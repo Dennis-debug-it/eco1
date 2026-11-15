@@ -79,6 +79,9 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
         // ---- Shared conventions ------------------------------------------------------------
         foreach (var et in b.Model.GetEntityTypes())
         {
+            // Keys are generated client-side (Guid.NewGuid in Entity); tell EF so graph-discovered entities are inserted, not updated.
+            foreach (var p in et.FindPrimaryKey()?.Properties.Where(p => p.ClrType == typeof(Guid)) ?? [])
+                p.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
             foreach (var p in et.GetProperties().Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
                 p.SetColumnType("numeric(18,4)");
             foreach (var p in et.GetProperties().Where(p => p.ClrType.IsEnum || Nullable.GetUnderlyingType(p.ClrType)?.IsEnum == true))

@@ -81,8 +81,7 @@ public sealed class PayrollRunService(
         else if (run.Status != PayrollRunStatus.Prepared) throw new InvalidStateException($"Run is {run.Status}.");
 
         var ctx = await assembler.LoadAsync(run, ct);
-        db.PayrollRunEmployees.RemoveRange(run.Employees);
-        run.Employees.Clear();
+        await ClearResultsAsync(run, ct);
         foreach (var e in ctx.Employees)
         {
             var (_, issues) = assembler.Build(ctx, e);
@@ -118,10 +117,7 @@ public sealed class PayrollRunService(
         var threshold = ctx.Entity.Settings.SalaryVarianceWarningPercent / 100m;
 
         // Replace previous results wholesale; the run is not yet approved so nothing is lost.
-        var oldIds = run.Employees.Select(e => e.Id).ToList();
-        await db.PayrollResultLines.Where(l => oldIds.Contains(l.PayrollRunEmployeeId)).ExecuteDeleteAsync(ct);
-        db.PayrollRunEmployees.RemoveRange(run.Employees);
-        run.Employees.Clear();
+        await ClearResultsAsync(run, ct);
         ResetTotals(run);
 
         var seenAccounts = new Dictionary<string, string>();
@@ -436,6 +432,16 @@ public sealed class PayrollRunService(
             ActorId = tenant.RequireUser(), ActorName = tenant.UserName ?? "unknown", Comment = comment, FromStatus = from, ToStatus = run.Status,
         });
         audit.Record($"payroll.run.{action.ToString().ToLowerInvariant()}", nameof(PayrollRun), run.Id, new { run.Reference, from, to = run.Status, comment }, run.LegalEntityId);
+    }
+
+    /// <summary>Hard-deletes un-approved working results (soft deletion would collide with the unique run/employee index).</summary>
+    private async Task ClearResultsAsync(PayrollRun run, CancellationToken ct)
+    {
+        run.EnsureEditable();
+        foreach (var e in run.Employees) db.Entry(e).State = EntityState.Detached;
+        run.Employees.Clear();
+        await db.PayrollResultLines.Where(l => db.PayrollRunEmployees.Any(e => e.PayrollRunId == run.Id && e.Id == l.PayrollRunEmployeeId)).ExecuteDeleteAsync(ct);
+        await db.PayrollRunEmployees.Where(e => e.PayrollRunId == run.Id).ExecuteDeleteAsync(ct);
     }
 
     private static void ResetTotals(PayrollRun r)
