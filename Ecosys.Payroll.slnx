@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ecosys.Payroll.Api/Ecosys.Payroll.Api.csproj" />
+    <Project Path="src/Ecosys.Payroll.Domain/Ecosys.Payroll.Domain.csproj" />
+    <Project Path="src/Ecosys.Payroll.Engine/Ecosys.Payroll.Engine.csproj" />
+    <Project Path="src/Ecosys.Payroll.Infrastructure/Ecosys.Payroll.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ecosys.Payroll.Tests/Ecosys.Payroll.Tests.csproj" />
+  </Folder>
+</Solution>

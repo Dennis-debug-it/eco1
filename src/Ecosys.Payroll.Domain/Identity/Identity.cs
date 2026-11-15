@@ -1,0 +1,104 @@
+using Ecosys.Payroll.Domain.Common;
+
+namespace Ecosys.Payroll.Domain.Identity;
+
+/// <summary>Role names (PRD §11). Shared Ecosys identity issues these as role claims.</summary>
+public static class Roles
+{
+    public const string PlatformAdministrator = "PlatformAdministrator";
+    public const string TenantAdministrator = "TenantAdministrator";
+    public const string HrAdministrator = "HrAdministrator";
+    public const string PayrollAdministrator = "PayrollAdministrator";
+    public const string PayrollReviewer = "PayrollReviewer";
+    public const string PayrollApprover = "PayrollApprover";
+    public const string FinanceOfficer = "FinanceOfficer";
+    public const string Auditor = "Auditor";
+    public const string Employee = "Employee";
+
+    public static readonly string[] All =
+    [
+        PlatformAdministrator, TenantAdministrator, HrAdministrator, PayrollAdministrator, PayrollReviewer,
+        PayrollApprover, FinanceOfficer, Auditor, Employee,
+    ];
+}
+
+/// <summary>Fine-grained permissions. Roles map to permission sets; salary visibility is independent (PRD §11).</summary>
+public static class Permissions
+{
+    public const string OrganisationManage = "organisation.manage";
+    public const string EmployeesRead = "employees.read";
+    public const string EmployeesWrite = "employees.write";
+    public const string SalaryRead = "salary.read";
+    public const string SalaryWrite = "salary.write";
+    public const string CompensationManage = "compensation.manage";
+    public const string StatutoryManage = "statutory.manage";
+    public const string StatutoryApprove = "statutory.approve";
+    public const string PayrollPrepare = "payroll.prepare";
+    public const string PayrollReview = "payroll.review";
+    public const string PayrollApprove = "payroll.approve";
+    public const string PayrollFinalise = "payroll.finalise";
+    public const string PayrollReverse = "payroll.reverse";
+    public const string PaymentsManage = "payments.manage";
+    public const string JournalsRead = "journals.read";
+    public const string ReportsRead = "reports.read";
+    public const string AuditRead = "audit.read";
+    public const string LeaveApprove = "leave.approve";
+    public const string SelfService = "self.service";
+
+    public static IReadOnlySet<string> ForRoles(IEnumerable<string> roles)
+    {
+        var set = new HashSet<string>();
+        foreach (var r in roles)
+        {
+            switch (r)
+            {
+                case Roles.PlatformAdministrator:
+                case Roles.TenantAdministrator:
+                    set.UnionWith([OrganisationManage, EmployeesRead, EmployeesWrite, SalaryRead, SalaryWrite, CompensationManage,
+                        StatutoryManage, StatutoryApprove, PayrollPrepare, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse,
+                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService]);
+                    break;
+                case Roles.HrAdministrator:
+                    set.UnionWith([EmployeesRead, EmployeesWrite, OrganisationManage, LeaveApprove, ReportsRead, SelfService]);
+                    break;
+                case Roles.PayrollAdministrator:
+                    set.UnionWith([EmployeesRead, SalaryRead, SalaryWrite, CompensationManage, StatutoryManage, PayrollPrepare, PaymentsManage, ReportsRead, SelfService]);
+                    break;
+                case Roles.PayrollReviewer:
+                    set.UnionWith([EmployeesRead, SalaryRead, PayrollReview, ReportsRead, SelfService]);
+                    break;
+                case Roles.PayrollApprover:
+                    set.UnionWith([EmployeesRead, SalaryRead, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse, StatutoryApprove, ReportsRead, SelfService]);
+                    break;
+                case Roles.FinanceOfficer:
+                    set.UnionWith([SalaryRead, JournalsRead, PaymentsManage, ReportsRead, SelfService]);
+                    break;
+                case Roles.Auditor:
+                    set.UnionWith([EmployeesRead, SalaryRead, JournalsRead, ReportsRead, AuditRead]);
+                    break;
+                case Roles.Employee:
+                    set.Add(SelfService);
+                    break;
+            }
+        }
+        return set;
+    }
+}
+
+/// <summary>Local projection of a platform identity, used for role assignment and self-service linkage.</summary>
+public class User : TenantEntity
+{
+    public required string Email { get; set; }
+    public required string DisplayName { get; set; }
+    /// <summary>Subject identifier from the shared Ecosys identity provider.</summary>
+    public string? ExternalSubject { get; set; }
+    /// <summary>PBKDF2 hash — only used by the built-in development identity provider.</summary>
+    public string? PasswordHash { get; set; }
+    public List<string> Roles { get; set; } = [];
+    /// <summary>Legal entities the user may act on; empty means all in the tenant.</summary>
+    public List<Guid> LegalEntityIds { get; set; } = [];
+    public Guid? EmployeeId { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool MfaEnabled { get; set; }
+    public DateTimeOffset? LastLoginAt { get; set; }
+}

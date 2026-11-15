@@ -1,0 +1,92 @@
+using Ecosys.Payroll.Domain.Common;
+
+namespace Ecosys.Payroll.Domain.Organisation;
+
+public class Tenant : Entity
+{
+    public required string Name { get; set; }
+    public required string Slug { get; set; }
+    public string DefaultCurrency { get; set; } = "KES";
+    public string DefaultJurisdiction { get; set; } = "KE";
+    public bool IsActive { get; set; } = true;
+}
+
+public class LegalEntity : TenantEntity
+{
+    public required string Name { get; set; }
+    public required string RegistrationNumber { get; set; }
+    public required string TaxPin { get; set; }
+    public string? NssfEmployerNumber { get; set; }
+    public string? ShifEmployerNumber { get; set; }
+    public string? NitaRegistrationNumber { get; set; }
+    public string Jurisdiction { get; set; } = "KE";
+    public string CurrencyCode { get; set; } = "KES";
+    public string? Address { get; set; }
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+    /// <summary>Month (1-12) in which the financial year starts.</summary>
+    public int FinancialYearStartMonth { get; set; } = 1;
+    public bool IsActive { get; set; } = true;
+    public PayrollSettings Settings { get; set; } = new();
+}
+
+/// <summary>Per-legal-entity payroll behaviour. Stored as jsonb.</summary>
+public sealed class PayrollSettings
+{
+    public bool AllowPreparerToApprove { get; set; }
+    public bool RequireReviewBeforeApproval { get; set; } = true;
+    public int MinimumApprovals { get; set; } = 1;
+    public decimal SalaryVarianceWarningPercent { get; set; } = 20m;
+    public string PayslipFooter { get; set; } = "This is a computer-generated payslip.";
+}
+
+public class Branch : LegalEntityScopedEntity
+{
+    public required string Code { get; set; }
+    public required string Name { get; set; }
+    public string? Location { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+public class Department : LegalEntityScopedEntity
+{
+    public required string Code { get; set; }
+    public required string Name { get; set; }
+    public Guid? ParentDepartmentId { get; set; }
+    public Guid? ManagerEmployeeId { get; set; }
+    public Guid? DefaultCostCentreId { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+public class CostCentre : LegalEntityScopedEntity
+{
+    public required string Code { get; set; }
+    public required string Name { get; set; }
+    public string? GlSegment { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+public enum PayFrequency { Monthly, SemiMonthly, Weekly }
+
+public class PayrollGroup : LegalEntityScopedEntity
+{
+    public required string Code { get; set; }
+    public required string Name { get; set; }
+    public PayFrequency Frequency { get; set; } = PayFrequency.Monthly;
+    /// <summary>Day of month employees in this group are normally paid.</summary>
+    public int PayDay { get; set; } = 28;
+    public string? Description { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+public enum PeriodStatus { Open, Closed }
+
+public class PayrollPeriod : LegalEntityScopedEntity
+{
+    public Guid PayrollGroupId { get; set; }
+    public required string Name { get; set; }
+    public DateOnly PeriodStart { get; set; }
+    public DateOnly PeriodEnd { get; set; }
+    public DateOnly PayDate { get; set; }
+    public PeriodStatus Status { get; set; } = PeriodStatus.Open;
+}
