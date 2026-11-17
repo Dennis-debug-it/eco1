@@ -107,6 +107,9 @@ public sealed class PdfWriter
                 case '(': sb.Append("\\("); break;
                 case ')': sb.Append("\\)"); break;
                 case '…': sb.Append("\\205"); break; // WinAnsi ellipsis
+                case '–': sb.Append("\\226"); break; // en dash
+                case '—': sb.Append("\\227"); break; // em dash
+                case '\u2019': sb.Append("\\222"); break; // right single quote
                 case '\r' or '\n': sb.Append(' '); break;
                 default: sb.Append(c < 256 ? c : '?'); break;
             }
