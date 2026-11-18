@@ -16,7 +16,7 @@ export default function SelfServicePage() {
       <PageHead title="My workspace" sub="Your payslips, leave and personal details" />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'payslips', label: 'Payslips' }, { id: 'leave', label: 'Leave' }, { id: 'profile', label: 'My details' }]} />
       {tab === 'overview' && <Overview employeeId={id} />}
-      {tab === 'payslips' && <PayslipList employeeId={id} />}
+      {tab === 'payslips' && <><PayslipList employeeId={id} /><P9 employeeId={id} /></>}
       {tab === 'leave' && <MyLeave employeeId={id} />}
       {tab === 'profile' && <Profile employeeId={id} />}
     </>
@@ -80,6 +80,21 @@ function Profile({ employeeId }: { employeeId: string }) {
       <div className="card"><h2>Personal details</h2><dl className="kv"><dt>Employee number</dt><dd className="mono">{e.employeeNumber}</dd><dt>Name</dt><dd>{e.firstName} {e.middleName} {e.lastName}</dd><dt>Job title</dt><dd>{e.jobTitle}</dd><dt>Email</dt><dd>{e.email}</dd><dt>Phone</dt><dd>{e.phone}</dd><dt>Hire date</dt><dd>{fmt.date(e.hireDate)}</dd><dt>Employment</dt><dd>{e.employmentType} · <Badge status={e.status} /></dd></dl><p className="muted small">To change personal details, contact HR — changes are audited.</p></div>
       <div className="card"><h2>Bank accounts</h2>{!q.data!.bankAccounts.length ? <Empty>No bank account on file.</Empty> : <table><tbody>{q.data!.bankAccounts.map(b => <tr key={b.id}><td>{b.bankName}</td><td className="mono">{b.accountNumber}</td><td>{b.isPrimary && <Badge status="Active">Primary</Badge>}</td><td>{b.isVerified ? <Badge status="Active">Verified</Badge> : <Badge status="Pending">Awaiting verification</Badge>}</td></tr>)}</tbody></table>}
         <h2 style={{ marginTop: 14 }}>Statutory numbers</h2><dl className="kv"><dt>KRA PIN</dt><dd className="mono">{q.data!.statutory?.kraPin ?? '—'}</dd><dt>NSSF</dt><dd className="mono">{q.data!.statutory?.nssfNumber ?? '—'}</dd><dt>SHIF</dt><dd className="mono">{q.data!.statutory?.shifNumber ?? '—'}</dd></dl></div>
+    </div>
+  )
+}
+
+function P9({ employeeId }: { employeeId: string }) {
+  const q = useQuery({ queryKey: ['employee', employeeId], queryFn: () => api.get<EmployeeDetail>(`/api/payroll/employees/${employeeId}`) })
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [err, setErr] = useState<unknown>(null)
+  const le = q.data?.employee.legalEntityId
+  return (
+    <div className="card"><h2>Tax deduction card (P9)</h2>
+      <p className="muted small">Your annual summary of pay, tax and statutory deductions for filing your KRA return.</p>
+      <ErrorBox error={err} />
+      <div className="toolbar"><input type="number" value={year} onChange={e => setYear(Number(e.target.value))} style={{ width: 90 }} aria-label="Year" />
+        <button className="btn" disabled={!le} onClick={async () => { setErr(null); try { await api.download(`/api/payroll/reports/annual?legalEntityId=${le}&year=${year}&employeeId=${employeeId}&format=pdf`) } catch (e) { setErr(e) } }}>Download PDF</button></div>
     </div>
   )
 }

@@ -39,6 +39,8 @@ public static class DependencyInjection
         services.AddScoped<ReportingService>();
         services.AddScoped<DemoDataSeeder>();
         services.AddScoped<NotificationService>();
+        services.AddScoped<LeaveBalanceService>();
+        services.AddSingleton(TimeProvider.System);
         if (config["Notifications:Provider"] == "Ecosys")
             services.AddHttpClient<INotificationSender, EcosysNotificationSender>(c =>
             {

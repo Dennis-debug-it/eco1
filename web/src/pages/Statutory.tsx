@@ -63,7 +63,7 @@ function Rules({ canManage, canApprove }: { canManage: boolean; canApprove: bool
 function summary(r: StatutoryRule): string {
   const p = r.parameters as Record<string, unknown>
   const parts: string[] = []
-  if (r.parameters.bands) parts.push(`${r.parameters.bands.length} bands, relief ${fmt.num(p.personalRelief as number)}`)
+  if (r.parameters.bands?.length) parts.push(`${r.parameters.bands.length} bands, relief ${fmt.num(p.personalRelief as number)}`)
   if (p.lowerEarningsLimit != null) parts.push(`LEL ${fmt.int(p.lowerEarningsLimit as number)} / UEL ${fmt.int(p.upperEarningsLimit as number)}`)
   if (r.minimumAmount) parts.push(`min ${fmt.num(r.minimumAmount)}`)
   if (p.pensionDeductionCap != null) parts.push(`pension cap ${fmt.int(p.pensionDeductionCap as number)}, PRMF ${fmt.int(p.postRetirementMedicalCap as number)}, mortgage ${fmt.int(p.mortgageInterestCap as number)}`)

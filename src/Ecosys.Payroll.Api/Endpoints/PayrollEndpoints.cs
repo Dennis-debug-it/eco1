@@ -108,8 +108,8 @@ public static class PayrollEndpoints
             return Results.Ok(rows);
         });
 
-        g.MapGet("/{id:guid}/employees/{runEmployeeId:guid}", async (Guid id, Guid runEmployeeId, PayrollRunService svc, CancellationToken ct) =>
-            Results.Ok(await svc.GetEmployeeResultAsync(id, runEmployeeId, ct)));
+        g.MapGet("/{id:guid}/employees/{employeeId:guid}", async (Guid id, Guid employeeId, PayrollRunService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetEmployeeResultAsync(id, employeeId, ct)));
 
         g.MapGet("/{id:guid}/variable-inputs", async (Guid id, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {

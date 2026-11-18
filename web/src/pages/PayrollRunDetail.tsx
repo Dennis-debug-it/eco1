@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { api, fmt } from '../lib/api'
+import { api, ApiError, fmt, tokenStore } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useComponents } from '../lib/lookups'
 import type { Journal, Payment, RunEmployeeDetail, RunEmployeeRow, RunStatus, RunSummary } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
 
 const flow: RunStatus[] = ['Draft', 'Prepared', 'Calculated', 'UnderReview', 'Approved', 'PaymentProcessing', 'Paid', 'Finalised']
-type Tab = 'summary' | 'employees' | 'exceptions' | 'inputs' | 'payments' | 'journal' | 'history'
+type Tab = 'summary' | 'employees' | 'exceptions' | 'inputs' | 'attendance' | 'payments' | 'journal' | 'history'
 
 export default function PayrollRunDetailPage() {
   const { id = '' } = useParams()
@@ -20,7 +20,7 @@ export default function PayrollRunDetailPage() {
   const [dialog, setDialog] = useState<'submit' | 'approve' | 'reject' | 'reverse' | 'payfile' | 'confirm' | null>(null)
   const [detail, setDetail] = useState<string | null>(null)
   const [actionErr, setActionErr] = useState<unknown>(null)
-  const refresh = () => { qc.invalidateQueries({ queryKey: ['run', id] }); qc.invalidateQueries({ queryKey: ['run-employees', id] }); qc.invalidateQueries({ queryKey: ['runs'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) }
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['run', id] }); qc.invalidateQueries({ queryKey: ['run-employees', id] }); qc.invalidateQueries({ queryKey: ['run-employee', id] }); qc.invalidateQueries({ queryKey: ['runs'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }) }
   const act = useMutation({ mutationFn: (path: string) => api.post(`/api/payroll/runs/${id}/${path}`), onSuccess: refresh, onError: setActionErr, onMutate: () => setActionErr(null) })
 
   if (q.isLoading) return <Loading />
@@ -36,7 +36,7 @@ export default function PayrollRunDetailPage() {
       <PageHead title={r.reference} sub={<>{s.periodName} · {s.groupName} · {r.runType} · <Badge status={r.status} /></>}>
         <Link to="/payroll" className="btn">All runs</Link>
         {editable && can(P.PayrollPrepare) && <button className="btn" onClick={() => act.mutate('prepare')} disabled={act.isPending}>Refresh employees</button>}
-        {editable && can(P.PayrollPrepare) && <button className="btn primary" onClick={() => act.mutate('calculate')} disabled={act.isPending}>{r.status === 'Calculated' ? 'Recalculate' : 'Calculate'}</button>}
+        {editable && can(P.PayrollPrepare) && <button className="btn primary" onClick={() => act.mutate('calculate')} disabled={act.isPending}>{act.isPending && act.variables === 'calculate' ? 'Calculating…' : r.status === 'Calculated' ? 'Recalculate' : 'Calculate'}</button>}
         {r.status === 'Calculated' && can(P.PayrollPrepare) && <button className="btn primary" onClick={() => setDialog('submit')} disabled={r.errorCount > 0} title={r.errorCount > 0 ? 'Resolve errors first' : ''}>Submit for review</button>}
         {r.status === 'UnderReview' && (can(P.PayrollApprove) || can(P.PayrollReview)) && <button className="btn danger" onClick={() => setDialog('reject')}>Reject</button>}
         {r.status === 'UnderReview' && can(P.PayrollApprove) && <button className="btn primary" onClick={() => setDialog('approve')} disabled={isPreparer} title={isPreparer ? 'Preparers cannot approve their own payroll' : ''}>Approve</button>}
@@ -59,7 +59,7 @@ export default function PayrollRunDetailPage() {
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <Tabs value={tab} onChange={setTab} tabs={[{ id: 'summary', label: 'Summary' }, { id: 'employees', label: `Employees (${r.employeeCount})` }, { id: 'exceptions', label: `Exceptions (${r.errorCount + r.warningCount})` }, { id: 'inputs', label: 'Variable inputs' }, { id: 'payments', label: 'Payments' }, { id: 'journal', label: 'Journal' }, { id: 'history', label: 'Approval history' }]} />
+        <Tabs value={tab} onChange={setTab} tabs={[{ id: 'summary', label: 'Summary' }, { id: 'employees', label: `Employees (${r.employeeCount})` }, { id: 'exceptions', label: `Exceptions (${r.errorCount + r.warningCount})` }, { id: 'inputs', label: 'Variable inputs' }, { id: 'attendance', label: 'Attendance' }, { id: 'payments', label: 'Payments' }, { id: 'journal', label: 'Journal' }, { id: 'history', label: 'Approval history' }]} />
       </div>
 
       {tab === 'summary' && (
@@ -72,8 +72,9 @@ export default function PayrollRunDetailPage() {
           <div className="card"><h2>Run details</h2>
             <dl className="kv"><dt>Period</dt><dd>{fmt.date(s.periodStart)} – {fmt.date(s.periodEnd)}</dd><dt>Pay date</dt><dd>{fmt.date(s.payDate)}</dd><dt>Prepared by</dt><dd>{s.preparedByName ?? '—'}</dd><dt>Calculated</dt><dd>{fmt.dateTime(r.calculatedAt)}</dd><dt>Approved by</dt><dd>{s.approvedByName ?? '—'} {r.approvedAt && <span className="muted">({fmt.dateTime(r.approvedAt)})</span>}</dd><dt>Finalised</dt><dd>{fmt.dateTime(r.finalisedAt)}</dd><dt>Taxable pay</dt><dd className="mono">{fmt.num(r.totalTaxable)}</dd><dt>Notes</dt><dd>{r.notes ?? '—'}</dd></dl>
             {r.status === 'Finalised' && <div className="actions" style={{ marginTop: 12 }}>
-              <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=csv`)}>Payroll register (CSV)</button>
-              {['KE.PAYE', 'KE.NSSF', 'KE.SHIF', 'KE.AHL'].map(c => <button key={c} className="btn sm" onClick={() => api.download(`/api/payroll/reports/statutory?runId=${id}&ruleCode=${c}&format=csv`)}>{c.split('.')[1]} return</button>)}
+              <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=xlsx`)}>Payroll register (Excel)</button>
+              <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=pdf`)}>Register (PDF)</button>
+              {['KE.PAYE', 'KE.NSSF', 'KE.SHIF', 'KE.AHL'].map(c => <button key={c} className="btn sm" onClick={() => api.download(`/api/payroll/reports/statutory?runId=${id}&ruleCode=${c}&format=xlsx`)}>{c.split('.')[1]} return</button>)}
             </div>}
           </div>
         </div>
@@ -84,7 +85,7 @@ export default function PayrollRunDetailPage() {
           {!can(P.SalaryRead) ? <Empty>Salary visibility is restricted for your role.</Empty> : emps.isLoading ? <Loading /> : !emps.data?.length ? <Empty>Run has not been prepared yet.</Empty> : (
             <div className="table-wrap"><table>
               <thead><tr><th>No.</th><th>Employee</th><th>Department</th><th className="num">Basic</th><th className="num">Gross</th><th className="num">Taxable</th><th className="num">PAYE</th><th className="num">NSSF</th><th className="num">SHIF</th><th className="num">AHL</th><th className="num">Other</th><th className="num">Net</th><th className="num">Prev. net</th><th className="num">Employer cost</th><th /></tr></thead>
-              <tbody>{emps.data.map(e => <tr key={e.id} className="clickable" onClick={() => setDetail(e.id)}>
+              <tbody>{emps.data.map(e => <tr key={e.id} className="clickable" onClick={() => setDetail(e.employeeId)}>
                 <td className="mono">{e.employeeNumber}</td><td>{e.employeeName}</td><td>{e.department}</td><td className="num">{fmt.num(e.basicPay)}</td><td className="num">{fmt.num(e.grossPay)}</td><td className="num">{fmt.num(e.taxablePay)}</td><td className="num">{fmt.num(e.paye)}</td><td className="num">{fmt.num(e.nssf)}</td><td className="num">{fmt.num(e.shif)}</td><td className="num">{fmt.num(e.housingLevy)}</td><td className="num">{fmt.num(e.totalOtherDeductions)}</td><td className="num"><b>{fmt.num(e.netPay)}</b></td><td className="num muted">{fmt.num(e.previousNetPay)}</td><td className="num">{fmt.num(e.totalEmployerCost)}</td>
                 <td>{e.hasErrors ? <Badge status="Error">{e.issues.filter(i => i.severity === 'Error').length}</Badge> : e.issues.length > 0 ? <Badge status="Warning">{e.issues.length}</Badge> : null}</td></tr>)}</tbody>
               <tfoot><tr><td colSpan={3}>Totals</td><td className="num">{fmt.num(emps.data.reduce((a, e) => a + e.basicPay, 0))}</td><td className="num">{fmt.num(r.totalGross)}</td><td className="num">{fmt.num(r.totalTaxable)}</td><td className="num">{fmt.num(r.totalPaye)}</td><td className="num">{fmt.num(r.totalNssfEmployee)}</td><td className="num">{fmt.num(r.totalShif)}</td><td className="num">{fmt.num(r.totalHousingLevyEmployee)}</td><td className="num">{fmt.num(r.totalOtherDeductions)}</td><td className="num">{fmt.num(r.totalNet)}</td><td /><td className="num">{fmt.num(r.totalEmployerCost)}</td><td /></tr></tfoot>
@@ -102,6 +103,7 @@ export default function PayrollRunDetailPage() {
       )}
 
       {tab === 'inputs' && <VariableInputs runId={id} legalEntityId={r.legalEntityId} editable={editable && can(P.PayrollPrepare)} employees={emps.data ?? []} onChange={refresh} />}
+      {tab === 'attendance' && <Attendance runId={id} editable={editable && can(P.PayrollPrepare)} employees={emps.data ?? []} onChange={refresh} />}
       {tab === 'payments' && <Payments runId={id} batches={s.batches} />}
       {tab === 'journal' && <JournalView runId={id} has={s.hasJournal} />}
       {tab === 'history' && (
@@ -110,7 +112,7 @@ export default function PayrollRunDetailPage() {
             <tbody>{s.approvals.map(a => <tr key={a.id}><td>{fmt.dateTime(a.createdAt)}</td><td>{a.action}</td><td>{a.actorName}</td><td><Badge status={a.fromStatus} /></td><td><Badge status={a.toStatus} /></td><td style={{ whiteSpace: 'normal' }}>{a.comment}</td></tr>)}</tbody></table>)}</div>
       )}
 
-      {detail && <EmployeeResultModal runId={id} runEmployeeId={detail} currency={cur} onClose={() => setDetail(null)} />}
+      {detail && <EmployeeResultModal runId={id} employeeId={detail} currency={cur} onClose={() => setDetail(null)} />}
       {dialog === 'submit' && <ReasonDialog title="Submit for review" confirmLabel="Submit" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/submit`, { text: t }).then(refresh)}><p>The run will be locked for review. A reviewer or approver can send it back.</p></ReasonDialog>}
       {dialog === 'approve' && <ReasonDialog title="Approve payroll" confirmLabel="Approve" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/approve`, { text: t }).then(refresh)}><p>Approving locks all calculations. Net payroll <b>{fmt.money(r.totalNet, cur)}</b> for {r.employeeCount} employees; total employer cost {fmt.money(r.totalEmployerCost, cur)}.</p></ReasonDialog>}
       {dialog === 'reject' && <ReasonDialog title="Reject payroll" label="Reason" required confirmLabel="Reject" danger onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/reject`, { text: t }).then(refresh)} />}
@@ -124,8 +126,8 @@ export default function PayrollRunDetailPage() {
 const Card = ({ label, value, hint }: { label: string; value: string; hint?: string }) => <div className="card stat"><div className="label">{label}</div><div className="value">{value}</div>{hint && <div className="hint">{hint}</div>}</div>
 const Row = ({ n, a = 0, b = 0 }: { n: string; a?: number; b?: number }) => <tr><td>{n}</td><td className="num">{a ? fmt.num(a) : '—'}</td><td className="num">{b ? fmt.num(b) : '—'}</td><td className="num">{fmt.num(a + b)}</td></tr>
 
-function EmployeeResultModal({ runId, runEmployeeId, currency, onClose }: { runId: string; runEmployeeId: string; currency: string; onClose: () => void }) {
-  const q = useQuery({ queryKey: ['run-employee', runId, runEmployeeId], queryFn: () => api.get<RunEmployeeDetail>(`/api/payroll/runs/${runId}/employees/${runEmployeeId}`) })
+function EmployeeResultModal({ runId, employeeId, currency, onClose }: { runId: string; employeeId: string; currency: string; onClose: () => void }) {
+  const q = useQuery({ queryKey: ['run-employee', runId, employeeId], queryFn: () => api.get<RunEmployeeDetail>(`/api/payroll/runs/${runId}/employees/${employeeId}`) })
   const d = q.data
   const group = (t: string) => d?.lines.filter(l => l.type === t) ?? []
   return (
@@ -181,6 +183,46 @@ function VariableInputs({ runId, legalEntityId, editable, employees, onChange }:
       {q.data?.length ? <table><thead><tr><th>Employee</th><th>Component</th><th className="num">Amount</th><th>Note</th><th /></tr></thead>
         <tbody>{q.data.map(v => <tr key={v.id}><td>{empName(v.employeeId)}</td><td>{compName(v.salaryComponentId)}</td><td className="num">{fmt.num(v.amount)}</td><td>{v.note}</td><td>{editable && <button className="btn sm danger" onClick={() => del.mutate(v.id)}>Remove</button>}</td></tr>)}</tbody></table> : <Empty>No variable inputs for this run.</Empty>}
       {editable && q.data?.length ? <p className="muted small">Adding or removing inputs after calculation marks the results stale — recalculate before submitting.</p> : null}
+    </div>
+  )
+}
+
+type AttendanceRow = { id: string; employeeId: string; employeeNumber: string; employeeName: string; daysWorked: number; absentDays: number; overtimeHours: number; restDayOvertimeHours: number; source: string; note?: string }
+
+function Attendance({ runId, editable, employees, onChange }: { runId: string; editable: boolean; employees: RunEmployeeRow[]; onChange: () => void }) {
+  const qc = useQueryClient()
+  const q = useQuery({ queryKey: ['attendance', runId], queryFn: () => api.get<AttendanceRow[]>(`/api/payroll/runs/${runId}/attendance`) })
+  const [f, setF] = useState({ employeeNumber: '', daysWorked: 22, absentDays: 0, overtimeHours: 0, restDayOvertimeHours: 0, note: '' })
+  const [err, setErr] = useState<unknown>(null)
+  const [msg, setMsg] = useState('')
+  const done = (n: number) => { setMsg(`${n} row(s) saved. Recalculate to apply.`); qc.invalidateQueries({ queryKey: ['attendance', runId] }); onChange() }
+  const save = useMutation({ mutationFn: () => api.put<{ saved: number }>(`/api/payroll/runs/${runId}/attendance`, [{ ...f, employeeNumber: f.employeeNumber || employees[0]?.employeeNumber }]), onSuccess: r => done(r.saved), onError: setErr, onMutate: () => setErr(null) })
+  const upload = async (file: File) => {
+    setErr(null); setMsg('')
+    try {
+      const res = await fetch(`/api/payroll/runs/${runId}/attendance/import`, { method: 'POST', headers: { 'Content-Type': 'text/csv', Authorization: `Bearer ${tokenStore.get() ?? ''}` }, body: await file.text() })
+      const body = await res.json()
+      if (!res.ok) throw new ApiError(res.status, body)
+      done(body.saved)
+    } catch (e) { setErr(e) }
+  }
+  const num = (k: keyof typeof f, label: string, w = 80) => <input type="number" min={0} step="0.5" style={{ width: w }} value={f[k] as number} onChange={e => setF({ ...f, [k]: Number(e.target.value) })} aria-label={label} title={label} />
+  return (
+    <div className="card">
+      <h2>Attendance</h2>
+      <p className="muted small">Absent days are deducted at the daily rate of basic pay; overtime is paid at the hourly rate × the legal entity's multipliers. Import a CSV from your time or biometric system with columns <span className="mono">EmployeeNumber, DaysWorked, AbsentDays, OvertimeHours, RestDayOvertimeHours, Note</span>.</p>
+      <ErrorBox error={err} />{msg && <div className="alert ok">{msg}</div>}
+      {editable && <>
+        <div className="toolbar"><label className="btn">Import CSV<input type="file" accept=".csv,text/csv" className="sr-only" onChange={e => { const file = e.target.files?.[0]; if (file) upload(file); e.target.value = '' }} /></label></div>
+        {employees.length > 0 && <div className="toolbar">
+          <select value={f.employeeNumber || employees[0]?.employeeNumber} onChange={e => setF({ ...f, employeeNumber: e.target.value })} aria-label="Employee">{employees.map(e => <option key={e.employeeId} value={e.employeeNumber}>{e.employeeNumber} {e.employeeName}</option>)}</select>
+          <span className="small muted">Days</span>{num('daysWorked', 'Days worked', 64)}<span className="small muted">Absent</span>{num('absentDays', 'Absent days', 64)}<span className="small muted">OT h</span>{num('overtimeHours', 'Overtime hours', 64)}<span className="small muted">Rest-day OT h</span>{num('restDayOvertimeHours', 'Rest day overtime hours', 64)}
+          <input placeholder="Note" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} aria-label="Note" />
+          <button className="btn primary" onClick={() => save.mutate()} disabled={save.isPending}>Save</button>
+        </div>}
+      </>}
+      {q.isLoading ? <Loading /> : !q.data?.length ? <Empty>No attendance captured for this run.</Empty> : <table><thead><tr><th>Employee</th><th className="num">Days worked</th><th className="num">Absent</th><th className="num">OT hours</th><th className="num">Rest-day OT</th><th>Source</th><th>Note</th></tr></thead>
+        <tbody>{q.data.map(a => <tr key={a.id}><td>{a.employeeNumber} {a.employeeName}</td><td className="num">{a.daysWorked}</td><td className="num">{a.absentDays || ''}</td><td className="num">{a.overtimeHours || ''}</td><td className="num">{a.restDayOvertimeHours || ''}</td><td>{a.source}</td><td>{a.note}</td></tr>)}</tbody></table>}
     </div>
   )
 }

@@ -274,3 +274,17 @@ public class KenyaYear4AndFrequencyTests
         Assert.Equal(0m, r.Paye); // ~KES 21.7k/month equivalent is below the relief threshold
     }
 }
+
+public class LeaveAccrualTests
+{
+    private static readonly Ecosys.Payroll.Domain.Leave.LeaveType Annual = new() { Code = "ANNUAL", Name = "Annual", AnnualEntitlementDays = 21, AccruesMonthly = true, MaxCarryOverDays = 5 };
+
+    [Theory]
+    [InlineData("2018-03-01", 2026, "2026-11-18", 19.25)] // 11 months of 2026 elapsed
+    [InlineData("2026-03-10", 2026, "2026-11-18", 15.75)] // joined March (by the 15th) → Mar..Nov = 9 months
+    [InlineData("2026-03-20", 2026, "2026-11-18", 14.00)] // joined after the 15th → Apr..Nov = 8 months
+    [InlineData("2018-03-01", 2025, "2026-11-18", 21.00)] // past year fully accrued
+    [InlineData("2027-01-05", 2026, "2026-11-18", 0)]     // not yet employed
+    public void Monthly_accrual_is_prorated(string hire, int year, string today, decimal expected) =>
+        Assert.Equal(expected, Ecosys.Payroll.Infrastructure.Services.LeaveBalanceService.Accrued(Annual, DateOnly.Parse(hire), year, DateOnly.Parse(today)));
+}

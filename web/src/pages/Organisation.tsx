@@ -38,7 +38,7 @@ function LegalEntities({ canEdit }: { canEdit: boolean }) {
   if (q.isLoading) return <Loading />
   return (
     <div className="card">
-      <div className="page-head" style={{ marginBottom: 8 }}><h2>Legal entities</h2>{canEdit && <button className="btn primary" onClick={() => setEdit({ jurisdiction: 'KE', currencyCode: 'KES', financialYearStartMonth: 1, isActive: true, settings: { allowPreparerToApprove: false, requireReviewBeforeApproval: true, minimumApprovals: 1, salaryVarianceWarningPercent: 20, payslipFooter: 'This is a computer-generated payslip.' } })}>New legal entity</button>}</div>
+      <div className="page-head" style={{ marginBottom: 8 }}><h2>Legal entities</h2>{canEdit && <button className="btn primary" onClick={() => setEdit({ jurisdiction: 'KE', currencyCode: 'KES', financialYearStartMonth: 1, isActive: true, settings: { allowPreparerToApprove: false, requireReviewBeforeApproval: true, minimumApprovals: 1, salaryVarianceWarningPercent: 20, payslipFooter: 'This is a computer-generated payslip.', standardMonthlyHours: 195, standardMonthlyWorkingDays: 22, overtimeMultiplier: 1.5, restDayOvertimeMultiplier: 2, notifyEmployeesOnPayslip: true } })}>New legal entity</button>}</div>
       <table><thead><tr><th>Name</th><th>Registration</th><th>KRA PIN</th><th>NSSF employer</th><th>SHIF employer</th><th>Currency</th><th>Preparer may approve</th><th>Variance warning</th><th /></tr></thead>
         <tbody>{q.data!.map(e => <tr key={e.id}><td>{e.name}</td><td className="mono">{e.registrationNumber}</td><td className="mono">{e.taxPin}</td><td className="mono">{e.nssfEmployerNumber}</td><td className="mono">{e.shifEmployerNumber}</td><td>{e.currencyCode}</td><td>{e.settings.allowPreparerToApprove ? <Badge status="Warning">Yes</Badge> : 'No'}</td><td>{e.settings.salaryVarianceWarningPercent}%</td><td>{canEdit && <button className="btn sm" onClick={() => setEdit(e)}>Edit</button>}</td></tr>)}</tbody></table>
       {edit && <Modal title={edit.id ? 'Edit legal entity' : 'New legal entity'} onClose={() => setEdit(null)} width={720}>
@@ -51,7 +51,12 @@ function LegalEntities({ canEdit }: { canEdit: boolean }) {
         <div className="form-grid">
           <Field label="Net pay variance warning (%)"><input type="number" value={edit.settings?.salaryVarianceWarningPercent ?? 20} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, salaryVarianceWarningPercent: Number(ev.target.value) } })} /></Field>
           <Field label="Payslip footer"><input value={edit.settings?.payslipFooter ?? ''} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, payslipFooter: ev.target.value } })} /></Field>
+          <Field label="Standard hours / month (overtime rate)"><input type="number" value={edit.settings?.standardMonthlyHours ?? 195} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, standardMonthlyHours: Number(ev.target.value) } })} /></Field>
+          <Field label="Working days / month (absence rate)"><input type="number" value={edit.settings?.standardMonthlyWorkingDays ?? 22} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, standardMonthlyWorkingDays: Number(ev.target.value) } })} /></Field>
+          <Field label="Overtime multiplier"><input type="number" step="0.1" value={edit.settings?.overtimeMultiplier ?? 1.5} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, overtimeMultiplier: Number(ev.target.value) } })} /></Field>
+          <Field label="Rest-day / holiday multiplier"><input type="number" step="0.1" value={edit.settings?.restDayOvertimeMultiplier ?? 2} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, restDayOvertimeMultiplier: Number(ev.target.value) } })} /></Field>
         </div>
+        <label className="field inline"><input type="checkbox" checked={edit.settings?.notifyEmployeesOnPayslip ?? true} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, notifyEmployeesOnPayslip: ev.target.checked } })} /> Notify employees by email/WhatsApp when payslips are issued</label>
         <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={() => setEdit(null)}>Cancel</button><button className="btn primary" disabled={m.isPending} onClick={() => m.mutate(edit)}>Save</button></div>
       </Modal>}
     </div>

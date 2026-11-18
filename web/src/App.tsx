@@ -2,6 +2,7 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { P, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
+import MfaEnrol from './components/MfaEnrol'
 import DashboardPage from './pages/Dashboard'
 import EmployeesPage from './pages/Employees'
 import EmployeeDetailPage from './pages/EmployeeDetail'
@@ -19,6 +20,9 @@ export default function App() {
   const { user, loading, logout, can } = useAuth()
   if (loading) return <Loading what="Signing in" />
   if (!user) return <LoginPage />
+  if (user.mfaRequired && !user.mfaSatisfied) return user.mfaEnabled
+    ? <div className="login"><div className="card"><h2>Sign in again</h2><p className="small">Your session was started without a verification code. Sign out and sign in with your authenticator code.</p><button className="btn primary" onClick={logout}>Sign out</button></div></div>
+    : <MfaEnrol gate />
 
   const employeeOnly = user.roles.length === 1 && user.roles[0] === 'Employee'
   const nav: { to: string; label: string; show: boolean; section?: string }[] = [
@@ -31,7 +35,7 @@ export default function App() {
     { to: '/payroll', label: 'Payroll processing', show: can(P.SalaryRead) },
     { to: '/statutory', label: 'Statutory compliance', show: can(P.StatutoryManage) || can(P.StatutoryApprove) || can(P.SalaryRead) },
     { to: '/reports', label: 'Reports & audit', show: can(P.ReportsRead) || can(P.AuditRead) },
-    { to: '/settings', label: 'Settings & users', show: can(P.OrganisationManage), section: 'Administration' },
+    { to: '/settings', label: 'Settings & security', show: true, section: 'Administration' },
   ]
 
   return (

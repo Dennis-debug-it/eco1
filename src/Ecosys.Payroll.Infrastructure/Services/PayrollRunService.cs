@@ -420,10 +420,14 @@ public sealed class PayrollRunService(
 
     public async Task<PayrollRun> GetAsync(Guid runId, bool includeEmployees, CancellationToken ct = default) => await LoadAsync(runId, includeEmployees, ct);
 
-    public async Task<PayrollRunEmployee> GetEmployeeResultAsync(Guid runId, Guid runEmployeeId, CancellationToken ct = default)
+    /// <summary>
+    /// Result rows are regenerated on every recalculation, so callers should address them by the stable
+    /// employee id; the row id is still accepted for backwards compatibility.
+    /// </summary>
+    public async Task<PayrollRunEmployee> GetEmployeeResultAsync(Guid runId, Guid employeeOrRowId, CancellationToken ct = default)
     {
         var e = await db.PayrollRunEmployees.Include(x => x.Lines.OrderBy(l => l.Sequence))
-            .FirstOrDefaultAsync(x => x.Id == runEmployeeId && x.PayrollRunId == runId, ct) ?? throw new NotFoundException("PayrollRunEmployee", runEmployeeId);
+            .FirstOrDefaultAsync(x => x.PayrollRunId == runId && (x.EmployeeId == employeeOrRowId || x.Id == employeeOrRowId), ct) ?? throw new NotFoundException("PayrollRunEmployee", employeeOrRowId);
         if (!tenant.Has(Permissions.SalaryRead) && tenant.EmployeeId != e.EmployeeId) throw new ForbiddenException("Salary visibility is restricted.");
         return e;
     }

@@ -31,31 +31,31 @@ export default function DashboardPage() {
           {d.openExceptions > 0 && <div className="alert warn" style={{ marginTop: 12 }}>{d.openExceptions} open validation exception(s) across unfinalised runs.</div>}
         </div>
         <div className="card">
-          <h2>Pending approvals</h2>
+          <h2>Awaiting submission or approval</h2>
           {d.pendingApprovals.length === 0 ? <Empty>Nothing waiting for review or approval.</Empty> : (
-            <table><thead><tr><th>Run</th><th>Status</th><th className="num">Employees</th><th className="num">Net</th><th>Submitted</th></tr></thead>
-              <tbody>{d.pendingApprovals.map(p => <tr key={p.runId}><td><Link to={`/payroll/${p.runId}`}>{p.reference}</Link></td><td><Badge status={p.status} /></td><td className="num">{p.employees}</td><td className="num">{fmt.num(p.net)}</td><td>{fmt.dateTime(p.submittedAt)}</td></tr>)}</tbody></table>
+            <div className="table-wrap"><table><thead><tr><th>Run</th><th>Status</th><th className="num">Employees</th><th className="num">Net</th><th>Submitted</th></tr></thead>
+              <tbody>{d.pendingApprovals.map(p => <tr key={p.runId}><td><Link to={`/payroll/${p.runId}`}>{p.reference}</Link></td><td><Badge status={p.status} /></td><td className="num">{p.employees}</td><td className="num">{fmt.num(p.net)}</td><td>{fmt.dateTime(p.submittedAt)}</td></tr>)}</tbody></table></div>
           )}
         </div>
         <div className="card">
-          <h2>Payroll cost trend (employer cost, finalised runs)</h2>
+          <h2>Employer cost trend</h2>
           <BarChart data={d.trend.map(t => ({ label: t.period, value: t.employerCost }))} format={v => (v / 1000).toFixed(0) + 'k'} />
         </div>
         <div className="card">
           <h2>Cost by department (latest run)</h2>
           {d.byDepartment.length === 0 ? <Empty>No finalised payroll yet.</Empty> : (
-            <table><thead><tr><th>Department</th><th className="num">Employees</th><th className="num">Gross</th><th className="num">Employer cost</th><th style={{ width: '30%' }}>Share</th></tr></thead>
+            <div className="table-wrap"><table><thead><tr><th>Department</th><th className="num">Employees</th><th className="num">Gross</th><th className="num">Employer cost</th><th style={{ width: '30%' }}>Share</th></tr></thead>
               <tbody>{d.byDepartment.map(b => {
                 const share = d.byDepartment.reduce((s, x) => s + x.employerCost, 0)
-                return <tr key={b.name}><td>{b.name}</td><td className="num">{b.employees}</td><td className="num">{fmt.num(b.gross)}</td><td className="num">{fmt.num(b.employerCost)}</td><td><div className="bar" aria-label={fmt.pct(b.employerCost / share * 100)}><i style={{ width: `${(b.employerCost / share) * 100}%` }} /></div></td></tr>
-              })}</tbody></table>
+                return <tr key={b.name}><td>{b.name}</td><td className="num">{b.employees}</td><td className="num">{fmt.num(b.gross)}</td><td className="num">{fmt.num(b.employerCost)}</td><td style={{ minWidth: 80 }}><div className="bar" role="img" aria-label={fmt.pct(b.employerCost / share * 100)}><i style={{ width: `${(b.employerCost / share) * 100}%` }} /></div></td></tr>
+              })}</tbody></table></div>
           )}
         </div>
         <div className="card">
           <h2>Cost by branch (latest run)</h2>
           {d.byBranch.length === 0 ? <Empty>No finalised payroll yet.</Empty> : (
-            <table><thead><tr><th>Branch</th><th className="num">Employees</th><th className="num">Net</th><th className="num">Employer cost</th></tr></thead>
-              <tbody>{d.byBranch.map(b => <tr key={b.name}><td>{b.name}</td><td className="num">{b.employees}</td><td className="num">{fmt.num(b.net)}</td><td className="num">{fmt.num(b.employerCost)}</td></tr>)}</tbody></table>
+            <div className="table-wrap"><table><thead><tr><th>Branch</th><th className="num">Employees</th><th className="num">Net</th><th className="num">Employer cost</th></tr></thead>
+              <tbody>{d.byBranch.map(b => <tr key={b.name}><td>{b.name}</td><td className="num">{b.employees}</td><td className="num">{fmt.num(b.net)}</td><td className="num">{fmt.num(b.employerCost)}</td></tr>)}</tbody></table></div>
           )}
         </div>
       </div>

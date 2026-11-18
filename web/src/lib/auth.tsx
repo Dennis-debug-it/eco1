@@ -5,7 +5,8 @@ import type { Me } from './types'
 type AuthState = {
   user: Me | null
   loading: boolean
-  login: (tenant: string, email: string, password: string) => Promise<void>
+  login: (tenant: string, email: string, password: string, code?: string) => Promise<void>
+  adopt: (token: string, user: Me) => void
   logout: () => void
   can: (permission: string) => boolean
 }
@@ -27,16 +28,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('ecosys:unauthorised', onUnauth)
   }, [])
 
-  const login = useCallback(async (tenant: string, email: string, password: string) => {
-    const res = await api.post<{ token: string; user: Me }>('/api/payroll/auth/login', { tenant, email, password })
+  const login = useCallback(async (tenant: string, email: string, password: string, code?: string) => {
+    const res = await api.post<{ token: string; user: Me }>('/api/payroll/auth/login', { tenant, email, password, code: code || undefined })
     tokenStore.set(res.token)
     setUser(res.user)
   }, [])
+  const adopt = useCallback((token: string, u: Me) => { tokenStore.set(token); setUser(u) }, [])
 
   const logout = useCallback(() => { tokenStore.clear(); setUser(null) }, [])
   const can = useCallback((p: string) => !!user && (user.roles.includes('PlatformAdministrator') || user.permissions.includes(p)), [user])
 
-  const value = useMemo(() => ({ user, loading, login, logout, can }), [user, loading, login, logout, can])
+  const value = useMemo(() => ({ user, loading, login, adopt, logout, can }), [user, loading, login, adopt, logout, can])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

@@ -349,3 +349,32 @@ public class PayrollApiTests(PayrollApiFixture app)
         Assert.Same(primary, parts[0].Account);
     }
 }
+
+[Collection(PayrollApiCollection.Name)]
+[Trait("Category", "Integration")]
+public class PlatformRuleUpgradeTests(PayrollApiFixture app)
+{
+    [Fact]
+    public async Task Startup_seed_closes_superseded_platform_version_on_existing_database()
+    {
+        // Simulate a database seeded before NSSF year 4 existed: v3 open-ended, v4 absent.
+        var v4 = Ecosys.Payroll.Engine.Jurisdictions.Kenya.KenyaStatutoryRules.All().Single(r => r.RuleCode == "KE.NSSF" && r.Version == 4).Id;
+        var v3 = Ecosys.Payroll.Engine.Jurisdictions.Kenya.KenyaStatutoryRules.All().Single(r => r.RuleCode == "KE.NSSF" && r.Version == 3).Id;
+        await app.WithDbAsync(null, async db =>
+        {
+            db.StatutoryRuleVersions.Remove(await db.StatutoryRuleVersions.FirstAsync(r => r.Id == v4));
+            await db.SaveChangesAsync();
+            await db.StatutoryRuleVersions.IgnoreQueryFilters().Where(r => r.Id == v4).ExecuteDeleteAsync();
+            return await db.StatutoryRuleVersions.Where(r => r.Id == v3).ExecuteUpdateAsync(s => s.SetProperty(r => r.EffectiveTo, (DateOnly?)null));
+        });
+
+        using (var scope = app.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<Ecosys.Payroll.Infrastructure.Seed.DemoDataSeeder>().SeedPlatformRulesAsync();
+
+        var (to, present) = await app.WithDbAsync(null, async db => (
+            (await db.StatutoryRuleVersions.FirstAsync(r => r.Id == v3)).EffectiveTo,
+            await db.StatutoryRuleVersions.AnyAsync(r => r.Id == v4)));
+        Assert.Equal(new DateOnly(2026, 1, 31), to);
+        Assert.True(present);
+    }
+}

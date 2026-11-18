@@ -189,7 +189,12 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
 
         // Unpaid leave and unauthorised absence are valued at the daily rate of monthly basic.
         var settings = ctx.Entity.Settings;
-        var dailyRate = monthlyBasic / Math.Max(1m, settings.StandardMonthlyWorkingDays);
+        // Guard against settings stored before these fields existed (absent JSON keys load as 0).
+        var workingDays = settings.StandardMonthlyWorkingDays > 0 ? settings.StandardMonthlyWorkingDays : 22m;
+        var monthlyHours = settings.StandardMonthlyHours > 0 ? settings.StandardMonthlyHours : 195m;
+        var otMultiplier = settings.OvertimeMultiplier > 0 ? settings.OvertimeMultiplier : 1.5m;
+        var restMultiplier = settings.RestDayOvertimeMultiplier > 0 ? settings.RestDayOvertimeMultiplier : 2.0m;
+        var dailyRate = monthlyBasic / workingDays;
         var unpaidDays = ctx.UnpaidLeaveDays.GetValueOrDefault(emp.Id);
         if (ctx.Attendance.TryGetValue(emp.Id, out var att)) unpaidDays += att.AbsentDays;
         var unpaidAmount = unpaidDays > 0 ? Math.Min(basic, Math.Round(dailyRate * unpaidDays, 2)) : 0m;
@@ -198,7 +203,7 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         // Overtime from attendance, valued at the hourly rate of monthly basic.
         if (att is not null && (att.OvertimeHours > 0 || att.RestDayOvertimeHours > 0))
         {
-            var hourly = monthlyBasic / Math.Max(1m, settings.StandardMonthlyHours);
+            var hourly = monthlyBasic / monthlyHours;
             var ot = ctx.Components.Values.FirstOrDefault(c => c.Code == "OT" && c.IsActive);
             void AddOt(decimal hours, decimal multiplier, string label)
             {
@@ -207,8 +212,8 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
                 earnings.Add(new EarningInput(ot?.Code ?? "OT", $"{ot?.Name ?? "Overtime"} {label} ({hours:0.##}h x {multiplier:0.##})", amt,
                     ot?.Taxable ?? true, ot?.Pensionable ?? false, false, ot?.Id, ot?.GlAccountCode));
             }
-            AddOt(att.OvertimeHours, settings.OvertimeMultiplier, "normal");
-            AddOt(att.RestDayOvertimeHours, settings.RestDayOvertimeMultiplier, "rest day/holiday");
+            AddOt(att.OvertimeHours, otMultiplier, "normal");
+            AddOt(att.RestDayOvertimeHours, restMultiplier, "rest day/holiday");
         }
 
         ctx.Statutory.TryGetValue(emp.Id, out var stat);

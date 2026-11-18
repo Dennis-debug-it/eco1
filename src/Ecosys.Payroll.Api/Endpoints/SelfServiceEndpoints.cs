@@ -76,10 +76,12 @@ public static class SelfServiceEndpoints
             return Results.Created($"/api/payroll/leave/types/{body.Id}", body);
         });
 
-        leave.MapGet("/balances/{employeeId:guid}", async (Guid employeeId, int? year, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
+        leave.MapGet("/balances/{employeeId:guid}", async (Guid employeeId, int? year, ITenantContext ctx, PayrollDbContext db, LeaveBalanceService balances, CancellationToken ct) =>
         {
             if (ctx.EmployeeId != employeeId) ctx.Require(Permissions.EmployeesRead);
             var y = year ?? DateTime.UtcNow.Year;
+            await balances.EnsureAsync(employeeId, y, ct);
+            await db.SaveChangesAsync(ct);
             var rows = await db.EmployeeLeaveBalances.Where(b => b.EmployeeId == employeeId && b.Year == y)
                 .Join(db.LeaveTypes, b => b.LeaveTypeId, t => t.Id, (b, t) => new { b.Id, b.LeaveTypeId, leaveType = t.Name, t.Code, t.IsPaid, b.Year, b.Entitlement, b.Accrued, b.Taken, b.CarriedOver, available = b.CarriedOver + b.Accrued - b.Taken })
                 .ToListAsync(ct);
@@ -99,7 +101,7 @@ public static class SelfServiceEndpoints
             return Results.Ok(rows);
         });
 
-        leave.MapPost("/requests", async (LeaveRequestBody body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        leave.MapPost("/requests", async (LeaveRequestBody body, ITenantContext ctx, PayrollDbContext db, AuditService audit, LeaveBalanceService balances, CancellationToken ct) =>
         {
             var employeeId = ctx.EmployeeId ?? throw new ForbiddenException("No employee linked to this user.");
             if (body.EndDate < body.StartDate || body.Days <= 0) throw new DomainException("Invalid leave dates.", "VALIDATION");
@@ -107,6 +109,8 @@ public static class SelfServiceEndpoints
             var type = await db.LeaveTypes.FirstOrDefaultAsync(t => t.Id == body.LeaveTypeId, ct) ?? throw new NotFoundException(nameof(LeaveType), body.LeaveTypeId);
             if (type.IsPaid && type.AnnualEntitlementDays > 0)
             {
+                await balances.EnsureAsync(employeeId, body.StartDate.Year, ct);
+                await db.SaveChangesAsync(ct);
                 var bal = await db.EmployeeLeaveBalances.FirstOrDefaultAsync(b => b.EmployeeId == employeeId && b.LeaveTypeId == type.Id && b.Year == body.StartDate.Year, ct);
                 var pending = await db.LeaveRequests.Where(r => r.EmployeeId == employeeId && r.LeaveTypeId == type.Id && r.Status == LeaveRequestStatus.Pending).SumAsync(r => r.Days, ct);
                 if (bal is null || bal.Available - pending < body.Days) throw new DomainException($"Insufficient {type.Name} balance.", "INSUFFICIENT_BALANCE");

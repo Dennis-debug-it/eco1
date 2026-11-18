@@ -167,8 +167,8 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
             e.ToTable("statutory_rule_versions");
             e.HasIndex(x => new { x.Jurisdiction, x.RuleCode, x.Version, x.TenantId }).IsUnique();
             e.HasIndex(x => new { x.Jurisdiction, x.EffectiveFrom, x.EffectiveTo });
-            e.Property(x => x.Parameters).HasColumnType("jsonb").HasConversion(JsonConverter(() => new StatutoryRuleParameters()));
-            e.Property(x => x.Rounding).HasColumnType("jsonb").HasConversion(JsonConverter(() => RoundingRule.Default));
+            e.Property(x => x.Parameters).HasColumnType("jsonb").HasConversion(JsonConverter(() => new StatutoryRuleParameters()), JsonComparer<StatutoryRuleParameters>());
+            e.Property(x => x.Rounding).HasColumnType("jsonb").HasConversion(JsonConverter(() => RoundingRule.Default), JsonComparer<RoundingRule>());
             e.Property(x => x.ApplicableCategories).HasColumnType("jsonb");
             e.HasQueryFilter(x => !x.IsDeleted && (IgnoreTenantFilter || x.TenantId == null || x.TenantId == tenant.TenantId));
         });
@@ -187,7 +187,7 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
         {
             e.HasIndex(x => new { x.PayrollRunId, x.EmployeeId }).IsUnique();
             e.HasIndex(x => x.EmployeeId);
-            e.Property(x => x.Issues).HasColumnType("jsonb").HasConversion(JsonConverter(() => new List<PayrollValidationIssue>()));
+            e.Property(x => x.Issues).HasColumnType("jsonb").HasConversion(JsonConverter(() => new List<PayrollValidationIssue>()), JsonComparer<List<PayrollValidationIssue>>());
             e.Property(x => x.StatutoryRuleVersionIds).HasColumnType("jsonb");
             e.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.PayrollRunEmployeeId).OnDelete(DeleteBehavior.Cascade);
@@ -270,6 +270,12 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
     private static ValueConverter<T, string> JsonConverter<T>(Func<T> fallback) where T : class =>
         new(v => JsonSerializer.Serialize(v, Json), v => JsonSerializer.Deserialize<T>(v, Json) ?? fallback());
 
+    /// <summary>Compares JSON-mapped values by serialised content so in-place changes are detected.</summary>
+    private static Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<T> JsonComparer<T>() where T : class =>
+        new((a, b) => JsonSerializer.Serialize(a, Json) == JsonSerializer.Serialize(b, Json),
+            v => JsonSerializer.Serialize(v, Json).GetHashCode(),
+            v => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(v, Json), Json)!);
+
     public override Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
@@ -283,7 +289,8 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
                     entry.Entity.CreatedBy ??= tenant.UserId;
                     if (entry.Entity is TenantEntity te)
                     {
-                        if (te.TenantId == Guid.Empty) te.TenantId = tenant.RequireTenant();
+                        // Platform-level writes (IgnoreTenantFilter) may record Guid.Empty for platform-wide audit rows.
+                        if (te.TenantId == Guid.Empty && !IgnoreTenantFilter) te.TenantId = tenant.RequireTenant();
                         else if (!IgnoreTenantFilter && tenant.TenantId is { } tid && te.TenantId != tid)
                             throw new ForbiddenException("Cross-tenant write rejected.");
                     }
