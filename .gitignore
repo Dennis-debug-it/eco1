@@ -9,3 +9,4 @@ web/dist/
 .env
 appsettings.*.local.json
 tsconfig.tsbuildinfo
+src/Ecosys.Payroll.Api/wwwroot/
