@@ -38,6 +38,17 @@ public static class DependencyInjection
         services.AddScoped<PayrollRunService>();
         services.AddScoped<ReportingService>();
         services.AddScoped<DemoDataSeeder>();
+        services.AddScoped<NotificationService>();
+        if (config["Notifications:Provider"] == "Ecosys")
+            services.AddHttpClient<INotificationSender, EcosysNotificationSender>(c =>
+            {
+                c.BaseAddress = new Uri((config["Notifications:Ecosys:BaseUrl"] ?? throw new InvalidOperationException("Notifications:Ecosys:BaseUrl is required.")).TrimEnd('/') + "/");
+                c.Timeout = TimeSpan.FromSeconds(15);
+            });
+        else
+            services.AddScoped<INotificationSender, LogNotificationSender>();
+        services.AddSingleton<NotificationDispatcher>();
+        if (config.GetValue("Notifications:Enabled", true)) services.AddHostedService(sp => sp.GetRequiredService<NotificationDispatcher>());
         return services;
     }
 }

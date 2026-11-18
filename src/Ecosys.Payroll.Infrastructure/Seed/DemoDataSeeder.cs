@@ -24,7 +24,20 @@ public sealed class DemoDataSeeder(PayrollDbContext db, TenantContext tenant)
     public async Task SeedPlatformRulesAsync(CancellationToken ct = default)
     {
         db.IgnoreTenantFilter = true;
-        var existing = await db.StatutoryRuleVersions.IgnoreQueryFilters().Where(r => r.TenantId == null).Select(r => r.Id).ToHashSetAsync(ct);
+        var existingRecords = await db.StatutoryRuleVersions.IgnoreQueryFilters().Where(r => r.TenantId == null).ToDictionaryAsync(r => r.Id, ct);
+        var existing = existingRecords.Keys.ToHashSet();
+        // Vendor-maintained platform versions: when a successor is shipped, the predecessor's end date and
+        // reference are synced. Rates/parameters of an existing version are never altered here.
+        foreach (var rule in KenyaStatutoryRules.All().Where(r => existing.Contains(r.Id)))
+        {
+            var rec = existingRecords[rule.Id];
+            if (rec.EffectiveTo != rule.EffectiveTo || rec.LegalReference != rule.LegalReference)
+            {
+                db.PayrollAuditLogs.Add(new Domain.Payroll.PayrollAuditLog { TenantId = Guid.Empty, ActorName = "platform-seed", Action = "statutory.rule.synced", EntityType = nameof(StatutoryRuleVersionRecord), EntityId = rec.Id, Details = $"{{\"effectiveTo\":\"{rec.EffectiveTo}\u2192{rule.EffectiveTo}\"}}" });
+                rec.EffectiveTo = rule.EffectiveTo;
+                rec.LegalReference = rule.LegalReference;
+            }
+        }
         foreach (var rule in KenyaStatutoryRules.All().Where(r => !existing.Contains(r.Id)))
         {
             var rec = StatutoryRuleVersionRecord.FromEngine(rule);

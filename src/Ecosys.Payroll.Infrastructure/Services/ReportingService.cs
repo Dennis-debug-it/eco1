@@ -23,8 +23,49 @@ public sealed record PendingItem(Guid RunId, string Reference, string Status, in
 public sealed record StatutoryReportRow(string EmployeeNumber, string EmployeeName, string? Pin, string? MemberNumber, decimal Gross, decimal Base, decimal Employee, decimal Employer, decimal Total);
 public sealed record StatutoryReport(string RuleCode, string Title, string RunReference, string Period, IReadOnlyList<StatutoryReportRow> Rows, decimal TotalEmployee, decimal TotalEmployer);
 
+public sealed record AnnualMonth(int Month, string Period, decimal Gross, decimal TaxableEarnings, decimal AllowableDeductions, decimal TaxablePay, decimal GrossTax, decimal Reliefs, decimal Paye, decimal Nssf, decimal Shif, decimal HousingLevy, decimal NetPay);
+public sealed record AnnualEmployee(Guid EmployeeId, string EmployeeNumber, string EmployeeName, string? KraPin, IReadOnlyList<AnnualMonth> Months, AnnualMonth Totals);
+public sealed record AnnualReport(int Year, string LegalEntity, string EmployerPin, IReadOnlyList<AnnualEmployee> Employees);
+
 public sealed class ReportingService(PayrollDbContext db, ITenantContext tenant)
 {
+    /// <summary>
+    /// Annual payroll summary per employee (P9-style tax deduction card), built from finalised regular,
+    /// supplementary and correction runs whose period ends in the year. Reversed runs are excluded.
+    /// </summary>
+    public async Task<AnnualReport> AnnualAsync(Guid legalEntityId, int year, Guid? employeeId, CancellationToken ct = default)
+    {
+        var self = employeeId is { } eid && tenant.EmployeeId == eid;
+        if (!self) { tenant.Require(Domain.Identity.Permissions.ReportsRead); tenant.Require(Domain.Identity.Permissions.SalaryRead); }
+        tenant.RequireLegalEntity(legalEntityId);
+        var entity = await db.LegalEntities.FirstOrDefaultAsync(e => e.Id == legalEntityId, ct) ?? throw new NotFoundException("LegalEntity", legalEntityId);
+        var start = new DateOnly(year, 1, 1); var end = new DateOnly(year, 12, 31);
+        var runs = await db.PayrollRuns.Where(r => r.LegalEntityId == legalEntityId && r.Status == PayrollRunStatus.Finalised)
+            .Join(db.PayrollPeriods, r => r.PayrollPeriodId, p => p.Id, (r, p) => new { r.Id, p.PeriodEnd })
+            .Where(x => x.PeriodEnd >= start && x.PeriodEnd <= end).ToListAsync(ct);
+        var runMonth = runs.ToDictionary(r => r.Id, r => r.PeriodEnd.Month);
+        var runIds = runMonth.Keys.ToList();
+        var q = db.PayrollRunEmployees.Where(e => runIds.Contains(e.PayrollRunId));
+        if (employeeId is { } only) q = q.Where(e => e.EmployeeId == only);
+        var rows = await q.ToListAsync(ct);
+        var ids = rows.Select(r => r.EmployeeId).Distinct().ToList();
+        var pins = await db.EmployeeStatutoryDetails.Where(s => ids.Contains(s.EmployeeId)).ToDictionaryAsync(s => s.EmployeeId, s => s.KraPin, ct);
+
+        static AnnualMonth Sum(int month, string label, IEnumerable<PayrollRunEmployee> xs)
+        {
+            var l = xs.ToList();
+            return new AnnualMonth(month, label, l.Sum(x => x.GrossPay), l.Sum(x => x.TaxableEarnings), l.Sum(x => x.TaxableEarnings - x.TaxablePay), l.Sum(x => x.TaxablePay),
+                l.Sum(x => x.GrossTax), l.Sum(x => x.TotalReliefs), l.Sum(x => x.Paye), l.Sum(x => x.Nssf), l.Sum(x => x.Shif), l.Sum(x => x.HousingLevy), l.Sum(x => x.NetPay));
+        }
+        var employees = rows.GroupBy(r => r.EmployeeId).Select(g =>
+        {
+            var first = g.OrderByDescending(x => runMonth[x.PayrollRunId]).First();
+            var months = Enumerable.Range(1, 12).Select(m => Sum(m, new DateOnly(year, m, 1).ToString("MMM yyyy"), g.Where(x => runMonth[x.PayrollRunId] == m))).ToList();
+            return new AnnualEmployee(g.Key, first.EmployeeNumber, first.EmployeeName, pins.GetValueOrDefault(g.Key), months, Sum(0, "Total", g));
+        }).OrderBy(e => e.EmployeeNumber).ToList();
+        return new AnnualReport(year, entity.Name, entity.TaxPin, employees);
+    }
+
     public async Task<DashboardSummary> DashboardAsync(Guid? legalEntityId, CancellationToken ct = default)
     {
         tenant.Require(Permissions.ReportsRead);

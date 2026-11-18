@@ -120,7 +120,7 @@ public static class SelfServiceEndpoints
             return Results.Created($"/api/payroll/leave/requests/{r.Id}", r);
         });
 
-        leave.MapPost("/requests/{id:guid}/approve", async (Guid id, LeaveDecision? d, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        leave.MapPost("/requests/{id:guid}/approve", async (Guid id, LeaveDecision? d, ITenantContext ctx, PayrollDbContext db, AuditService audit, NotificationService notify, CancellationToken ct) =>
         {
             ctx.Require(Permissions.LeaveApprove);
             var r = await db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(LeaveRequest), id);
@@ -130,16 +130,18 @@ public static class SelfServiceEndpoints
             var bal = await db.EmployeeLeaveBalances.FirstOrDefaultAsync(b => b.EmployeeId == r.EmployeeId && b.LeaveTypeId == r.LeaveTypeId && b.Year == r.StartDate.Year, ct);
             if (bal is not null) bal.Taken += r.Days;
             audit.Record("leave.approved", nameof(LeaveRequest), id, new { r.Days }, r.LegalEntityId);
+            await notify.LeaveDecidedAsync(r, approved: true, ct);
             await db.SaveChangesAsync(ct);
             return Results.Ok(r);
         });
-        leave.MapPost("/requests/{id:guid}/reject", async (Guid id, LeaveDecision d, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        leave.MapPost("/requests/{id:guid}/reject", async (Guid id, LeaveDecision d, ITenantContext ctx, PayrollDbContext db, AuditService audit, NotificationService notify, CancellationToken ct) =>
         {
             ctx.Require(Permissions.LeaveApprove);
             var r = await db.LeaveRequests.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(LeaveRequest), id);
             if (r.Status != LeaveRequestStatus.Pending) throw new InvalidStateException("Request is not pending.");
             r.Status = LeaveRequestStatus.Rejected; r.ApproverId = ctx.UserId; r.DecidedAt = DateTimeOffset.UtcNow; r.ApproverComment = d.Comment;
             audit.Record("leave.rejected", nameof(LeaveRequest), id, new { d.Comment }, r.LegalEntityId);
+            await notify.LeaveDecidedAsync(r, approved: false, ct);
             await db.SaveChangesAsync(ct);
             return Results.Ok(r);
         });

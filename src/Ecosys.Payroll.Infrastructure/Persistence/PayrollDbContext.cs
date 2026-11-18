@@ -58,6 +58,8 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
     public DbSet<Payslip> Payslips => Set<Payslip>();
     public DbSet<PayrollAdjustment> PayrollAdjustments => Set<PayrollAdjustment>();
     public DbSet<PayrollAuditLog> PayrollAuditLogs => Set<PayrollAuditLog>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<NotificationMessage> NotificationMessages => Set<NotificationMessage>();
 
     public DbSet<PayrollJournal> PayrollJournals => Set<PayrollJournal>();
     public DbSet<PayrollJournalLine> PayrollJournalLines => Set<PayrollJournalLine>();
@@ -208,6 +210,17 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
         });
         Scoped<PayrollAdjustment>(b, e => e.HasIndex(x => new { x.EmployeeId, x.Status }));
         TenantEntity<PayrollAuditLog>(b, e => { e.HasIndex(x => new { x.TenantId, x.OccurredAt }); e.HasIndex(x => new { x.EntityType, x.EntityId }); });
+        Scoped<AttendanceRecord>(b, e =>
+        {
+            e.HasIndex(x => new { x.PayrollRunId, x.EmployeeId }).IsUnique();
+            e.HasOne<PayrollRun>().WithMany().HasForeignKey(x => x.PayrollRunId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId);
+        });
+        TenantEntity<NotificationMessage>(b, e =>
+        {
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.Property(x => x.Recipient).HasConversion(encryptor.RequiredConverter());
+        });
 
         // ---- Finance ----------------------------------------------------------------------
         Scoped<PayrollJournal>(b, e =>
@@ -230,6 +243,7 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
             e.HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
             e.Property(x => x.Roles).HasColumnType("jsonb");
             e.Property(x => x.LegalEntityIds).HasColumnType("jsonb");
+            e.Property(x => x.MfaSecret).HasConversion(encryptor.Converter());
         });
     }
 
@@ -289,6 +303,28 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
                     break;
             }
         }
-        return base.SaveChangesAsync(ct);
+        return SaveWithReferenceGuardAsync(ct);
+    }
+
+    /// <summary>
+    /// Foreign keys are not tenant-aware, so a client-supplied LegalEntityId from another tenant would satisfy
+    /// the FK. Every written legal-entity-scoped row must reference a legal entity visible to this tenant.
+    /// </summary>
+    private async Task<int> SaveWithReferenceGuardAsync(CancellationToken ct)
+    {
+        if (!IgnoreTenantFilter)
+        {
+            var referenced = ChangeTracker.Entries<LegalEntityScopedEntity>()
+                .Where(e => e.State is EntityState.Added || (e.State == EntityState.Modified && e.Property(x => x.LegalEntityId).IsModified))
+                .Select(e => e.Entity.LegalEntityId).Distinct().ToList();
+            if (referenced.Count > 0)
+            {
+                var pending = ChangeTracker.Entries<LegalEntity>().Where(e => e.State == EntityState.Added).Select(e => e.Entity.Id).ToHashSet();
+                var unresolved = referenced.Where(id => !pending.Contains(id)).ToList();
+                var visible = unresolved.Count == 0 ? [] : await LegalEntities.Where(l => unresolved.Contains(l.Id)).Select(l => l.Id).ToListAsync(ct);
+                if (unresolved.Except(visible).Any()) throw new ForbiddenException("Referenced legal entity does not belong to this tenant.");
+            }
+        }
+        return await base.SaveChangesAsync(ct);
     }
 }

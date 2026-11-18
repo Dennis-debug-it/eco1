@@ -26,7 +26,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.EmployeeSalaryAssignment", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -116,7 +115,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.EmployeeSalaryAssignmentLine", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -187,7 +185,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.PayrollVariableInput", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -264,7 +261,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.SalaryComponent", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -393,7 +389,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.SalaryStructure", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -466,7 +461,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.SalaryStructureLine", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -541,7 +535,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.StaffLoan", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -633,7 +626,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compliance.StatutoryRuleVersionRecord", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -775,7 +767,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Employees.Employee", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -955,7 +946,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Employees.EmployeeBankAccount", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1056,7 +1046,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Employees.EmployeeStatutoryDetails", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1152,7 +1141,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Employees.EmploymentRecord", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1252,7 +1240,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Finance.GlAccountMapping", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1325,7 +1312,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Finance.PayrollJournal", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1418,7 +1404,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Finance.PayrollJournalLine", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1503,7 +1488,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1558,9 +1542,17 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("mfa_enabled");
 
+                    b.Property<string>("MfaSecret")
+                        .HasColumnType("text")
+                        .HasColumnName("mfa_secret");
+
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text")
+                        .HasColumnName("phone");
 
                     b.PrimitiveCollection<string>("Roles")
                         .IsRequired()
@@ -1595,7 +1587,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.EmployeeLeaveBalance", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1678,7 +1669,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.LeaveRequest", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1777,7 +1767,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.LeaveType", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1866,7 +1855,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Branch", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1939,7 +1927,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.CostCentre", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2012,7 +1999,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Department", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2093,7 +2079,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.LegalEntity", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2198,7 +2183,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.PayrollGroup", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2280,7 +2264,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.PayrollPeriod", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2361,7 +2344,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2423,10 +2405,207 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.ToTable("tenants", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.AttendanceRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AbsentDays")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("absent_days");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("DaysWorked")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("days_worked");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<decimal>("OvertimeHours")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("overtime_hours");
+
+                    b.Property<Guid>("PayrollRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payroll_run_id");
+
+                    b.Property<decimal>("RestDayOvertimeHours")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("rest_day_overtime_hours");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attendance_records");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_attendance_records_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_attendance_records_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_attendance_records_tenant_id");
+
+                    b.HasIndex("PayrollRunId", "EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attendance_records_payroll_run_id_employee_id");
+
+                    b.ToTable("attendance_records", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.NotificationMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .HasColumnType("text")
+                        .HasColumnName("entity_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("ProviderReference")
+                        .HasColumnType("text")
+                        .HasColumnName("provider_reference");
+
+                    b.Property<string>("Recipient")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("recipient");
+
+                    b.Property<string>("RecipientName")
+                        .HasColumnType("text")
+                        .HasColumnName("recipient_name");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("Template")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("template");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notification_messages");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_notification_messages_tenant_id");
+
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_notification_messages_status_next_attempt_at");
+
+                    b.ToTable("notification_messages", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PaymentBatch", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2533,7 +2712,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollAdjustment", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2630,7 +2808,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollApproval", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2716,7 +2893,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2804,7 +2980,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollPayment", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -2933,7 +3108,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollResultLineRecord", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -3035,7 +3209,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollRun", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -3257,7 +3430,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PayrollRunEmployee", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -3435,7 +3607,6 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.Payslip", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -3841,12 +4012,26 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                             b1.Property<int>("MinimumApprovals");
 
+                            b1.Property<bool>("NotifyEmployeesOnPayslip");
+
+                            b1.Property<decimal>("OvertimeMultiplier")
+                                .HasColumnType("numeric(18,4)");
+
                             b1.Property<string>("PayslipFooter")
                                 .IsRequired();
 
                             b1.Property<bool>("RequireReviewBeforeApproval");
 
+                            b1.Property<decimal>("RestDayOvertimeMultiplier")
+                                .HasColumnType("numeric(18,4)");
+
                             b1.Property<decimal>("SalaryVarianceWarningPercent")
+                                .HasColumnType("numeric(18,4)");
+
+                            b1.Property<decimal>("StandardMonthlyHours")
+                                .HasColumnType("numeric(18,4)");
+
+                            b1.Property<decimal>("StandardMonthlyWorkingDays")
                                 .HasColumnType("numeric(18,4)");
 
                             b1.HasKey("LegalEntityId");
@@ -3891,6 +4076,30 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_payroll_periods_payroll_groups_payroll_group_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.AttendanceRecord", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Employees.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_attendance_records_employees_employee_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_attendance_records_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Payroll.PayrollRun", null)
+                        .WithMany()
+                        .HasForeignKey("PayrollRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_attendance_records_payroll_runs_payroll_run_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PaymentBatch", b =>

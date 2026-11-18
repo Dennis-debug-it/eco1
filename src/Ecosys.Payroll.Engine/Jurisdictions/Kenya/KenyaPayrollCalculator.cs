@@ -23,6 +23,7 @@ public sealed class KenyaPayrollCalculator : IPayrollCalculator
         ArgumentNullException.ThrowIfNull(rules);
         if (!string.Equals(rules.Jurisdiction, Jurisdiction, StringComparison.OrdinalIgnoreCase))
             throw new StatutoryConfigurationException($"Rule set for {rules.Jurisdiction} supplied to the {Jurisdiction} calculator.");
+        if (rules.ScaleFactor != period.MonthlyScaleFactor) rules = rules.Scale(period.MonthlyScaleFactor);
 
         var lines = new List<PayrollResultLine>();
         var issues = new List<PayrollValidationIssue>();

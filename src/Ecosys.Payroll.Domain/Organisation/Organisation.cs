@@ -38,6 +38,15 @@ public sealed class PayrollSettings
     public int MinimumApprovals { get; set; } = 1;
     public decimal SalaryVarianceWarningPercent { get; set; } = 20m;
     public string PayslipFooter { get; set; } = "This is a computer-generated payslip.";
+
+    /// <summary>Standard hours per month used to derive the hourly rate for overtime (45h x 52 / 12 = 195).</summary>
+    public decimal StandardMonthlyHours { get; set; } = 195m;
+    /// <summary>Working days per month used to value unpaid absence days.</summary>
+    public decimal StandardMonthlyWorkingDays { get; set; } = 22m;
+    public decimal OvertimeMultiplier { get; set; } = 1.5m;
+    public decimal RestDayOvertimeMultiplier { get; set; } = 2.0m;
+    /// <summary>Notify employees by email/WhatsApp when payslips are issued.</summary>
+    public bool NotifyEmployeesOnPayslip { get; set; } = true;
 }
 
 public class Branch : LegalEntityScopedEntity

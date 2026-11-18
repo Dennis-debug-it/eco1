@@ -15,6 +15,9 @@ public static class Roles
     public const string Auditor = "Auditor";
     public const string Employee = "Employee";
 
+    /// <summary>Roles that must use multi-factor authentication (PRD §13.5).</summary>
+    public static readonly string[] Privileged = [PlatformAdministrator, TenantAdministrator, PayrollAdministrator, PayrollApprover, FinanceOfficer];
+
     public static readonly string[] All =
     [
         PlatformAdministrator, TenantAdministrator, HrAdministrator, PayrollAdministrator, PayrollReviewer,
@@ -100,5 +103,8 @@ public class User : TenantEntity
     public Guid? EmployeeId { get; set; }
     public bool IsActive { get; set; } = true;
     public bool MfaEnabled { get; set; }
+    /// <summary>Base32 TOTP secret, encrypted at rest.</summary>
+    public string? MfaSecret { get; set; }
+    public string? Phone { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
 }

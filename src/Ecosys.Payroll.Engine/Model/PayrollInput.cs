@@ -75,13 +75,24 @@ public sealed record EmployeePayrollInput
     public decimal UnpaidLeaveDeduction { get; init; }
 }
 
+public enum PeriodFrequency { Monthly, SemiMonthly, Weekly }
+
 public sealed record PayrollPeriodInput(
     Guid PayrollPeriodId,
     DateOnly PeriodStart,
     DateOnly PeriodEnd,
     string Jurisdiction,
-    string CurrencyCode)
+    string CurrencyCode,
+    PeriodFrequency Frequency = PeriodFrequency.Monthly)
 {
+    /// <summary>Factor converting monthly statutory thresholds to this period's length.</summary>
+    public decimal MonthlyScaleFactor => Frequency switch
+    {
+        PeriodFrequency.Weekly => 12m / 52m,
+        PeriodFrequency.SemiMonthly => 0.5m,
+        _ => 1m,
+    };
+
     /// <summary>Statutory rules are selected as effective on the period end date.</summary>
     public DateOnly RuleDate => PeriodEnd;
 }

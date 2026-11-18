@@ -3,8 +3,9 @@ using Ecosys.Payroll.Engine.Rules;
 namespace Ecosys.Payroll.Engine.Jurisdictions.Kenya;
 
 /// <summary>
-/// Seed statutory configuration for Kenya. These are the published parameters as understood at
-/// authoring time and are shipped in <see cref="RuleApprovalStatus.Approved"/> state for the
+/// Seed statutory configuration for Kenya. Parameters were cross-checked in November 2026 against
+/// secondary sources citing KRA, NSSF (Year-4 notice, Feb 2026) and SHA publications; they are the published
+/// parameters as understood at authoring time and are shipped in <see cref="RuleApprovalStatus.Approved"/> state for the
 /// reference tenant only so that tests and demos run. <b>Per PRD §4.3 they must be independently
 /// verified against KRA, NSSF, SHA and NITA publications before any production deployment.</b>
 /// Deterministic GUIDs keep seeded ids stable across environments.
@@ -75,11 +76,21 @@ public static class KenyaStatutoryRules
         {
             Id = Id("nssf.v3"), RuleCode = KenyaRuleCodes.Nssf, Jurisdiction = "KE", Authority = "NSSF", Name = "NSSF",
             Version = 3, Method = StatutoryCalculationMethod.TieredContribution, Base = StatutoryBase.PensionableEarnings,
-            EffectiveFrom = new DateOnly(2025, 2, 1), EffectiveTo = null,
+            EffectiveFrom = new DateOnly(2025, 2, 1), EffectiveTo = new DateOnly(2026, 1, 31),
             EmployeeRate = 0.06m, EmployerRate = 0.06m,
             ApprovalStatus = RuleApprovalStatus.Approved,
-            LegalReference = "NSSF Act 2013 Third Schedule, year 3: LEL 8,000 / UEL 72,000 — verify year-4 limits before Feb 2026 payrolls",
+            LegalReference = "NSSF Act 2013 Third Schedule, year 3: LEL 8,000 / UEL 72,000",
             Parameters = new StatutoryRuleParameters { LowerEarningsLimit = 8_000m, UpperEarningsLimit = 72_000m, CountsAsPensionContribution = true, DeductibleFromTaxablePay = true },
+        },
+        new StatutoryRuleVersion
+        {
+            Id = Id("nssf.v4"), RuleCode = KenyaRuleCodes.Nssf, Jurisdiction = "KE", Authority = "NSSF", Name = "NSSF",
+            Version = 4, Method = StatutoryCalculationMethod.TieredContribution, Base = StatutoryBase.PensionableEarnings,
+            EffectiveFrom = new DateOnly(2026, 2, 1), EffectiveTo = null,
+            EmployeeRate = 0.06m, EmployerRate = 0.06m,
+            ApprovalStatus = RuleApprovalStatus.Approved,
+            LegalReference = "NSSF Act 2013 Third Schedule, year 4 (NSSF notice to employers, Feb 2026): LEL 9,000 / UEL 108,000; max 6,480 employee + 6,480 employer",
+            Parameters = new StatutoryRuleParameters { LowerEarningsLimit = 9_000m, UpperEarningsLimit = 108_000m, CountsAsPensionContribution = true, DeductibleFromTaxablePay = true },
         },
 
         // ---------------- SHIF (Social Health Insurance Act 2023) ---------------------------

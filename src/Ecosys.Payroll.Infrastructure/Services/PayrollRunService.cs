@@ -24,7 +24,8 @@ public sealed class PayrollRunService(
     StatutoryRuleService rules,
     PayrollInputAssembler assembler,
     PayrollCalculatorRegistry calculators,
-    JournalBuilder journals)
+    JournalBuilder journals,
+    NotificationService notifications)
 {
     public async Task<PayrollRun> CreateAsync(CreateRunRequest req, CancellationToken ct = default)
     {
@@ -113,7 +114,7 @@ public sealed class PayrollRunService(
         var ctx = await assembler.LoadAsync(run, ct);
         var ruleSet = await rules.ResolveAsync(run.Jurisdiction, ctx.Period.PeriodEnd, ct);
         var calculator = calculators.For(run.Jurisdiction);
-        var periodInput = new PayrollPeriodInput(ctx.Period.Id, ctx.Period.PeriodStart, ctx.Period.PeriodEnd, run.Jurisdiction, run.CurrencyCode);
+        var periodInput = new PayrollPeriodInput(ctx.Period.Id, ctx.Period.PeriodStart, ctx.Period.PeriodEnd, run.Jurisdiction, run.CurrencyCode, ctx.Frequency);
         var threshold = ctx.Entity.Settings.SalaryVarianceWarningPercent / 100m;
 
         // Replace previous results wholesale; the run is not yet approved so nothing is lost.
@@ -195,6 +196,7 @@ public sealed class PayrollRunService(
         run.SubmittedBy = tenant.UserId;
         run.SubmittedAt = DateTimeOffset.UtcNow;
         Approval(run, ApprovalAction.Submitted, from, comment);
+        await notifications.PayrollSubmittedAsync(run, ct);
         await db.SaveChangesAsync(ct);
         return run;
     }
@@ -215,6 +217,7 @@ public sealed class PayrollRunService(
         run.ApprovedBy = me;
         run.ApprovedAt = DateTimeOffset.UtcNow;
         Approval(run, ApprovalAction.Approved, from, comment);
+        await notifications.PayrollDecidedAsync(run, approved: true, comment, ct);
         await db.SaveChangesAsync(ct);
         return run;
     }
@@ -228,6 +231,7 @@ public sealed class PayrollRunService(
         var from = run.Status;
         run.Transition(PayrollRunStatus.Rejected);
         Approval(run, ApprovalAction.Rejected, from, reason);
+        await notifications.PayrollDecidedAsync(run, approved: false, reason, ct);
         await db.SaveChangesAsync(ct);
         return run;
     }
@@ -242,8 +246,8 @@ public sealed class PayrollRunService(
         var period = await db.PayrollPeriods.FirstAsync(p => p.Id == run.PayrollPeriodId, ct);
         var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
         var ids = run.Employees.Select(e => e.EmployeeId).ToList();
-        var banks = (await db.EmployeeBankAccounts.Where(b => ids.Contains(b.EmployeeId)).ToListAsync(ct))
-            .GroupBy(b => b.EmployeeId).ToDictionary(g => g.Key, g => g.OrderByDescending(b => b.IsPrimary).First());
+        var banks = (await db.EmployeeBankAccounts.Where(b => ids.Contains(b.EmployeeId) && b.IsVerified).ToListAsync(ct))
+            .GroupBy(b => b.EmployeeId).ToDictionary(g => g.Key, g => g.ToList());
 
         // Cancel any un-sent earlier payments so a regenerated file never double-pays.
         var stale = await db.PayrollPayments.Where(p => p.PayrollRunId == run.Id && (p.Status == PaymentStatus.Pending || p.Status == PaymentStatus.FileGenerated)).ToListAsync(ct);
@@ -260,14 +264,18 @@ public sealed class PayrollRunService(
         var n = 0;
         foreach (var e in run.Employees.Where(e => e.NetPay > 0).OrderBy(e => e.EmployeeNumber))
         {
-            if (!banks.TryGetValue(e.EmployeeId, out var bank)) throw new InvalidStateException($"Employee {e.EmployeeNumber} has no bank account.");
-            payments.Add(new PayrollPayment
+            if (!banks.TryGetValue(e.EmployeeId, out var accounts)) throw new InvalidStateException($"Employee {e.EmployeeNumber} has no verified bank account.");
+            foreach (var (bank, amount) in SplitNetPay(e.NetPay, accounts))
             {
-                TenantId = run.TenantId, LegalEntityId = run.LegalEntityId, PayrollRunId = run.Id, PayrollRunEmployeeId = e.Id, EmployeeId = e.EmployeeId,
-                PaymentBatchId = batch.Id, Reference = $"{batch.Reference}-{++n:D4}", Amount = e.NetPay, CurrencyCode = run.CurrencyCode,
-                Method = bank.Method, BankName = bank.BankName, BankCode = bank.BankCode, BranchCode = bank.BranchCode,
-                AccountName = bank.AccountName, AccountNumber = bank.AccountNumber, Status = PaymentStatus.FileGenerated,
-            });
+                if (format == PaymentFileFormat.MpesaB2C && bank.Method != Domain.Employees.PaymentMethod.MobileMoney) continue;
+                payments.Add(new PayrollPayment
+                {
+                    TenantId = run.TenantId, LegalEntityId = run.LegalEntityId, PayrollRunId = run.Id, PayrollRunEmployeeId = e.Id, EmployeeId = e.EmployeeId,
+                    PaymentBatchId = batch.Id, Reference = $"{batch.Reference}-{++n:D4}", Amount = amount, CurrencyCode = run.CurrencyCode,
+                    Method = bank.Method, BankName = bank.BankName, BankCode = bank.BankCode, BranchCode = bank.BranchCode,
+                    AccountName = bank.AccountName, AccountNumber = bank.AccountNumber, Status = PaymentStatus.FileGenerated,
+                });
+            }
         }
 
         var file = PaymentFileWriter.Write(format, entity, batch, payments, period);
@@ -277,7 +285,10 @@ public sealed class PayrollRunService(
         batch.TotalAmount = payments.Sum(p => p.Amount);
 
         // Reconciliation guard (PRD §18): file total must equal approved net total of paid employees.
-        var expected = run.Employees.Where(e => e.NetPay > 0).Sum(e => e.NetPay);
+        var expected = format == PaymentFileFormat.MpesaB2C
+            ? payments.Sum(p => p.Amount) // M-PESA files carry only the mobile-money share; bank shares go in a bank-format batch
+            : run.Employees.Where(e => e.NetPay > 0).Sum(e => e.NetPay);
+        if (payments.Count == 0) throw new InvalidStateException("No payments match this file format.");
         if (batch.TotalAmount != expected) throw new InvalidStateException($"Payment file total {batch.TotalAmount:N2} does not reconcile to approved net {expected:N2}.");
 
         db.PaymentBatches.Add(batch);
@@ -370,6 +381,8 @@ public sealed class PayrollRunService(
         run.FinalisedBy = tenant.UserId;
         run.FinalisedAt = DateTimeOffset.UtcNow;
         Approval(run, ApprovalAction.Finalised, from, $"Journal {journal.Reference} Dr {journal.TotalDebit:N2} / Cr {journal.TotalCredit:N2}");
+        var entitySettings = (await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct)).Settings;
+        if (entitySettings.NotifyEmployeesOnPayslip) await notifications.PayslipsIssuedAsync(run, period.Name, ct);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return run;
@@ -432,6 +445,28 @@ public sealed class PayrollRunService(
             ActorId = tenant.RequireUser(), ActorName = tenant.UserName ?? "unknown", Comment = comment, FromStatus = from, ToStatus = run.Status,
         });
         audit.Record($"payroll.run.{action.ToString().ToLowerInvariant()}", nameof(PayrollRun), run.Id, new { run.Reference, from, to = run.Status, comment }, run.LegalEntityId);
+    }
+
+    /// <summary>
+    /// Splits net pay across an employee's verified accounts: each non-primary account receives its
+    /// <see cref="Domain.Employees.EmployeeBankAccount.SplitPercent"/> of net (rounded to the cent) and the
+    /// primary account receives the remainder, so the parts always sum exactly to net pay.
+    /// </summary>
+    public static List<(Domain.Employees.EmployeeBankAccount Account, decimal Amount)> SplitNetPay(decimal net, IReadOnlyList<Domain.Employees.EmployeeBankAccount> accounts)
+    {
+        var primary = accounts.FirstOrDefault(a => a.IsPrimary) ?? accounts[0];
+        var result = new List<(Domain.Employees.EmployeeBankAccount, decimal)>();
+        var allocated = 0m;
+        foreach (var a in accounts.Where(a => a != primary && a.SplitPercent > 0 && a.SplitPercent < 100).OrderBy(a => a.CreatedAt))
+        {
+            var amt = Math.Round(net * a.SplitPercent / 100m, 2, MidpointRounding.AwayFromZero);
+            if (allocated + amt > net) amt = net - allocated;
+            if (amt <= 0) continue;
+            allocated += amt;
+            result.Add((a, amt));
+        }
+        result.Insert(0, (primary, net - allocated));
+        return result;
     }
 
     /// <summary>Hard-deletes un-approved working results (soft deletion would collide with the unique run/employee index).</summary>

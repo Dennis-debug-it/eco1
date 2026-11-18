@@ -10,6 +10,44 @@ namespace Ecosys.Payroll.Api.Endpoints;
 
 public sealed record GeneratePeriodsRequest(int Year, int PayDay = 28);
 
+/// <summary>Builds the period calendar for a pay frequency. Weekly periods run Monday–Sunday and belong to the year in which they end.</summary>
+public static class PeriodCalendar
+{
+    public static IEnumerable<(DateOnly Start, DateOnly End, DateOnly PayDate, string Name)> Generate(PayFrequency frequency, int year, int payDay)
+    {
+        switch (frequency)
+        {
+            case PayFrequency.Weekly:
+                var monday = new DateOnly(year, 1, 1);
+                while (monday.DayOfWeek != DayOfWeek.Monday) monday = monday.AddDays(-1);
+                for (var w = 1; ; w++)
+                {
+                    var end = monday.AddDays(6);
+                    if (end.Year > year) yield break;
+                    if (end.Year == year) yield return (monday, end, end.AddDays(-2) /* Friday */, $"Week {w:D2} {year} ({monday:dd MMM}–{end:dd MMM})");
+                    monday = monday.AddDays(7);
+                }
+            case PayFrequency.SemiMonthly:
+                for (var m = 1; m <= 12; m++)
+                {
+                    var first = new DateOnly(year, m, 1);
+                    var mid = new DateOnly(year, m, 15);
+                    var last = first.AddMonths(1).AddDays(-1);
+                    yield return (first, mid, mid, $"{first:MMMM yyyy} (1st half)");
+                    yield return (mid.AddDays(1), last, last, $"{first:MMMM yyyy} (2nd half)");
+                }
+                yield break;
+            default:
+                for (var m = 1; m <= 12; m++)
+                {
+                    var start = new DateOnly(year, m, 1);
+                    yield return (start, start.AddMonths(1).AddDays(-1), new DateOnly(year, m, Math.Min(payDay, DateTime.DaysInMonth(year, m))), start.ToString("MMMM yyyy"));
+                }
+                yield break;
+        }
+    }
+}
+
 public static class OrganisationEndpoints
 {
     public static void MapOrganisation(this RouteGroupBuilder api)
@@ -56,14 +94,12 @@ public static class OrganisationEndpoints
             ctx.Require(Permissions.OrganisationManage);
             var group = await db.PayrollGroups.FirstOrDefaultAsync(x => x.Id == groupId, ct) ?? throw new NotFoundException(nameof(PayrollGroup), groupId);
             ctx.RequireLegalEntity(group.LegalEntityId);
-            var existing = await db.PayrollPeriods.Where(p => p.PayrollGroupId == groupId && p.PeriodStart.Year == req.Year).Select(p => p.PeriodStart).ToHashSetAsync(ct);
+            var existing = await db.PayrollPeriods.Where(p => p.PayrollGroupId == groupId && p.PeriodEnd.Year == req.Year).Select(p => p.PeriodStart).ToHashSetAsync(ct);
             var created = 0;
-            for (var m = 1; m <= 12; m++)
+            foreach (var (start, end, payDate, name) in PeriodCalendar.Generate(group.Frequency, req.Year, req.PayDay))
             {
-                var start = new DateOnly(req.Year, m, 1);
                 if (existing.Contains(start)) continue;
-                var end = start.AddMonths(1).AddDays(-1);
-                db.PayrollPeriods.Add(new PayrollPeriod { LegalEntityId = group.LegalEntityId, PayrollGroupId = groupId, Name = start.ToString("MMMM yyyy"), PeriodStart = start, PeriodEnd = end, PayDate = new DateOnly(req.Year, m, Math.Min(req.PayDay, DateTime.DaysInMonth(req.Year, m))) });
+                db.PayrollPeriods.Add(new PayrollPeriod { LegalEntityId = group.LegalEntityId, PayrollGroupId = groupId, Name = name, PeriodStart = start, PeriodEnd = end, PayDate = payDate });
                 created++;
             }
             audit.Record("payroll_periods.generated", nameof(PayrollGroup), groupId, new { req.Year, created });

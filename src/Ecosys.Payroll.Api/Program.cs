@@ -29,6 +29,7 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
 var auth = builder.Configuration.GetSection("Auth");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
 {
+    o.MapInboundClaims = false; // keep JWT claim names (sub, role, amr, tenant_id) exactly as issued
     if (auth["Mode"] == "Ecosys")
     {
         o.Authority = auth["Authority"];

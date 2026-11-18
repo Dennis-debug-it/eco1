@@ -15,10 +15,11 @@ public static class ClaimNames
     public const string EmployeeId = "employee_id";
     public const string LegalEntityIds = "legal_entity_ids";
     public const string Role = "role";
+    public const string AuthMethod = "amr";
 }
 
 /// <summary>Builds the per-request <see cref="TenantContext"/> from the validated principal.</summary>
-public sealed class TenantContextMiddleware(RequestDelegate next)
+public sealed class TenantContextMiddleware(RequestDelegate next, IConfiguration config)
 {
     public async Task InvokeAsync(HttpContext http, TenantContext ctx)
     {
@@ -37,6 +38,18 @@ public sealed class TenantContextMiddleware(RequestDelegate next)
                 .Select(v => Guid.TryParse(v, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToHashSet();
         }
         ctx.IpAddress = http.Connection.RemoteIpAddress?.ToString();
+
+        // PRD §13.5: privileged roles must complete MFA. A password-only token for such a user may only
+        // reach the auth endpoints (to enrol or verify), never payroll data.
+        if (user.Identity?.IsAuthenticated == true && config.GetValue("Auth:RequireMfaForPrivilegedRoles", true)
+            && ctx.Roles.Overlaps(Roles.Privileged) && user.FindFirstValue(ClaimNames.AuthMethod) != "mfa"
+            && !http.Request.Path.StartsWithSegments("/api/payroll/auth"))
+        {
+            http.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await http.Response.WriteAsJsonAsync(new { title = "Multi-factor authentication required", status = 403, code = "MFA_REQUIRED",
+                detail = "Your role requires multi-factor authentication. Enrol an authenticator app, then sign in again with a code." });
+            return;
+        }
         await next(http);
     }
 }
@@ -44,7 +57,7 @@ public sealed class TenantContextMiddleware(RequestDelegate next)
 /// <summary>Issues development tokens (Local auth mode). In production the shared Ecosys identity provider issues tokens with the same claims.</summary>
 public sealed class TokenService(IConfiguration config)
 {
-    public (string Token, DateTimeOffset ExpiresAt) Issue(User user, Domain.Organisation.Tenant tenant)
+    public (string Token, DateTimeOffset ExpiresAt) Issue(User user, Domain.Organisation.Tenant tenant, bool mfa)
     {
         var auth = config.GetSection("Auth");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(auth["SigningKey"]!));
@@ -56,6 +69,7 @@ public sealed class TokenService(IConfiguration config)
             new("name", user.DisplayName),
             new(ClaimNames.TenantId, tenant.Id.ToString()),
             new("tenant_slug", tenant.Slug),
+            new(ClaimNames.AuthMethod, mfa ? "mfa" : "pwd"),
         };
         if (user.EmployeeId is { } eid) claims.Add(new Claim(ClaimNames.EmployeeId, eid.ToString()));
         if (user.LegalEntityIds.Count > 0) claims.Add(new Claim(ClaimNames.LegalEntityIds, string.Join(',', user.LegalEntityIds)));

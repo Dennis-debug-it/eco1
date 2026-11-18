@@ -55,17 +55,17 @@ public sealed class JournalBuilder(PayrollDbContext db)
             switch (l.Type)
             {
                 case ResultLineType.Earning:
-                    Add(debits, (l.GlAccountCode ?? Expense(l.Code, DefaultAccounts.SalaryExpense), emp.CostCentreId, "Salaries and wages"), l.Amount);
+                    Add(debits, (l.GlAccountCode ?? Expense(l.Code, DefaultAccounts.SalaryExpense), emp.CostCentreId, l.Code == "UNPAID_LEAVE" ? "Unpaid leave recovery" : DebitName(l.Name)), l.Amount);
                     break;
                 case ResultLineType.EmployerContribution:
-                    Add(debits, (Expense(l.Code, DefaultAccounts.EmployerContributionExpense), emp.CostCentreId, "Employer contributions"), l.Amount);
+                    Add(debits, (Expense(l.Code, DefaultAccounts.EmployerContributionExpense), emp.CostCentreId, $"Employer {DebitName(l.Name.Replace(" (employer)", ""))} expense"), l.Amount);
                     Add(credits, (LiabilityFor(l, Liability), $"{l.Name} payable"), l.Amount);
                     break;
                 case ResultLineType.StatutoryDeduction:
                     Add(credits, (LiabilityFor(l, Liability), $"{l.Name} payable"), l.Amount);
                     break;
                 case ResultLineType.Deduction:
-                    Add(credits, (l.GlAccountCode ?? Liability(l.Code, DefaultAccounts.OtherDeductionsPayable), $"{l.Name} payable"), l.Amount);
+                    Add(credits, (l.GlAccountCode ?? Liability(l.Code, DefaultAccounts.OtherDeductionsPayable), $"{DebitName(l.Name)} payable"), l.Amount);
                     break;
             }
         }
@@ -82,6 +82,13 @@ public sealed class JournalBuilder(PayrollDbContext db)
         if (!journal.IsBalanced)
             throw new InvalidStateException($"Payroll journal does not balance: Dr {journal.TotalDebit:N2} vs Cr {journal.TotalCredit:N2}.");
         return journal;
+    }
+
+    /// <summary>Strips per-instance suffixes (loan references, adjustment notes) so lines aggregate by component.</summary>
+    private static string DebitName(string name)
+    {
+        var i = name.IndexOf(" (", StringComparison.Ordinal);
+        return i > 0 ? name[..i] : name;
     }
 
     private static string LiabilityFor(PayrollResultLineRecord l, Func<string, string, string> liability) => l.StatutoryRuleCode switch

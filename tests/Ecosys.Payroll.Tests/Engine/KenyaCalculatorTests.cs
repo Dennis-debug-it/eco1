@@ -218,3 +218,59 @@ public class StatutoryRuleSetTests
         Assert.Throws<StatutoryConfigurationException>(() => RuleEvaluator.ValidateBands(bands));
     }
 }
+
+public class KenyaYear4AndFrequencyTests
+{
+    private static readonly KenyaPayrollCalculator Calc = new();
+
+    private static EmployeePayrollInput Employee(decimal basic) => new()
+    {
+        EmployeeId = Guid.NewGuid(), EmployeeNumber = "E001", DisplayName = "Test",
+        Earnings = [new EarningInput("BASIC", "Basic salary", basic, Taxable: true, Pensionable: true, IsBasic: true)],
+    };
+
+    [Fact]
+    public void Nssf_year4_applies_from_February_2026()
+    {
+        // Gross 150,000 (Mar 2026): NSSF 6% x 9,000 = 540 + 6% x 99,000 = 5,940 → 6,480 (capped at UEL 108,000)
+        // SHIF 4,125; AHL 2,250 → allowable 12,855 → taxable 137,145
+        // Tax 2,400 + 2,083.25 + 104,812 x 30% (31,443.60) = 35,926.85 − 2,400 = 33,526.85
+        var p = new PayrollPeriodInput(Guid.NewGuid(), new(2026, 3, 1), new(2026, 3, 31), "KE", "KES");
+        var rules = StatutoryRuleSet.Resolve("KE", p.RuleDate, KenyaStatutoryRules.All());
+        var r = Calc.Calculate(Employee(150_000m), p, rules);
+        Assert.Equal(4, rules.Require(KenyaRuleCodes.Nssf).Version);
+        Assert.Equal(6_480m, r.StatutoryAmount(KenyaRuleCodes.Nssf));
+        Assert.Equal(6_480m, r.EmployerAmount(KenyaRuleCodes.Nssf));
+        Assert.Equal(137_145m, r.TaxablePay);
+        Assert.Equal(33_526.85m, r.Paye);
+
+        // January 2026 still uses year 3 (max 4,320).
+        var jan = new PayrollPeriodInput(Guid.NewGuid(), new(2026, 1, 1), new(2026, 1, 31), "KE", "KES");
+        var rJan = Calc.Calculate(Employee(150_000m), jan, StatutoryRuleSet.Resolve("KE", jan.RuleDate, KenyaStatutoryRules.All()));
+        Assert.Equal(4_320m, rJan.StatutoryAmount(KenyaRuleCodes.Nssf));
+    }
+
+    [Fact]
+    public void Semi_monthly_period_halves_thresholds_and_matches_monthly_tax()
+    {
+        // Two semi-monthly halves of 50,000 should give the same PAYE as one monthly 100,000 (bands scale linearly).
+        var monthly = new PayrollPeriodInput(Guid.NewGuid(), new(2026, 3, 1), new(2026, 3, 31), "KE", "KES");
+        var half = new PayrollPeriodInput(Guid.NewGuid(), new(2026, 3, 1), new(2026, 3, 15), "KE", "KES", PeriodFrequency.SemiMonthly);
+        var rules = StatutoryRuleSet.Resolve("KE", monthly.RuleDate, KenyaStatutoryRules.All());
+        var m = Calc.Calculate(Employee(100_000m), monthly, rules);
+        var h = Calc.Calculate(Employee(50_000m), half, rules);
+        Assert.Equal(m.StatutoryAmount(KenyaRuleCodes.Nssf), h.StatutoryAmount(KenyaRuleCodes.Nssf) * 2);
+        Assert.InRange(m.Paye - h.Paye * 2, -0.02m, 0.02m); // each half is rounded to the cent independently
+        Assert.Equal(25m, h.EmployerAmount(KenyaRuleCodes.Nita)); // KES 50/month levy split per half
+    }
+
+    [Fact]
+    public void Weekly_period_scales_personal_relief()
+    {
+        var weekly = new PayrollPeriodInput(Guid.NewGuid(), new(2026, 3, 2), new(2026, 3, 8), "KE", "KES", PeriodFrequency.Weekly);
+        var rules = StatutoryRuleSet.Resolve("KE", weekly.RuleDate, KenyaStatutoryRules.All()).Scale(weekly.MonthlyScaleFactor);
+        Assert.Equal(Math.Round(2_400m * 12m / 52m, 4), rules.Require(KenyaRuleCodes.Paye).Parameters.PersonalRelief);
+        var r = Calc.Calculate(Employee(5_000m), weekly, rules);
+        Assert.Equal(0m, r.Paye); // ~KES 21.7k/month equivalent is below the relief threshold
+    }
+}

@@ -46,6 +46,45 @@ public sealed class StatutoryRuleSet
         return new StatutoryRuleSet(jurisdiction, asOf, selected);
     }
 
+    /// <summary>
+    /// Kenyan statutory parameters are monthly. For weekly or semi-monthly payrolls every monetary threshold
+    /// (bands, reliefs, caps, LEL/UEL, minimums, fixed levies) is scaled by <paramref name="factor"/>
+    /// (= 12 / periods per year) while rates are unchanged. Rule ids are preserved for audit.
+    /// </summary>
+    public StatutoryRuleSet Scale(decimal factor)
+    {
+        if (factor == 1m) return this;
+        if (factor <= 0) throw new ArgumentOutOfRangeException(nameof(factor));
+        decimal? S(decimal? v) => v is null ? null : Math.Round(v.Value * factor, 4);
+        var scaled = _rules.ToDictionary(kv => kv.Key, kv =>
+        {
+            var r = kv.Value;
+            var p = r.Parameters;
+            return r with
+            {
+                MinimumAmount = S(r.MinimumAmount),
+                MaximumAmount = S(r.MaximumAmount),
+                Parameters = p with
+                {
+                    Bands = p.Bands.Select(b => b with { LowerBound = Math.Round(b.LowerBound * factor, 4), UpperBound = S(b.UpperBound) }).ToList(),
+                    PersonalRelief = S(p.PersonalRelief),
+                    InsuranceReliefCap = S(p.InsuranceReliefCap),
+                    PensionDeductionCap = S(p.PensionDeductionCap),
+                    PostRetirementMedicalCap = S(p.PostRetirementMedicalCap),
+                    MortgageInterestCap = S(p.MortgageInterestCap),
+                    LowerEarningsLimit = S(p.LowerEarningsLimit),
+                    UpperEarningsLimit = S(p.UpperEarningsLimit),
+                    EmployeeFixedAmount = S(p.EmployeeFixedAmount),
+                    EmployerFixedAmount = S(p.EmployerFixedAmount),
+                },
+            };
+        }, StringComparer.OrdinalIgnoreCase);
+        return new StatutoryRuleSet(Jurisdiction, AsOf, scaled) { ScaleFactor = factor };
+    }
+
+    /// <summary>1 for monthly payrolls; 12/52 for weekly; 0.5 for semi-monthly.</summary>
+    public decimal ScaleFactor { get; private init; } = 1m;
+
     public StatutoryRuleVersion? Find(string ruleCode) => _rules.GetValueOrDefault(ruleCode);
 
     public StatutoryRuleVersion Require(string ruleCode) =>

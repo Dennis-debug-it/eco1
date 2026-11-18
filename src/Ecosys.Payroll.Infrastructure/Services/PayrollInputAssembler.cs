@@ -24,7 +24,20 @@ public sealed record RunContext(
     IReadOnlyDictionary<Guid, decimal> UnpaidLeaveDays,
     IReadOnlyDictionary<Guid, List<PayrollAdjustment>> Adjustments,
     IReadOnlyDictionary<Guid, decimal> PreviousNetPay,
-    IReadOnlyDictionary<Guid, EmployeeBankAccount> PrimaryBankAccounts);
+    IReadOnlyDictionary<Guid, EmployeeBankAccount> PrimaryBankAccounts,
+    PayrollGroup Group,
+    IReadOnlyDictionary<Guid, AttendanceRecord> Attendance)
+{
+    public PeriodFrequency Frequency => Group.Frequency switch
+    {
+        PayFrequency.Weekly => PeriodFrequency.Weekly,
+        PayFrequency.SemiMonthly => PeriodFrequency.SemiMonthly,
+        _ => PeriodFrequency.Monthly,
+    };
+
+    /// <summary>Salary assignments and fixed components are monthly amounts; this converts them to the period.</summary>
+    public decimal PeriodFactor => Frequency switch { PeriodFrequency.Weekly => 12m / 52m, PeriodFrequency.SemiMonthly => 0.5m, _ => 1m };
+}
 
 /// <summary>
 /// Translates persisted configuration into the engine's <see cref="EmployeePayrollInput"/> (PRD §4.1 steps 1–5).
@@ -79,10 +92,12 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
             ? new Dictionary<Guid, decimal>()
             : await db.PayrollRunEmployees.Where(e => e.PayrollRunId == previousRunId).ToDictionaryAsync(e => e.EmployeeId, e => e.NetPay, ct);
 
-        var banks = (await db.EmployeeBankAccounts.Where(b => ids.Contains(b.EmployeeId)).AsNoTracking().ToListAsync(ct))
+        var banks = (await db.EmployeeBankAccounts.Where(b => ids.Contains(b.EmployeeId) && b.IsVerified).AsNoTracking().ToListAsync(ct))
             .GroupBy(b => b.EmployeeId).ToDictionary(g => g.Key, g => g.OrderByDescending(b => b.IsPrimary).First());
+        var group = await db.PayrollGroups.FirstAsync(g => g.Id == run.PayrollGroupId, ct);
+        var attendance = await db.AttendanceRecords.Where(a => a.PayrollRunId == run.Id).AsNoTracking().ToDictionaryAsync(a => a.EmployeeId, ct);
 
-        return new RunContext(run, period, entity, components, structures, employees, assignments, statutory, variables, loans, unpaid, adjustments, previous, banks);
+        return new RunContext(run, period, entity, components, structures, employees, assignments, statutory, variables, loans, unpaid, adjustments, previous, banks, group, attendance);
     }
 
     private static decimal OverlapDays(LeaveRequest l, PayrollPeriod p)
@@ -108,7 +123,8 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
 
         var earnings = new List<EarningInput>();
         var deductions = new List<DeductionInput>();
-        var basic = assignment.BasicSalary;
+        var monthlyBasic = assignment.BasicSalary;
+        var basic = Math.Round(monthlyBasic * ctx.PeriodFactor, 2);
 
         // Days worked pro-rating for joiners/leavers inside the period.
         var daysInPeriod = ctx.Period.PeriodEnd.DayNumber - ctx.Period.PeriodStart.DayNumber + 1;
@@ -134,7 +150,7 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
             if (cfg.Method == CalculationMethod.Variable) continue; // supplied per run
             var amount = cfg.Method switch
             {
-                CalculationMethod.FixedAmount => cfg.Amount ?? c.DefaultAmount ?? 0m,
+                CalculationMethod.FixedAmount => Math.Round((cfg.Amount ?? c.DefaultAmount ?? 0m) * ctx.PeriodFactor, 2),
                 CalculationMethod.PercentOfBasic => Math.Round(basic * (cfg.Rate ?? c.DefaultRate ?? 0m), 2),
                 CalculationMethod.PercentOfGross => 0m, // resolved after gross below
                 _ => 0m,
@@ -171,16 +187,35 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
                 if (ctx.Components.TryGetValue(a.SalaryComponentId, out var c))
                     AddComponent(c, a.Amount, earnings, deductions, $"{c.Name} (adjustment: {a.Type})");
 
-        // Unpaid leave.
-        var unpaidAmount = 0m;
-        if (ctx.UnpaidLeaveDays.TryGetValue(emp.Id, out var days) && days > 0)
-            unpaidAmount = Math.Round(basic / daysInPeriod * days, 2);
+        // Unpaid leave and unauthorised absence are valued at the daily rate of monthly basic.
+        var settings = ctx.Entity.Settings;
+        var dailyRate = monthlyBasic / Math.Max(1m, settings.StandardMonthlyWorkingDays);
+        var unpaidDays = ctx.UnpaidLeaveDays.GetValueOrDefault(emp.Id);
+        if (ctx.Attendance.TryGetValue(emp.Id, out var att)) unpaidDays += att.AbsentDays;
+        var unpaidAmount = unpaidDays > 0 ? Math.Min(basic, Math.Round(dailyRate * unpaidDays, 2)) : 0m;
+        if (unpaidDays > 0) issues.Add(new(ValidationSeverity.Warning, "UNPAID_DAYS", $"{unpaidDays:0.##} unpaid day(s) deducted at {dailyRate:N2}/day."));
+
+        // Overtime from attendance, valued at the hourly rate of monthly basic.
+        if (att is not null && (att.OvertimeHours > 0 || att.RestDayOvertimeHours > 0))
+        {
+            var hourly = monthlyBasic / Math.Max(1m, settings.StandardMonthlyHours);
+            var ot = ctx.Components.Values.FirstOrDefault(c => c.Code == "OT" && c.IsActive);
+            void AddOt(decimal hours, decimal multiplier, string label)
+            {
+                if (hours <= 0) return;
+                var amt = Math.Round(hours * hourly * multiplier, 2);
+                earnings.Add(new EarningInput(ot?.Code ?? "OT", $"{ot?.Name ?? "Overtime"} {label} ({hours:0.##}h x {multiplier:0.##})", amt,
+                    ot?.Taxable ?? true, ot?.Pensionable ?? false, false, ot?.Id, ot?.GlAccountCode));
+            }
+            AddOt(att.OvertimeHours, settings.OvertimeMultiplier, "normal");
+            AddOt(att.RestDayOvertimeHours, settings.RestDayOvertimeMultiplier, "rest day/holiday");
+        }
 
         ctx.Statutory.TryGetValue(emp.Id, out var stat);
         if (stat is null || string.IsNullOrWhiteSpace(stat.KraPin)) issues.Add(new(ValidationSeverity.Error, "NO_KRA_PIN", "KRA PIN is missing."));
         if (stat is null || string.IsNullOrWhiteSpace(stat.NssfNumber)) issues.Add(new(ValidationSeverity.Warning, "NO_NSSF", "NSSF number is missing."));
         if (stat is null || string.IsNullOrWhiteSpace(stat.ShifNumber)) issues.Add(new(ValidationSeverity.Warning, "NO_SHIF", "SHIF number is missing."));
-        if (!ctx.PrimaryBankAccounts.ContainsKey(emp.Id)) issues.Add(new(ValidationSeverity.Error, "NO_BANK", "No bank account on file."));
+        if (!ctx.PrimaryBankAccounts.ContainsKey(emp.Id)) issues.Add(new(ValidationSeverity.Error, "NO_BANK", "No verified bank account on file."));
         if (proration < 1m) issues.Add(new(ValidationSeverity.Warning, "PRORATED", $"Pay pro-rated for {daysPaid} of {daysInPeriod} days."));
 
         var exemptions = stat?.StatutoryExemptions ?? [];

@@ -18,6 +18,17 @@ public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalarySt
 
 public static class EmployeeEndpoints
 {
+    /// <summary>Organisational references must exist within the employee's own legal entity (and therefore tenant).</summary>
+    private static async Task ValidateReferencesAsync(Employee e, PayrollDbContext db, CancellationToken ct)
+    {
+        if (!await db.PayrollGroups.AnyAsync(x => x.Id == e.PayrollGroupId && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Payroll group is not valid for this legal entity.", "VALIDATION");
+        if (e.DepartmentId is { } d && !await db.Departments.AnyAsync(x => x.Id == d && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Department is not valid for this legal entity.", "VALIDATION");
+        if (e.BranchId is { } b && !await db.Branches.AnyAsync(x => x.Id == b && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Branch is not valid for this legal entity.", "VALIDATION");
+        if (e.CostCentreId is { } c && !await db.CostCentres.AnyAsync(x => x.Id == c && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Cost centre is not valid for this legal entity.", "VALIDATION");
+        if (e.ReportingManagerId is { } m && !await db.Employees.AnyAsync(x => x.Id == m, ct)) throw new DomainException("Reporting manager not found.", "VALIDATION");
+        if (e.HireDate == default) throw new DomainException("Hire date is required.", "VALIDATION");
+    }
+
     public static void MapEmployees(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/employees").RequireAuthorization();
@@ -86,6 +97,7 @@ public static class EmployeeEndpoints
             if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
                 throw new DomainException($"Employee number {body.EmployeeNumber} already exists.", "DUPLICATE");
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.UserId = null;
+            await ValidateReferencesAsync(body, db, ct);
             db.Employees.Add(body);
             db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = body.LegalEntityId, EmployeeId = body.Id, EffectiveFrom = body.HireDate, EmploymentType = body.EmploymentType, Status = body.Status, JobTitle = body.JobTitle, DepartmentId = body.DepartmentId, BranchId = body.BranchId, CostCentreId = body.CostCentreId, PayrollGroupId = body.PayrollGroupId, ChangeReason = "Hired" });
             audit.Record("employee.created", nameof(Employee), body.Id, new { body.EmployeeNumber, body.FirstName, body.LastName }, body.LegalEntityId);
@@ -106,6 +118,7 @@ public static class EmployeeEndpoints
             e.EmploymentType = body.EmploymentType; e.Status = body.Status; e.HireDate = body.HireDate; e.ContractEndDate = body.ContractEndDate; e.TerminationDate = body.TerminationDate;
             e.JobTitle = body.JobTitle; e.DepartmentId = body.DepartmentId; e.BranchId = body.BranchId; e.CostCentreId = body.CostCentreId; e.PayrollGroupId = body.PayrollGroupId;
             e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
+            await ValidateReferencesAsync(e, db, ct);
             if (employmentChanged)
             {
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);

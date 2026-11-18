@@ -21,8 +21,42 @@ public sealed record RunListItem(Guid Id, string Reference, PayrollRunStatus Sta
 public sealed record RunSummary(PayrollRun Run, string PeriodName, DateOnly PeriodStart, DateOnly PeriodEnd, DateOnly PayDate, string GroupName, string? PreparedByName, string? ApprovedByName, IReadOnlyList<PayrollApproval> Approvals, IReadOnlyList<PaymentBatch> Batches, bool HasJournal);
 public sealed record RunEmployeeRow(Guid Id, Guid EmployeeId, string EmployeeNumber, string EmployeeName, string? Department, decimal BasicPay, decimal GrossPay, decimal TaxablePay, decimal Paye, decimal Nssf, decimal Shif, decimal HousingLevy, decimal TotalOtherDeductions, decimal NetPay, decimal TotalEmployerCost, decimal? PreviousNetPay, bool HasErrors, IReadOnlyList<Ecosys.Payroll.Engine.Model.PayrollValidationIssue> Issues);
 
+public sealed record AttendanceRow(string EmployeeNumber, decimal DaysWorked, decimal AbsentDays, decimal OvertimeHours, decimal RestDayOvertimeHours, string? Note);
+
 public static class PayrollEndpoints
 {
+    private static async Task<object> SaveAttendanceAsync(Guid runId, List<AttendanceRow> rows, string source, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct)
+    {
+        ctx.Require(Permissions.PayrollPrepare);
+        var run = await svc.GetAsync(runId, includeEmployees: false, ct);
+        run.EnsureEditable();
+        var numbers = rows.Select(r => r.EmployeeNumber.Trim()).ToList();
+        var emps = await db.Employees.Where(e => e.LegalEntityId == run.LegalEntityId && e.PayrollGroupId == run.PayrollGroupId && numbers.Contains(e.EmployeeNumber)).ToDictionaryAsync(e => e.EmployeeNumber, ct);
+        var unknown = numbers.Where(n => !emps.ContainsKey(n)).Distinct().ToList();
+        if (unknown.Count > 0) throw new DomainException($"Unknown employee number(s) for this payroll group: {string.Join(", ", unknown.Take(10))}.", "VALIDATION");
+        var dupes = numbers.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (dupes.Count > 0) throw new DomainException($"Duplicate rows for: {string.Join(", ", dupes)}.", "VALIDATION");
+        foreach (var r in rows)
+            if (r.AbsentDays < 0 || r.OvertimeHours < 0 || r.RestDayOvertimeHours < 0 || r.DaysWorked < 0 || r.OvertimeHours + r.RestDayOvertimeHours > 300 || r.AbsentDays > 31)
+                throw new DomainException($"Implausible attendance values for {r.EmployeeNumber}.", "VALIDATION");
+
+        var existing = await db.AttendanceRecords.Where(a => a.PayrollRunId == runId).ToDictionaryAsync(a => a.EmployeeId, ct);
+        foreach (var r in rows)
+        {
+            var emp = emps[r.EmployeeNumber.Trim()];
+            if (!existing.TryGetValue(emp.Id, out var rec))
+            {
+                rec = new AttendanceRecord { LegalEntityId = run.LegalEntityId, PayrollRunId = runId, EmployeeId = emp.Id };
+                db.AttendanceRecords.Add(rec);
+            }
+            rec.DaysWorked = r.DaysWorked; rec.AbsentDays = r.AbsentDays; rec.OvertimeHours = r.OvertimeHours; rec.RestDayOvertimeHours = r.RestDayOvertimeHours; rec.Note = r.Note; rec.Source = source;
+        }
+        if (run.Status == PayrollRunStatus.Calculated) run.Transition(PayrollRunStatus.Prepared); // results are stale
+        audit.Record("payroll.run.attendance", nameof(PayrollRun), runId, new { rows = rows.Count, source, overtimeHours = rows.Sum(r => r.OvertimeHours + r.RestDayOvertimeHours), absentDays = rows.Sum(r => r.AbsentDays) }, run.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return new { saved = rows.Count };
+    }
+
     public static void MapPayrollRuns(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/runs").RequireAuthorization();
@@ -110,6 +144,39 @@ public static class PayrollEndpoints
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
         });
+
+        // ---- Attendance (time & attendance / biometric import, or manual capture) ----
+        g.MapGet("/{id:guid}/attendance", async (Guid id, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, CancellationToken ct) =>
+        {
+            ctx.Require(Permissions.SalaryRead);
+            var run = await svc.GetAsync(id, includeEmployees: false, ct);
+            var rows = await db.AttendanceRecords.Where(a => a.PayrollRunId == id)
+                .Join(db.Employees, a => a.EmployeeId, e => e.Id, (a, e) => new { a.Id, a.EmployeeId, e.EmployeeNumber, employeeName = e.FirstName + " " + e.LastName, a.DaysWorked, a.AbsentDays, a.OvertimeHours, a.RestDayOvertimeHours, a.Source, a.Note })
+                .OrderBy(x => x.EmployeeNumber).ToListAsync(ct);
+            return Results.Ok(rows);
+        });
+        g.MapPut("/{id:guid}/attendance", async (Guid id, List<AttendanceRow> rows, string? source, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+            Results.Ok(await SaveAttendanceAsync(id, rows, source ?? "manual", ctx, svc, db, audit, ct)));
+        g.MapPost("/{id:guid}/attendance/import", async (Guid id, HttpRequest http, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        {
+            // CSV: EmployeeNumber,DaysWorked,AbsentDays,OvertimeHours,RestDayOvertimeHours[,Note] — header row required.
+            using var reader = new StreamReader(http.Body);
+            var text = await reader.ReadToEndAsync(ct);
+            var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (lines.Length < 2) throw new DomainException("The file has no data rows.", "VALIDATION");
+            var header = lines[0].Split(',').Select(h => h.Trim().Trim('"').ToLowerInvariant().Replace(" ", "")).ToList();
+            int Col(string name) => header.IndexOf(name);
+            if (Col("employeenumber") < 0) throw new DomainException("Missing EmployeeNumber column.", "VALIDATION");
+            var parsed = new List<AttendanceRow>();
+            for (var i = 1; i < lines.Length; i++)
+            {
+                var c = lines[i].Split(',').Select(x => x.Trim().Trim('"')).ToArray();
+                decimal D(string name) => Col(name) is var k && k >= 0 && k < c.Length && decimal.TryParse(c[k], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v
+                    : Col(name) >= 0 && Col(name) < c.Length && c[Col(name)].Length > 0 ? throw new DomainException($"Line {i + 1}: '{c[Col(name)]}' is not a number ({name}).", "VALIDATION") : 0m;
+                parsed.Add(new AttendanceRow(c[Col("employeenumber")], D("daysworked"), D("absentdays"), D("overtimehours"), D("restdayovertimehours"), Col("note") is var n && n >= 0 && n < c.Length ? c[n] : null));
+            }
+            return Results.Ok(await SaveAttendanceAsync(id, parsed, "import", ctx, svc, db, audit, ct));
+        }).Accepts<string>("text/csv");
 
         g.MapPost("/{id:guid}/prepare", async (Guid id, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.PrepareAsync(id, ct)));
         g.MapPost("/{id:guid}/calculate", async (Guid id, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.CalculateAsync(id, ct)));
