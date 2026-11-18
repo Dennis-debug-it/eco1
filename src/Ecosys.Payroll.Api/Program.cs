@@ -9,6 +9,14 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
+// Container healthcheck: `dotnet Ecosys.Payroll.Api.dll --healthcheck` probes the running instance (no curl in the image).
+if (args.Contains("--healthcheck"))
+{
+    using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+    try { return (await http.GetAsync($"http://localhost:{Environment.GetEnvironmentVariable("HEALTHCHECK_PORT") ?? "8080"}/health")).IsSuccessStatusCode ? 0 : 1; }
+    catch { return 1; }
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(o =>
@@ -87,6 +95,7 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
 }
 
-app.Run();
+await app.RunAsync();
+return 0;
 
 public partial class Program;

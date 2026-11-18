@@ -1,0 +1,44 @@
+# Local / single-host deployment: PostgreSQL + Ecosys Payroll (API and web app on :8080).
+#   cp .env.example .env   # then set the keys
+#   docker compose up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ecosys_payroll
+      POSTGRES_USER: payroll
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payroll -d ecosys_payroll"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  payroll:
+    build: .
+    image: ecosys/payroll:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__Payroll: Host=db;Port=5432;Database=ecosys_payroll;Username=payroll;Password=${POSTGRES_PASSWORD}
+      Payroll__Encryption__Key: ${PAYROLL_ENCRYPTION_KEY:?set PAYROLL_ENCRYPTION_KEY in .env}
+      Payroll__SeedDemoData: ${SEED_DEMO_DATA:-false}
+      Payroll__PortalUrl: ${PORTAL_URL:-http://localhost:8080}
+      Auth__Mode: ${AUTH_MODE:-Local}
+      Auth__SigningKey: ${AUTH_SIGNING_KEY:-}
+      Auth__Authority: ${AUTH_AUTHORITY:-}
+      Auth__Audience: ${AUTH_AUDIENCE:-ecosys-payroll}
+      Notifications__Provider: ${NOTIFICATIONS_PROVIDER:-Log}
+      Notifications__Ecosys__BaseUrl: ${NOTIFICATIONS_BASE_URL:-}
+      Notifications__Ecosys__ApiKey: ${NOTIFICATIONS_API_KEY:-}
+      Cors__Origins__0: ${PORTAL_URL:-http://localhost:8080}
+
+volumes:
+  pgdata:

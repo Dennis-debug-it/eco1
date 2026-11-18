@@ -12,6 +12,18 @@ namespace Ecosys.Payroll.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Kerberos/GSS transport encryption is off unless explicitly requested: TLS (SSL Mode) is the supported
+    /// encryption, and probing GSS needs libgssapi, which slim container images don't ship.
+    /// </summary>
+    public static string PayrollConnectionString(IConfiguration config)
+    {
+        var raw = config.GetConnectionString("Payroll") ?? throw new InvalidOperationException("ConnectionStrings:Payroll is not configured.");
+        var b = new Npgsql.NpgsqlConnectionStringBuilder(raw);
+        if (!raw.Contains("gss", StringComparison.OrdinalIgnoreCase)) b.GssEncryptionMode = Npgsql.GssEncryptionMode.Disable;
+        return b.ConnectionString;
+    }
+
     public static IServiceCollection AddPayrollInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         var key = config["Payroll:Encryption:Key"];
@@ -24,7 +36,7 @@ public static class DependencyInjection
 
         services.AddDbContext<PayrollDbContext>((sp, o) =>
         {
-            o.UseNpgsql(config.GetConnectionString("Payroll"), npg => npg.MigrationsHistoryTable("__ef_migrations", "payroll"))
+            o.UseNpgsql(PayrollConnectionString(config), npg => npg.MigrationsHistoryTable("__ef_migrations", "payroll"))
              .UseSnakeCaseNamingConvention();
         });
 
