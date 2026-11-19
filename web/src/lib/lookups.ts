@@ -12,3 +12,8 @@ export const useComponents = (le?: string) => useQuery({ queryKey: ['components'
 export const useStructures = (le?: string) => useQuery({ queryKey: ['structures', le], queryFn: () => api.get<Structure[]>(`/api/payroll/compensation/salary-structures${le ? `?legalEntityId=${le}` : ''}`) })
 
 export const byId = <T extends { id: string }>(rows: T[] | undefined) => Object.fromEntries((rows ?? []).map(r => [r.id, r])) as Record<string, T>
+
+export type HrMe = { employeeId?: string; directReports: number; team: { id: string; employeeNumber: string; fullName: string; jobTitle?: string }[]; pendingLeave: number; pendingExpenses: number; pendingNominations: number; reviewsToComplete: number; feedbackRequested: number; myReviewOpen: boolean }
+export const useHrMe = (enabled = true) => useQuery({ queryKey: ['hr-me'], enabled, queryFn: () => api.get<HrMe>('/api/payroll/hr/me'), staleTime: 30_000 })
+export type EmployeeOption = { id: string; employeeNumber: string; fullName: string; jobTitle?: string }
+export const useEmployeeOptions = (enabled = true) => useQuery({ queryKey: ['employee-options'], enabled, queryFn: async () => (await api.get<{ items: EmployeeOption[] }>('/api/payroll/employees?limit=500')).items })

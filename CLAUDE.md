@@ -44,12 +44,15 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
 - **Audit** every state change or sensitive change with `AuditService.Record`, in the same unit of work.
 - **New settings fields** on JSON-mapped types (`PayrollSettings`) load as `default` for existing rows. Add a backfill migration and defensive defaults.
 - **Notifications** go through `NotificationService` (outbox). Never put salary figures in a message.
+- **HR modules pay through `ScheduledPayItem`**, not by editing runs. Use `SystemComponents.EnsureAsync` for the component codes. The run claims items at calculate, marks them processed at finalise and releases them on reversal.
+- **HR access** goes through `HrAccess`, which checks self, then line manager, then permission. HR roles do not hold `salary.read`, so hide pay figures from them (see `SeparationEndpoints`, where `duesHidden` is set).
+- **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout
 
 - `src/Ecosys.Payroll.Engine`: rules, calculator, Kenya seed rules.
-- `src/Ecosys.Payroll.Domain`: entities, state machine, roles and permissions.
-- `src/Ecosys.Payroll.Infrastructure`: `PayrollDbContext`, services (run lifecycle, assembler, journals, reports, notifications, leave), documents (PDF, xlsx), migrations, seeder.
+- `src/Ecosys.Payroll.Domain`: entities (`Hr/HrEntities.cs` for HR), state machine, roles and permissions.
+- `src/Ecosys.Payroll.Infrastructure`: `PayrollDbContext` (plus `PayrollDbContext.Hr.cs`), services (run lifecycle, assembler, journals, reports, notifications), `Services/Hr/*` (leave, separations, performance, learning, HR operations, `HrFoundations`), documents (PDF, xlsx), migrations, seeder (`DemoHrSeeder` for HR demo data).
 - `src/Ecosys.Payroll.Api`: `Endpoints/*`, `Infrastructure/ApiSupport.cs` (tenant context middleware, MFA gate, tokens, error mapping).
 - `tests/Ecosys.Payroll.Tests`: `Engine/` (unit) and `Integration/` (HTTP + PostgreSQL).
 - `web/src`: `pages/*`, `components/ui.tsx`, `lib/{api,auth,types,lookups}.ts`.

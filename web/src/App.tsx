@@ -15,9 +15,19 @@ import LeavePage from './pages/Leave'
 import SelfServicePage from './pages/SelfService'
 import ReportsPage from './pages/Reports'
 import SettingsPage from './pages/Settings'
+import PerformancePage from './pages/Performance'
+import LearningPage from './pages/Learning'
+import ExitsPage from './pages/Exits'
+import RecruitmentPage from './pages/Recruitment'
+import PeopleRecordsPage from './pages/PeopleRecords'
+import CasesPage from './pages/Cases'
+import ExpensesPage from './pages/Expenses'
+import HrAnalyticsPage from './pages/HrAnalytics'
+import { useHrMe } from './lib/lookups'
 
 export default function App() {
   const { user, loading, logout, can } = useAuth()
+  const hrMe = useHrMe(!!user && (!user.mfaRequired || user.mfaSatisfied))
   if (loading) return <Loading what="Signing in" />
   if (!user) return <LoginPage />
   if (user.mfaRequired && !user.mfaSatisfied) return user.mfaEnabled
@@ -25,12 +35,23 @@ export default function App() {
     : <MfaEnrol gate />
 
   const employeeOnly = user.roles.length === 1 && user.roles[0] === 'Employee'
+  const manager = (hrMe.data?.directReports ?? 0) > 0
+  const staff = !!user.employeeId
+  const count = (n?: number) => (n ? ` (${n})` : '')
   const nav: { to: string; label: string; show: boolean; section?: string }[] = [
     { to: '/', label: 'Dashboard', show: can(P.ReportsRead) },
-    { to: '/self-service', label: 'My payslips & leave', show: !!user.employeeId, section: 'Employee' },
-    { to: '/employees', label: 'Employees', show: can(P.EmployeesRead), section: 'Workforce' },
+    { to: '/self-service', label: 'My workspace', show: staff, section: 'Me' },
+    { to: '/employees', label: 'Employees', show: can(P.EmployeesRead), section: 'People' },
     { to: '/organisation', label: 'Organisation', show: can(P.OrganisationManage) || can(P.EmployeesRead) },
-    { to: '/leave', label: 'Leave management', show: can(P.LeaveApprove) },
+    { to: '/people-records', label: 'People records', show: can(P.HrDocuments) || can(P.HrBenefits) || can(P.HrAssets) || can(P.EmployeesRead) },
+    { to: '/recruitment', label: 'Recruitment', show: can(P.HrRecruitment) },
+    { to: '/exits', label: 'Exits & final dues', show: can(P.HrSeparations) || can(P.PayrollPrepare) || can(P.PayrollApprove) },
+    { to: '/leave', label: `Leave${count(hrMe.data?.pendingLeave)}`, show: can(P.LeaveApprove) || manager || staff, section: 'HR' },
+    { to: '/performance', label: `Performance${count(hrMe.data?.reviewsToComplete)}`, show: can(P.HrPerformance) || manager || can(P.SalaryRead) },
+    { to: '/learning', label: `Learning${count(hrMe.data?.pendingNominations)}`, show: can(P.HrLearning) || manager || staff },
+    { to: '/expenses', label: `Expenses${count(hrMe.data?.pendingExpenses)}`, show: can(P.ExpensesFinance) || staff },
+    { to: '/cases', label: 'Cases', show: can(P.HrCases) },
+    { to: '/hr-analytics', label: 'HR analytics', show: can(P.ReportsRead) },
     { to: '/compensation', label: 'Compensation', show: can(P.CompensationManage) || can(P.SalaryRead), section: 'Payroll' },
     { to: '/payroll', label: 'Payroll processing', show: can(P.SalaryRead) },
     { to: '/statutory', label: 'Statutory compliance', show: can(P.StatutoryManage) || can(P.StatutoryApprove) || can(P.SalaryRead) },
@@ -70,6 +91,14 @@ export default function App() {
           <Route path="/statutory" element={<StatutoryPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/performance" element={<PerformancePage />} />
+          <Route path="/learning" element={<LearningPage />} />
+          <Route path="/exits" element={<ExitsPage />} />
+          <Route path="/recruitment" element={<RecruitmentPage />} />
+          <Route path="/people-records" element={<PeopleRecordsPage />} />
+          <Route path="/cases" element={<CasesPage />} />
+          <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/hr-analytics" element={<HrAnalyticsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ApiError, fmt } from '../lib/api'
+import { api, ApiError, fmt } from '../lib/api'
 
 export function PageHead({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
   return (
@@ -109,3 +109,29 @@ export function BarChart({ data, format = fmt.int, height = 160 }: { data: { lab
     </svg>
   )
 }
+
+/** Picks a file and uploads it as multipart field `file` (plus optional extra fields). */
+export function UploadButton({ label = 'Upload', url, extra, onDone, accept = '.pdf,.png,.jpg,.jpeg,.docx,.xlsx,.csv' }: { label?: string; url: string; extra?: Record<string, string>; onDone?: () => void; accept?: string }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<unknown>(null)
+  return (
+    <span>
+      <label className="btn sm">{busy ? 'Uploading…' : label}<input type="file" className="sr-only" accept={accept} disabled={busy} onChange={async e => {
+        const f = e.target.files?.[0]; e.target.value = ''
+        if (!f) return
+        const form = new FormData(); form.append('file', f)
+        for (const [k, v] of Object.entries(extra ?? {})) form.append(k, v)
+        setBusy(true); setErr(null)
+        try { await api.upload(url, form); onDone?.() } catch (ex) { setErr(ex) } finally { setBusy(false) }
+      }} /></label>
+      {!!err && <span className="small" style={{ color: 'var(--danger)', marginLeft: 6 }}>{err instanceof ApiError ? err.problem.detail ?? err.message : 'Upload failed'}</span>}
+    </span>
+  )
+}
+
+export function FileLink({ id, label = 'View' }: { id?: string | null; label?: string }) {
+  if (!id) return null
+  return <button className="btn sm" onClick={() => api.download(`/api/payroll/files/${id}`)}>{label}</button>
+}
+
+export const Stars = ({ value }: { value?: number | null }) => value == null ? <span className="muted">—</span> : <span aria-label={`${value} of 5`}>{'★'.repeat(Math.round(value))}<span className="muted">{'★'.repeat(5 - Math.round(value))}</span> <span className="small">{Number(value).toFixed(value % 1 ? 2 : 0)}</span></span>

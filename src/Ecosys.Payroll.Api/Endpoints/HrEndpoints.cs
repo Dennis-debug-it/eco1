@@ -27,6 +27,22 @@ public static class HrEndpoints
 
     public static void MapHr(this RouteGroupBuilder api)
     {
+        api.MapGet("/hr/me", async (ITenantContext ctx, HrAccess access, PayrollDbContext db, CancellationToken ct) =>
+        {
+            var team = await access.DirectReportsAsync(ct);
+            var me = ctx.EmployeeId;
+            return Results.Ok(new
+            {
+                employeeId = me, directReports = team.Count,
+                team = await db.Employees.Where(e => team.Contains(e.Id)).OrderBy(e => e.EmployeeNumber).Select(e => new { e.Id, e.EmployeeNumber, fullName = e.FirstName + " " + e.LastName, e.JobTitle }).ToListAsync(ct),
+                pendingLeave = await db.LeaveRequests.CountAsync(r => team.Contains(r.EmployeeId) && r.Status == LeaveRequestStatus.Pending, ct),
+                pendingExpenses = await db.ExpenseClaims.CountAsync(c => team.Contains(c.EmployeeId) && c.Status == ExpenseStatus.Submitted, ct),
+                pendingNominations = await db.TrainingEnrolments.CountAsync(e => team.Contains(e.EmployeeId) && e.Status == EnrolmentStatus.Nominated, ct),
+                reviewsToComplete = await db.PerformanceReviews.CountAsync(r => team.Contains(r.EmployeeId) && (r.Status == ReviewStatus.ManagerReview || r.Status == ReviewStatus.SelfAssessment), ct),
+                feedbackRequested = me is null ? 0 : await db.FeedbackRequests.CountAsync(f => f.ProviderEmployeeId == me && f.Status == FeedbackStatus.Requested, ct),
+                myReviewOpen = me is not null && await db.PerformanceReviews.AnyAsync(r => r.EmployeeId == me && (r.Status == ReviewStatus.SelfAssessment || r.Status == ReviewStatus.Completed), ct),
+            });
+        }).RequireAuthorization();
         MapFiles(api); MapRecruitment(api); MapDocuments(api); MapCases(api); MapPositions(api); MapBenefits(api); MapExpenses(api); MapAssets(api); MapAnalytics(api);
     }
 

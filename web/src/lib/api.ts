@@ -35,6 +35,14 @@ export const api = {
   post: <T>(url: string, body?: unknown) => request<T>('POST', url, body ?? {}),
   put: <T>(url: string, body: unknown) => request<T>('PUT', url, body),
   del: <T>(url: string) => request<T>('DELETE', url),
+  upload: async <T>(url: string, form: FormData): Promise<T> => {
+    const headers: Record<string, string> = {}
+    const token = tokenStore.get()
+    if (token) headers.Authorization = `Bearer ${token}`
+    const res = await fetch(url, { method: 'POST', headers, body: form })
+    if (!res.ok) { let problem: Problem = { status: res.status }; try { problem = await res.json() } catch { /* empty */ } throw new ApiError(res.status, problem) }
+    return res.json() as Promise<T>
+  },
   download: async (url: string, body?: unknown) => {
     const res = await request<Response>(body === undefined ? 'GET' : 'POST', url, body, true)
     const blob = await res.blob()
