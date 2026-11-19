@@ -7,7 +7,11 @@ public enum JournalStatus { Draft, Posted, Reversed }
 /// <summary>Accounting journal generated from a finalised run (PRD §8). Balanced by construction.</summary>
 public class PayrollJournal : LegalEntityScopedEntity
 {
-    public Guid PayrollRunId { get; set; }
+    /// <summary>Null for non-payroll journals (leave provision, training cost).</summary>
+    public Guid? PayrollRunId { get; set; }
+    /// <summary>Payroll, LeaveProvision, TrainingCost, Expenses.</summary>
+    public string Source { get; set; } = "Payroll";
+    public string? Narrative { get; set; }
     public required string Reference { get; set; }
     public DateOnly PostingDate { get; set; }
     public string CurrencyCode { get; set; } = "KES";

@@ -47,6 +47,17 @@ public static class Permissions
     public const string AuditRead = "audit.read";
     public const string LeaveApprove = "leave.approve";
     public const string SelfService = "self.service";
+    public const string HrPerformance = "hr.performance";
+    public const string HrLearning = "hr.learning";
+    public const string HrRecruitment = "hr.recruitment";
+    public const string HrCases = "hr.cases";
+    public const string HrDocuments = "hr.documents";
+    public const string HrAssets = "hr.assets";
+    public const string HrBenefits = "hr.benefits";
+    public const string HrSeparations = "hr.separations";
+    public const string ExpensesFinance = "expenses.finance";
+
+    public static readonly string[] Hr = [HrPerformance, HrLearning, HrRecruitment, HrCases, HrDocuments, HrAssets, HrBenefits, HrSeparations];
 
     public static IReadOnlySet<string> ForRoles(IEnumerable<string> roles)
     {
@@ -59,10 +70,10 @@ public static class Permissions
                 case Roles.TenantAdministrator:
                     set.UnionWith([OrganisationManage, EmployeesRead, EmployeesWrite, SalaryRead, SalaryWrite, CompensationManage,
                         StatutoryManage, StatutoryApprove, PayrollPrepare, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse,
-                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService]);
+                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService, ExpensesFinance, .. Hr]);
                     break;
                 case Roles.HrAdministrator:
-                    set.UnionWith([EmployeesRead, EmployeesWrite, OrganisationManage, LeaveApprove, ReportsRead, SelfService]);
+                    set.UnionWith([EmployeesRead, EmployeesWrite, OrganisationManage, LeaveApprove, ReportsRead, SelfService, .. Hr]);
                     break;
                 case Roles.PayrollAdministrator:
                     set.UnionWith([EmployeesRead, SalaryRead, SalaryWrite, CompensationManage, StatutoryManage, PayrollPrepare, PaymentsManage, ReportsRead, SelfService]);
@@ -74,7 +85,7 @@ public static class Permissions
                     set.UnionWith([EmployeesRead, SalaryRead, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse, StatutoryApprove, ReportsRead, SelfService]);
                     break;
                 case Roles.FinanceOfficer:
-                    set.UnionWith([SalaryRead, JournalsRead, PaymentsManage, ReportsRead, SelfService]);
+                    set.UnionWith([SalaryRead, JournalsRead, PaymentsManage, ReportsRead, SelfService, ExpensesFinance]);
                     break;
                 case Roles.Auditor:
                     set.UnionWith([EmployeesRead, SalaryRead, JournalsRead, ReportsRead, AuditRead]);

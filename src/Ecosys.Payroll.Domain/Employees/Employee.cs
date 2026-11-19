@@ -36,16 +36,25 @@ public class Employee : LegalEntityScopedEntity
     public Guid PayrollGroupId { get; set; }
     public Guid? ReportingManagerId { get; set; }
     public string? WorkLocation { get; set; }
+    public Guid? PositionId { get; set; }
+    /// <summary>Contractual notice period in days (Employment Act s.35 minimum: 28 days for monthly-paid staff).</summary>
+    public int NoticePeriodDays { get; set; } = 30;
+    public DateOnly? ProbationEndDate { get; set; }
 
     /// <summary>Linked platform user for self-service, if any.</summary>
     public Guid? UserId { get; set; }
 
     public string FullName => string.Join(' ', new[] { FirstName, MiddleName, LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
+    /// <summary>
+    /// Employed for at least part of the period. Leavers are paid up to their termination date whatever their status,
+    /// so the final (pro-rated) month and final dues are processed; a non-active status without a date is not paid.
+    /// </summary>
     public bool IsPayable(DateOnly periodStart, DateOnly periodEnd) =>
-        Status is EmploymentStatus.Active or EmploymentStatus.OnLeave or EmploymentStatus.Suspended &&
         HireDate <= periodEnd &&
-        (TerminationDate is null || TerminationDate >= periodStart);
+        (TerminationDate is { } leaving
+            ? leaving >= periodStart
+            : Status is EmploymentStatus.Active or EmploymentStatus.OnLeave or EmploymentStatus.Suspended);
 }
 
 public class EmploymentRecord : LegalEntityScopedEntity, IEffectiveDated

@@ -863,6 +863,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("national_id");
 
+                    b.Property<int>("NoticePeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("notice_period_days");
+
                     b.Property<string>("PassportNumber")
                         .HasColumnType("text")
                         .HasColumnName("passport_number");
@@ -878,6 +882,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<string>("PhysicalAddress")
                         .HasColumnType("text")
                         .HasColumnName("physical_address");
+
+                    b.Property<Guid?>("PositionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("position_id");
+
+                    b.Property<DateOnly?>("ProbationEndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("probation_end_date");
 
                     b.Property<Guid?>("ReportingManagerId")
                         .HasColumnType("uuid")
@@ -1344,7 +1356,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("legal_entity_id");
 
-                    b.Property<Guid>("PayrollRunId")
+                    b.Property<string>("Narrative")
+                        .HasColumnType("text")
+                        .HasColumnName("narrative");
+
+                    b.Property<Guid?>("PayrollRunId")
                         .HasColumnType("uuid")
                         .HasColumnName("payroll_run_id");
 
@@ -1360,6 +1376,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ReversalOfJournalId")
                         .HasColumnType("uuid")
                         .HasColumnName("reversal_of_journal_id");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1397,6 +1418,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_payroll_journals_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Source")
+                        .HasDatabaseName("ix_payroll_journals_legal_entity_id_source");
 
                     b.ToTable("payroll_journals", (string)null);
                 });
@@ -1483,6 +1507,2818 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_payroll_journal_lines_tenant_id");
 
                     b.ToTable("payroll_journal_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Asset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateOnly?>("PurchasedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("purchased_on");
+
+                    b.Property<string>("SerialNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("serial_number");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Tag")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tag");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<decimal>("Value")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_assets");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_assets_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_assets_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Tag")
+                        .IsUnique()
+                        .HasDatabaseName("ix_assets_legal_entity_id_tag");
+
+                    b.ToTable("assets", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.AssetAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("asset_id");
+
+                    b.Property<bool>("ChargeableIfNotReturned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("chargeable_if_not_returned");
+
+                    b.Property<string>("ConditionIn")
+                        .HasColumnType("text")
+                        .HasColumnName("condition_in");
+
+                    b.Property<string>("ConditionOut")
+                        .HasColumnType("text")
+                        .HasColumnName("condition_out");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateOnly>("IssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("issued_on");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<DateOnly?>("ReturnedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("returned_on");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_asset_assignments");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_asset_assignments_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_asset_assignments_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_asset_assignments_tenant_id");
+
+                    b.HasIndex("AssetId", "ReturnedOn")
+                        .HasDatabaseName("ix_asset_assignments_asset_id_returned_on");
+
+                    b.ToTable("asset_assignments", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.BenefitEnrolment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cover")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cover");
+
+                    b.PrimitiveCollection<string>("CoveredDependantIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("covered_dependant_ids");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid>("MedicalSchemeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("medical_scheme_id");
+
+                    b.Property<string>("MembershipNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("membership_number");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_benefit_enrolments");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_benefit_enrolments_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_benefit_enrolments_legal_entity_id");
+
+                    b.HasIndex("MedicalSchemeId")
+                        .HasDatabaseName("ix_benefit_enrolments_medical_scheme_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_benefit_enrolments_tenant_id");
+
+                    b.ToTable("benefit_enrolments", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.CompensationReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<decimal?>("BonusBudget")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("bonus_budget");
+
+                    b.Property<string>("BonusMatrix")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("bonus_matrix");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_date");
+
+                    b.Property<decimal?>("IncreaseBudget")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("increase_budget");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("MeritMatrix")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("merit_matrix");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("PreparedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prepared_by");
+
+                    b.Property<Guid>("ReviewCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_cycle_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_compensation_reviews");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_compensation_reviews_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_compensation_reviews_tenant_id");
+
+                    b.ToTable("compensation_reviews", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.CompensationReviewLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BonusAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("bonus_amount");
+
+                    b.Property<Guid>("CompensationReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("compensation_review_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("CurrentBasic")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("current_basic");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("Excluded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("excluded");
+
+                    b.Property<decimal>("IncreasePercent")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("increase_percent");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<decimal>("NewBasic")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("new_basic");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<int?>("Rating")
+                        .HasColumnType("integer")
+                        .HasColumnName("rating");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_compensation_review_lines");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_compensation_review_lines_tenant_id");
+
+                    b.HasIndex("CompensationReviewId", "EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_compensation_review_lines_compensation_review_id_employee_id");
+
+                    b.ToTable("compensation_review_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Dependant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BeneficiaryPercent")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("beneficiary_percent");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date")
+                        .HasColumnName("date_of_birth");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("IdNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("id_number");
+
+                    b.Property<bool>("IsBeneficiary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_beneficiary");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Relationship")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("relationship");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_dependants");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_dependants_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_dependants_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_dependants_tenant_id");
+
+                    b.ToTable("dependants", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.EmployeeDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("date")
+                        .HasColumnName("expires_on");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateOnly?>("IssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("issued_on");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid>("StoredFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("stored_file_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<bool>("VisibleToEmployee")
+                        .HasColumnType("boolean")
+                        .HasColumnName("visible_to_employee");
+
+                    b.HasKey("Id")
+                        .HasName("pk_employee_documents");
+
+                    b.HasIndex("ExpiresOn")
+                        .HasDatabaseName("ix_employee_documents_expires_on");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_employee_documents_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_employee_documents_tenant_id");
+
+                    b.HasIndex("EmployeeId", "Category")
+                        .HasDatabaseName("ix_employee_documents_employee_id_category");
+
+                    b.ToTable("employee_documents", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ExpenseCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal?>("DailyTaxFreeCap")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("daily_tax_free_cap");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("GlAccountCode")
+                        .HasColumnType("text")
+                        .HasColumnName("gl_account_code");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<decimal?>("MaxPerClaim")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("max_per_claim");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<bool>("ReceiptRequired")
+                        .HasColumnType("boolean")
+                        .HasColumnName("receipt_required");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_expense_categories");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_expense_categories_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_expense_categories_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_expense_categories_legal_entity_id_code");
+
+                    b.ToTable("expense_categories", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ExpenseClaim", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<Guid?>("FinanceApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("finance_approved_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Lines")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("lines");
+
+                    b.Property<Guid?>("ManagerApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manager_approved_by");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reference");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<string>("Route")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("route");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<decimal>("TaxableAmount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("taxable_amount");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("total");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_expense_claims");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_expense_claims_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_expense_claims_tenant_id");
+
+                    b.HasIndex("EmployeeId", "Status")
+                        .HasDatabaseName("ix_expense_claims_employee_id_status");
+
+                    b.HasIndex("LegalEntityId", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_expense_claims_legal_entity_id_reference");
+
+                    b.ToTable("expense_claims", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.FeedbackRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Improvements")
+                        .HasColumnType("text")
+                        .HasColumnName("improvements");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid>("PerformanceReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("performance_review_id");
+
+                    b.Property<Guid>("ProviderEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("provider_employee_id");
+
+                    b.Property<int?>("Rating")
+                        .HasColumnType("integer")
+                        .HasColumnName("rating");
+
+                    b.Property<string>("Relationship")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("relationship");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Strengths")
+                        .HasColumnType("text")
+                        .HasColumnName("strengths");
+
+                    b.Property<Guid>("SubjectEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_employee_id");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_feedback_requests");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_feedback_requests_legal_entity_id");
+
+                    b.HasIndex("PerformanceReviewId")
+                        .HasDatabaseName("ix_feedback_requests_performance_review_id");
+
+                    b.HasIndex("ProviderEmployeeId")
+                        .HasDatabaseName("ix_feedback_requests_provider_employee_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_feedback_requests_tenant_id");
+
+                    b.ToTable("feedback_requests", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Goal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Measure")
+                        .HasColumnType("text")
+                        .HasColumnName("measure");
+
+                    b.Property<Guid?>("ParentGoalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_goal_id");
+
+                    b.Property<decimal>("ProgressPercent")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("progress_percent");
+
+                    b.Property<Guid>("ReviewCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_cycle_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Target")
+                        .HasColumnType("text")
+                        .HasColumnName("target");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<decimal>("WeightPercent")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("weight_percent");
+
+                    b.HasKey("Id")
+                        .HasName("pk_goals");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_goals_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_goals_tenant_id");
+
+                    b.HasIndex("ReviewCycleId", "EmployeeId")
+                        .HasDatabaseName("ix_goals_review_cycle_id_employee_id");
+
+                    b.ToTable("goals", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.HrCase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly?>("AppealDeadline")
+                        .HasColumnType("date")
+                        .HasColumnName("appeal_deadline");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Companion")
+                        .HasColumnType("text")
+                        .HasColumnName("companion");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("Events")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("events");
+
+                    b.Property<DateTimeOffset?>("HearingAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hearing_at");
+
+                    b.Property<bool>("HearingHeld")
+                        .HasColumnType("boolean")
+                        .HasColumnName("hearing_held");
+
+                    b.Property<DateOnly>("IncidentDate")
+                        .HasColumnType("date")
+                        .HasColumnName("incident_date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("OutcomeReason")
+                        .HasColumnType("text")
+                        .HasColumnName("outcome_reason");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reference");
+
+                    b.Property<DateOnly?>("ResponseDueOn")
+                        .HasColumnType("date")
+                        .HasColumnName("response_due_on");
+
+                    b.Property<DateOnly?>("ShowCauseIssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("show_cause_issued_on");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_hr_cases");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_hr_cases_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_hr_cases_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_hr_cases_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_hr_cases_legal_entity_id_reference");
+
+                    b.ToTable("hr_cases", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ImprovementPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid?>("ManagerEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manager_employee_id");
+
+                    b.Property<string>("Objectives")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("objectives");
+
+                    b.Property<string>("Outcome")
+                        .HasColumnType("text")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_improvement_plans");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_improvement_plans_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_improvement_plans_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_improvement_plans_tenant_id");
+
+                    b.ToTable("improvement_plans", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.JobApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("ConsentToRetain")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consent_to_retain");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CvFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cv_file_id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("first_name");
+
+                    b.Property<Guid?>("HiredEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("hired_employee_id");
+
+                    b.Property<string>("Interviews")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("interviews");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("JobRequisitionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_requisition_id");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("last_name");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<decimal?>("OfferBasic")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("offer_basic");
+
+                    b.Property<string>("OfferJobTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("offer_job_title");
+
+                    b.Property<DateOnly?>("OfferStartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("offer_start_date");
+
+                    b.Property<string>("OfferStatus")
+                        .HasColumnType("text")
+                        .HasColumnName("offer_status");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("text")
+                        .HasColumnName("phone");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<string>("Source")
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("stage");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_job_applications");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_job_applications_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_job_applications_tenant_id");
+
+                    b.HasIndex("JobRequisitionId", "Stage")
+                        .HasDatabaseName("ix_job_applications_job_requisition_id_stage");
+
+                    b.ToTable("job_applications", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.JobRequisition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("branch_id");
+
+                    b.Property<DateOnly?>("ClosingDate")
+                        .HasColumnType("date")
+                        .HasColumnName("closing_date");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<string>("EmploymentType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("employment_type");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Justification")
+                        .HasColumnType("text")
+                        .HasColumnName("justification");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<int>("Openings")
+                        .HasColumnType("integer")
+                        .HasColumnName("openings");
+
+                    b.Property<Guid?>("PositionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("position_id");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reference");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<decimal?>("SalaryMax")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("salary_max");
+
+                    b.Property<decimal?>("SalaryMin")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("salary_min");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_job_requisitions");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_job_requisitions_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_job_requisitions_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_job_requisitions_legal_entity_id_reference");
+
+                    b.ToTable("job_requisitions", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.MedicalScheme", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("DeductionComponentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deduction_component_id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<decimal>("EmployeeSharePercent")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("employee_share_percent");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PolicyNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("policy_number");
+
+                    b.Property<string>("PremiumByCover")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("premium_by_cover");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_medical_schemes");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_medical_schemes_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_medical_schemes_tenant_id");
+
+                    b.ToTable("medical_schemes", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.NitaClaim", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("AmountApproved")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount_approved");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("NitaReference")
+                        .HasColumnType("text")
+                        .HasColumnName("nita_reference");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("period_end");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("period_start");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reference");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("TotalClaimed")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("total_claimed");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_nita_claims");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_nita_claims_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_nita_claims_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ix_nita_claims_legal_entity_id_reference");
+
+                    b.ToTable("nita_claims", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.NitaClaimLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateOnly>("CompletedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("completed_on");
+
+                    b.Property<string>("CourseTitle")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("course_title");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("NitaClaimId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("nita_claim_id");
+
+                    b.Property<string>("NitaCourseCode")
+                        .HasColumnType("text")
+                        .HasColumnName("nita_course_code");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TrainingEnrolmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_enrolment_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_nita_claim_lines");
+
+                    b.HasIndex("NitaClaimId")
+                        .HasDatabaseName("ix_nita_claim_lines_nita_claim_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_nita_claim_lines_tenant_id");
+
+                    b.HasIndex("TrainingEnrolmentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_nita_claim_lines_training_enrolment_id");
+
+                    b.ToTable("nita_claim_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OnboardingTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("Done")
+                        .HasColumnType("boolean")
+                        .HasColumnName("done");
+
+                    b.Property<DateTimeOffset?>("DoneAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("done_at");
+
+                    b.Property<string>("DoneBy")
+                        .HasColumnType("text")
+                        .HasColumnName("done_by");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Owner")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("owner");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_onboarding_tasks");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_onboarding_tasks_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_onboarding_tasks_tenant_id");
+
+                    b.HasIndex("EmployeeId", "Done")
+                        .HasDatabaseName("ix_onboarding_tasks_employee_id_done");
+
+                    b.ToTable("onboarding_tasks", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.PerformanceReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at");
+
+                    b.Property<string>("CalibrationNote")
+                        .HasColumnType("text")
+                        .HasColumnName("calibration_note");
+
+                    b.Property<string>("CompetencyRatings")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("competency_ratings");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("EmployeeResponse")
+                        .HasColumnType("text")
+                        .HasColumnName("employee_response");
+
+                    b.Property<int?>("FinalRating")
+                        .HasColumnType("integer")
+                        .HasColumnName("final_rating");
+
+                    b.Property<string>("GoalRatings")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("goal_ratings");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("ManagerComments")
+                        .HasColumnType("text")
+                        .HasColumnName("manager_comments");
+
+                    b.Property<decimal?>("ManagerScore")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("manager_score");
+
+                    b.Property<Guid>("ReviewCycleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("review_cycle_id");
+
+                    b.Property<Guid?>("ReviewerEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewer_employee_id");
+
+                    b.Property<string>("SelfComments")
+                        .HasColumnType("text")
+                        .HasColumnName("self_comments");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_performance_reviews");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_performance_reviews_legal_entity_id");
+
+                    b.HasIndex("ReviewerEmployeeId")
+                        .HasDatabaseName("ix_performance_reviews_reviewer_employee_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_performance_reviews_tenant_id");
+
+                    b.HasIndex("ReviewCycleId", "EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_performance_reviews_review_cycle_id_employee_id");
+
+                    b.ToTable("performance_reviews", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Position", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("BudgetedHeadcount")
+                        .HasColumnType("integer")
+                        .HasColumnName("budgeted_headcount");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("Grade")
+                        .HasColumnType("text")
+                        .HasColumnName("grade");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid?>("ReportsToPositionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reports_to_position_id");
+
+                    b.Property<decimal?>("SalaryMax")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("salary_max");
+
+                    b.Property<decimal?>("SalaryMin")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("salary_min");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_positions");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_positions_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_positions_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_positions_legal_entity_id_code");
+
+                    b.ToTable("positions", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ReviewCycle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<string>("Competencies")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("competencies");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<decimal>("GoalWeightPercent")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("goal_weight_percent");
+
+                    b.Property<bool>("Include360")
+                        .HasColumnType("boolean")
+                        .HasColumnName("include360");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("period_end");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("period_start");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_review_cycles");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_review_cycles_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_review_cycles_tenant_id");
+
+                    b.ToTable("review_cycles", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ScheduledPayItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid?>("ProcessedInRunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("processed_in_run_id");
+
+                    b.Property<Guid>("SalaryComponentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("salary_component_id");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source_type");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scheduled_pay_items");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_scheduled_pay_items_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_scheduled_pay_items_tenant_id");
+
+                    b.HasIndex("SourceType", "SourceId")
+                        .HasDatabaseName("ix_scheduled_pay_items_source_type_source_id");
+
+                    b.HasIndex("EmployeeId", "Status", "DueDate")
+                        .HasDatabaseName("ix_scheduled_pay_items_employee_id_status_due_date");
+
+                    b.ToTable("scheduled_pay_items", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Separation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<string>("Checklist")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("checklist");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Dues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("dues");
+
+                    b.Property<bool>("EligibleForRehire")
+                        .HasColumnType("boolean")
+                        .HasColumnName("eligible_for_rehire");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("ExitInterviewNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("exit_interview_notes");
+
+                    b.Property<Guid>("InitiatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("initiated_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateOnly>("LastWorkingDay")
+                        .HasColumnType("date")
+                        .HasColumnName("last_working_day");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<DateOnly>("NoticeDate")
+                        .HasColumnType("date")
+                        .HasColumnName("notice_date");
+
+                    b.Property<int>("NoticeDaysServed")
+                        .HasColumnType("integer")
+                        .HasColumnName("notice_days_served");
+
+                    b.Property<bool>("PayNoticeInLieu")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pay_notice_in_lieu");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_separations");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_separations_employee_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_separations_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_separations_tenant_id");
+
+                    b.ToTable("separations", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.StoredFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_name");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("OwnerType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("owner_type");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stored_files");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_stored_files_employee_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_stored_files_tenant_id");
+
+                    b.HasIndex("OwnerType", "OwnerId")
+                        .HasDatabaseName("ix_stored_files_owner_type_owner_id");
+
+                    b.ToTable("stored_files", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingBond", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<int>("Months")
+                        .HasColumnType("integer")
+                        .HasColumnName("months");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("TrainingEnrolmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_enrolment_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_training_bonds");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_training_bonds_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_training_bonds_tenant_id");
+
+                    b.HasIndex("EmployeeId", "Status")
+                        .HasDatabaseName("ix_training_bonds_employee_id_status");
+
+                    b.ToTable("training_bonds", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingCourse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int?>("CertificateValidityMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("certificate_validity_months");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<decimal>("CostPerParticipant")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cost_per_participant");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Delivery")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("delivery");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<decimal>("DurationHours")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("duration_hours");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<bool>("NitaApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("nita_approved");
+
+                    b.Property<string>("NitaCourseCode")
+                        .HasColumnType("text")
+                        .HasColumnName("nita_course_code");
+
+                    b.Property<string>("Provider")
+                        .HasColumnType("text")
+                        .HasColumnName("provider");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_training_courses");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_training_courses_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_training_courses_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_training_courses_legal_entity_id_code");
+
+                    b.ToTable("training_courses", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingEnrolment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CertificateFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("certificate_file_id");
+
+                    b.Property<string>("CertificateNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("certificate_number");
+
+                    b.Property<DateOnly?>("CertifiedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("certified_on");
+
+                    b.Property<decimal>("CostAllocated")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("cost_allocated");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("date")
+                        .HasColumnName("expires_on");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<decimal?>("Score")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("score");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TrainingSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_session_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_training_enrolments");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_training_enrolments_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_training_enrolments_tenant_id");
+
+                    b.HasIndex("EmployeeId", "ExpiresOn")
+                        .HasDatabaseName("ix_training_enrolments_employee_id_expires_on");
+
+                    b.HasIndex("TrainingSessionId", "EmployeeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_training_enrolments_training_session_id_employee_id");
+
+                    b.ToTable("training_enrolments", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingRequirement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("JobTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("job_title");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<bool>("Mandatory")
+                        .HasColumnType("boolean")
+                        .HasColumnName("mandatory");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TrainingCourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_course_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_training_requirements");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_training_requirements_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_training_requirements_tenant_id");
+
+                    b.HasIndex("TrainingCourseId")
+                        .HasDatabaseName("ix_training_requirements_training_course_id");
+
+                    b.ToTable("training_requirements", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal?>("ActualTotalCost")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("actual_total_cost");
+
+                    b.Property<int>("Capacity")
+                        .HasColumnType("integer")
+                        .HasColumnName("capacity");
+
+                    b.Property<Guid?>("CostJournalId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cost_journal_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Trainer")
+                        .HasColumnType("text")
+                        .HasColumnName("trainer");
+
+                    b.Property<Guid>("TrainingCourseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("training_course_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Venue")
+                        .HasColumnType("text")
+                        .HasColumnName("venue");
+
+                    b.HasKey("Id")
+                        .HasName("pk_training_sessions");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_training_sessions_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_training_sessions_tenant_id");
+
+                    b.HasIndex("TrainingCourseId")
+                        .HasDatabaseName("ix_training_sessions_training_course_id");
+
+                    b.ToTable("training_sessions", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Identity.User", b =>
@@ -1676,9 +4512,17 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("approver_comment");
 
+                    b.Property<Guid?>("ApproverEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approver_employee_id");
+
                     b.Property<Guid?>("ApproverId")
                         .HasColumnType("uuid")
                         .HasColumnName("approver_id");
+
+                    b.Property<Guid?>("AttachmentFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("attachment_file_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1707,6 +4551,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("date")
                         .HasColumnName("end_date");
+
+                    b.Property<decimal>("FullPayDays")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("full_pay_days");
+
+                    b.Property<decimal>("HalfPayDays")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("half_pay_days");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
@@ -1740,6 +4592,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("UnpaidDays")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("unpaid_days");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1783,6 +4639,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("code");
 
+                    b.Property<bool>("CountsWorkingDaysOnly")
+                        .HasColumnType("boolean")
+                        .HasColumnName("counts_working_days_only");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1794,6 +4654,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.Property<decimal?>("FullPayDaysPerYear")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("full_pay_days_per_year");
+
+                    b.Property<decimal>("HalfPayDaysPerYear")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("half_pay_days_per_year");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
@@ -1814,6 +4682,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("MaxCarryOverDays")
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("max_carry_over_days");
+
+                    b.Property<int>("MinServiceMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_service_months");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1850,6 +4722,77 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_leave_types_legal_entity_id_code");
 
                     b.ToTable("leave_types", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.PublicHoliday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsGazettedAdHoc")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_gazetted_ad_hoc");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateOnly>("ObservedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("observed_date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_public_holidays");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_public_holidays_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_public_holidays_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Date")
+                        .IsUnique()
+                        .HasDatabaseName("ix_public_holidays_legal_entity_id_date");
+
+                    b.ToTable("public_holidays", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Branch", b =>
@@ -3942,6 +6885,366 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_payroll_journal_lines_payroll_journals_payroll_journal_id");
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Asset", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_assets_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.AssetAssignment", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.Asset", null)
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_asset_assignments_assets_asset_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_asset_assignments_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.BenefitEnrolment", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_benefit_enrolments_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.MedicalScheme", null)
+                        .WithMany()
+                        .HasForeignKey("MedicalSchemeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_benefit_enrolments_medical_schemes_medical_scheme_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.CompensationReview", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_compensation_reviews_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.CompensationReviewLine", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.CompensationReview", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("CompensationReviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_compensation_review_lines_compensation_reviews_compensation");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Dependant", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_dependants_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.EmployeeDocument", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_employee_documents_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ExpenseCategory", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_expense_categories_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ExpenseClaim", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_expense_claims_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.FeedbackRequest", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_feedback_requests_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Goal", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_goals_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.ReviewCycle", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewCycleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_goals_review_cycles_review_cycle_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.HrCase", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_hr_cases_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ImprovementPlan", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_improvement_plans_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.JobApplication", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.JobRequisition", null)
+                        .WithMany()
+                        .HasForeignKey("JobRequisitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_job_applications_job_requisitions_job_requisition_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_job_applications_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.JobRequisition", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_job_requisitions_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.MedicalScheme", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_medical_schemes_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.NitaClaim", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_nita_claims_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.NitaClaimLine", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.NitaClaim", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("NitaClaimId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_nita_claim_lines_nita_claims_nita_claim_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OnboardingTask", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_onboarding_tasks_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.PerformanceReview", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_performance_reviews_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.ReviewCycle", null)
+                        .WithMany()
+                        .HasForeignKey("ReviewCycleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_performance_reviews_review_cycles_review_cycle_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Position", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_positions_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ReviewCycle", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_review_cycles_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.ScheduledPayItem", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_scheduled_pay_items_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.Separation", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Employees.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_separations_employees_employee_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_separations_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingBond", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_bonds_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingCourse", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_courses_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingEnrolment", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Employees.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_enrolments_employees_employee_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_enrolments_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.TrainingSession", null)
+                        .WithMany()
+                        .HasForeignKey("TrainingSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_enrolments_training_sessions_training_session_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingRequirement", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_requirements_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.TrainingCourse", null)
+                        .WithMany()
+                        .HasForeignKey("TrainingCourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_requirements_training_courses_training_course_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.TrainingSession", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_sessions_legal_entities_legal_entity_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.TrainingCourse", null)
+                        .WithMany()
+                        .HasForeignKey("TrainingCourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_training_sessions_training_courses_training_course_id");
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.EmployeeLeaveBalance", b =>
                 {
                     b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
@@ -3970,6 +7273,16 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_leave_types_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.PublicHoliday", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_public_holidays_legal_entities_legal_entity_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Branch", b =>
@@ -4254,6 +7567,16 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Finance.PayrollJournal", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.CompensationReview", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.NitaClaim", b =>
                 {
                     b.Navigation("Lines");
                 });

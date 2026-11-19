@@ -26,6 +26,8 @@ public static class EmployeeEndpoints
         if (e.BranchId is { } b && !await db.Branches.AnyAsync(x => x.Id == b && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Branch is not valid for this legal entity.", "VALIDATION");
         if (e.CostCentreId is { } c && !await db.CostCentres.AnyAsync(x => x.Id == c && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Cost centre is not valid for this legal entity.", "VALIDATION");
         if (e.ReportingManagerId is { } m && !await db.Employees.AnyAsync(x => x.Id == m, ct)) throw new DomainException("Reporting manager not found.", "VALIDATION");
+        if (e.PositionId is { } p && !await db.Positions.AnyAsync(x => x.Id == p && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Position is not valid for this legal entity.", "VALIDATION");
+        if (e.NoticePeriodDays < 0) throw new DomainException("Notice period cannot be negative.", "VALIDATION");
         if (e.HireDate == default) throw new DomainException("Hire date is required.", "VALIDATION");
     }
 
@@ -118,6 +120,8 @@ public static class EmployeeEndpoints
             e.EmploymentType = body.EmploymentType; e.Status = body.Status; e.HireDate = body.HireDate; e.ContractEndDate = body.ContractEndDate; e.TerminationDate = body.TerminationDate;
             e.JobTitle = body.JobTitle; e.DepartmentId = body.DepartmentId; e.BranchId = body.BranchId; e.CostCentreId = body.CostCentreId; e.PayrollGroupId = body.PayrollGroupId;
             e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
+            e.PositionId = body.PositionId; e.NoticePeriodDays = body.NoticePeriodDays; e.ProbationEndDate = body.ProbationEndDate;
+            if (e.ReportingManagerId == e.Id) throw new DomainException("An employee cannot report to themselves.", "VALIDATION");
             await ValidateReferencesAsync(e, db, ct);
             if (employmentChanged)
             {

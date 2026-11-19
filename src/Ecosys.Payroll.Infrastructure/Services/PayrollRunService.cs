@@ -1,6 +1,7 @@
 using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Compensation;
 using Ecosys.Payroll.Domain.Finance;
+using Ecosys.Payroll.Domain.Hr;
 using Ecosys.Payroll.Domain.Identity;
 using Ecosys.Payroll.Domain.Leave;
 using Ecosys.Payroll.Domain.Organisation;
@@ -111,7 +112,13 @@ public sealed class PayrollRunService(
         if (run.Status is PayrollRunStatus.Draft or PayrollRunStatus.Rejected) run.Transition(PayrollRunStatus.Prepared);
         if (run.Status is not (PayrollRunStatus.Prepared or PayrollRunStatus.Calculated)) throw new InvalidStateException($"Run is {run.Status}.");
 
+        // Release scheduled items this run claimed previously; LoadAsync re-claims those still due.
+        await db.ScheduledPayItems.Where(i => i.ProcessedInRunId == run.Id && i.Status == PayItemStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.ProcessedInRunId, (Guid?)null), ct);
         var ctx = await assembler.LoadAsync(run, ct);
+        var claimed = ctx.ScheduledItems.Values.SelectMany(x => x).Select(i => i.Id).ToList();
+        if (claimed.Count > 0)
+            await db.ScheduledPayItems.Where(i => claimed.Contains(i.Id)).ExecuteUpdateAsync(s => s.SetProperty(i => i.ProcessedInRunId, run.Id), ct);
         var ruleSet = await rules.ResolveAsync(run.Jurisdiction, ctx.Period.PeriodEnd, ct);
         var calculator = calculators.For(run.Jurisdiction);
         var periodInput = new PayrollPeriodInput(ctx.Period.Id, ctx.Period.PeriodStart, ctx.Period.PeriodEnd, run.Jurisdiction, run.CurrencyCode, ctx.Frequency);
@@ -367,10 +374,11 @@ public sealed class PayrollRunService(
         }
         await db.PayrollAdjustments.Where(a => empIds.Contains(a.EmployeeId) && a.Status == AdjustmentStatus.Pending && a.ApprovedBy != null)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, AdjustmentStatus.Applied).SetProperty(a => a.AppliedInRunId, run.Id), ct);
-        var unpaidTypes = await db.LeaveTypes.Where(t => t.LegalEntityId == run.LegalEntityId && !t.IsPaid).Select(t => t.Id).ToListAsync(ct);
-        await db.LeaveRequests.Where(l => empIds.Contains(l.EmployeeId) && unpaidTypes.Contains(l.LeaveTypeId) && l.Status == LeaveRequestStatus.Approved
-                                          && l.ProcessedInRunId == null && l.StartDate <= period.PeriodEnd && l.EndDate >= period.PeriodStart)
+        await db.LeaveRequests.Where(l => empIds.Contains(l.EmployeeId) && l.Status == LeaveRequestStatus.Approved
+                                          && l.StartDate <= period.PeriodEnd && l.EndDate >= period.PeriodStart)
             .ExecuteUpdateAsync(s => s.SetProperty(l => l.ProcessedInRunId, run.Id), ct);
+        await db.ScheduledPayItems.Where(i => i.ProcessedInRunId == run.Id && i.Status == PayItemStatus.Pending)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Status, PayItemStatus.Processed), ct);
 
         var journal = await journals.BuildAsync(run, period, ct);
         db.PayrollJournals.Add(journal);
@@ -406,6 +414,27 @@ public sealed class PayrollRunService(
         }
         var period = await db.PayrollPeriods.FirstAsync(p => p.Id == run.PayrollPeriodId, ct);
         period.Status = PeriodStatus.Open;
+
+        // Undo the side effects of finalisation so a corrected run starts from the same position.
+        if (run.Status == PayrollRunStatus.Finalised)
+        {
+            var runEmployees = await db.PayrollRunEmployees.Where(e => e.PayrollRunId == run.Id).Select(e => new { e.Id, e.EmployeeId }).ToListAsync(ct);
+            var rowIds = runEmployees.Select(e => e.Id).ToList();
+            var deductionLines = await db.PayrollResultLines.Where(l => rowIds.Contains(l.PayrollRunEmployeeId) && l.Type == ResultLineType.Deduction).ToListAsync(ct);
+            var empIds = runEmployees.Select(e => e.EmployeeId).ToList();
+            foreach (var loan in await db.StaffLoans.Where(l => empIds.Contains(l.EmployeeId)).ToListAsync(ct))
+            {
+                var row = runEmployees.FirstOrDefault(e => e.EmployeeId == loan.EmployeeId);
+                var repaid = deductionLines.Where(l => row != null && l.PayrollRunEmployeeId == row.Id && l.Name.Contains($"({loan.Reference})")).Sum(l => l.Amount);
+                if (repaid <= 0) continue;
+                loan.Balance += repaid;
+                if (loan.Status == LoanStatus.Settled) loan.Status = LoanStatus.Active;
+            }
+            await db.PayrollAdjustments.Where(a => a.AppliedInRunId == run.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, AdjustmentStatus.Pending).SetProperty(a => a.AppliedInRunId, (Guid?)null), ct);
+        }
+        await db.ScheduledPayItems.Where(i => i.ProcessedInRunId == run.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(i => i.Status, PayItemStatus.Pending).SetProperty(i => i.ProcessedInRunId, (Guid?)null), ct);
 
         var from = run.Status;
         run.Transition(PayrollRunStatus.Reversed);

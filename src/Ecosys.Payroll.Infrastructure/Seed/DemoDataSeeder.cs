@@ -16,7 +16,7 @@ namespace Ecosys.Payroll.Infrastructure.Seed;
 /// Seeds (a) the platform statutory rules for Kenya — always, idempotently — and (b) an optional demo tenant
 /// with a realistic small company so the product can be evaluated end-to-end.
 /// </summary>
-public sealed class DemoDataSeeder(PayrollDbContext db, TenantContext tenant)
+public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext tenant)
 {
     public const string DemoTenantSlug = "demo";
     public const string DemoPassword = "Demo!2345";

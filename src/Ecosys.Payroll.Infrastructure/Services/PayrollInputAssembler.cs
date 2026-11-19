@@ -1,5 +1,6 @@
 using Ecosys.Payroll.Domain.Compensation;
 using Ecosys.Payroll.Domain.Employees;
+using Ecosys.Payroll.Domain.Hr;
 using Ecosys.Payroll.Domain.Leave;
 using Ecosys.Payroll.Domain.Organisation;
 using Ecosys.Payroll.Domain.Payroll;
@@ -26,7 +27,9 @@ public sealed record RunContext(
     IReadOnlyDictionary<Guid, decimal> PreviousNetPay,
     IReadOnlyDictionary<Guid, EmployeeBankAccount> PrimaryBankAccounts,
     PayrollGroup Group,
-    IReadOnlyDictionary<Guid, AttendanceRecord> Attendance)
+    IReadOnlyDictionary<Guid, AttendanceRecord> Attendance,
+    IReadOnlyDictionary<Guid, List<ScheduledPayItem>> ScheduledItems,
+    IReadOnlyDictionary<Guid, List<(Guid? ComponentId, string Name, decimal MonthlyAmount)>> BenefitDeductions)
 {
     public PeriodFrequency Frequency => Group.Frequency switch
     {
@@ -72,13 +75,27 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         var loans = (await db.StaffLoans.Where(l => ids.Contains(l.EmployeeId) && l.Status == LoanStatus.Active && l.StartDate <= period.PeriodEnd).AsNoTracking().ToListAsync(ct))
             .GroupBy(l => l.EmployeeId).ToDictionary(g => g.Key, g => g.ToList());
 
-        var unpaidTypes = await db.LeaveTypes.Where(t => t.LegalEntityId == run.LegalEntityId && !t.IsPaid).Select(t => t.Id).ToListAsync(ct);
-        var unpaid = (await db.LeaveRequests
-                .Where(l => ids.Contains(l.EmployeeId) && unpaidTypes.Contains(l.LeaveTypeId) && l.Status == LeaveRequestStatus.Approved
-                            && l.ProcessedInRunId == null && l.StartDate <= period.PeriodEnd && l.EndDate >= period.PeriodStart)
-                .AsNoTracking().ToListAsync(ct))
-            .GroupBy(l => l.EmployeeId)
-            .ToDictionary(g => g.Key, g => g.Sum(l => OverlapDays(l, period)));
+        // Leave that costs pay in this period: unpaid types and the half-pay/unpaid tiers of paid types (e.g. sick leave).
+        // Selection is by overlap with the period (one regular run per period), so leave spanning months is deducted in each.
+        var leaveTypes = await db.LeaveTypes.Where(t => t.LegalEntityId == run.LegalEntityId).AsNoTracking().ToDictionaryAsync(t => t.Id, ct);
+        var unpaidTypeIds = leaveTypes.Values.Where(t => !t.IsPaid).Select(t => t.Id).ToList();
+        var payAffecting = await db.LeaveRequests
+            .Where(l => ids.Contains(l.EmployeeId) && l.Status == LeaveRequestStatus.Approved && l.StartDate <= period.PeriodEnd && l.EndDate >= period.PeriodStart
+                        && (unpaidTypeIds.Contains(l.LeaveTypeId) || l.HalfPayDays > 0 || l.UnpaidDays > 0))
+            .AsNoTracking().ToListAsync(ct);
+        var holidays = new HashSet<DateOnly>();
+        if (payAffecting.Count > 0)
+        {
+            var firstDay = payAffecting.Min(l => l.StartDate);
+            var lastDay = payAffecting.Max(l => l.EndDate);
+            holidays = (await db.PublicHolidays.Where(h => h.LegalEntityId == run.LegalEntityId && h.ObservedDate >= firstDay && h.ObservedDate <= lastDay)
+                .Select(h => h.ObservedDate).ToListAsync(ct)).ToHashSet();
+        }
+        var unpaid = payAffecting.GroupBy(l => l.EmployeeId).ToDictionary(g => g.Key, g => g.Sum(l =>
+        {
+            var t = leaveTypes.GetValueOrDefault(l.LeaveTypeId);
+            return LeaveDeductionDays(l, t is { IsPaid: false }, t?.CountsWorkingDaysOnly ?? true, period.PeriodStart, period.PeriodEnd, holidays);
+        }));
 
         var adjustments = (await db.PayrollAdjustments
                 .Where(a => ids.Contains(a.EmployeeId) && a.Status == AdjustmentStatus.Pending && a.ApprovedBy != null)
@@ -97,18 +114,48 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         var group = await db.PayrollGroups.FirstAsync(g => g.Id == run.PayrollGroupId, ct);
         var attendance = await db.AttendanceRecords.Where(a => a.PayrollRunId == run.Id).AsNoTracking().ToDictionaryAsync(a => a.EmployeeId, ct);
 
-        return new RunContext(run, period, entity, components, structures, employees, assignments, statutory, variables, loans, unpaid, adjustments, previous, banks, group, attendance);
+        // One-off items (final dues, bonuses, reimbursements) are paid by regular runs only, and only once:
+        // an item claimed by another run is skipped.
+        var scheduled = run.RunType != PayrollRunType.Regular ? new Dictionary<Guid, List<ScheduledPayItem>>()
+            : (await db.ScheduledPayItems.Where(i => ids.Contains(i.EmployeeId) && i.Status == PayItemStatus.Pending && i.DueDate <= period.PeriodEnd
+                                                     && (i.ProcessedInRunId == null || i.ProcessedInRunId == run.Id)).AsNoTracking().ToListAsync(ct))
+                .GroupBy(i => i.EmployeeId).ToDictionary(g => g.Key, g => g.OrderBy(i => i.DueDate).ToList());
+
+        var schemes = await db.MedicalSchemes.Where(s => s.LegalEntityId == run.LegalEntityId).AsNoTracking().ToDictionaryAsync(s => s.Id, ct);
+        var medicalComponent = components.Values.FirstOrDefault(c => c.Code == "MEDICAL");
+        var benefits = (await db.BenefitEnrolments.Where(b => ids.Contains(b.EmployeeId) && b.StartDate <= period.PeriodEnd && (b.EndDate == null || b.EndDate >= period.PeriodStart)).AsNoTracking().ToListAsync(ct))
+            .Where(b => schemes.ContainsKey(b.MedicalSchemeId))
+            .Select(b =>
+            {
+                var s = schemes[b.MedicalSchemeId];
+                var premium = s.PremiumByCover.GetValueOrDefault(b.Cover);
+                return (b.EmployeeId, Item: (ComponentId: s.DeductionComponentId ?? medicalComponent?.Id, Name: $"Medical cover — {s.Name} ({b.Cover})", MonthlyAmount: Math.Round(premium * s.EmployeeSharePercent / 100m, 2)));
+            })
+            .Where(x => x.Item.MonthlyAmount > 0)
+            .GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.Select(x => x.Item).ToList());
+
+        return new RunContext(run, period, entity, components, structures, employees, assignments, statutory, variables, loans, unpaid, adjustments, previous, banks, group, attendance, scheduled, benefits);
     }
 
-    private static decimal OverlapDays(LeaveRequest l, PayrollPeriod p)
+    /// <summary>
+    /// Pay-day equivalents to deduct for one leave request within a period. The request's days are taken in date order:
+    /// first the full-pay days, then half-pay days (deduct 0.5 each), then unpaid days (deduct 1 each).
+    /// A wholly unpaid leave type deducts every day.
+    /// </summary>
+    public static decimal LeaveDeductionDays(LeaveRequest l, bool typeUnpaid, bool workingDaysOnly, DateOnly periodStart, DateOnly periodEnd, ISet<DateOnly> holidays)
     {
-        var start = l.StartDate > p.PeriodStart ? l.StartDate : p.PeriodStart;
-        var end = l.EndDate < p.PeriodEnd ? l.EndDate : p.PeriodEnd;
-        var total = l.EndDate.DayNumber - l.StartDate.DayNumber + 1;
-        var overlap = end.DayNumber - start.DayNumber + 1;
-        if (overlap <= 0 || total <= 0) return 0;
-        // Pro-rate the recorded (working-day) count by the calendar overlap.
-        return Math.Round(l.Days * overlap / total, 2);
+        var dates = workingDaysOnly ? Hr.WorkCalendar.WorkingDates(l.StartDate, l.EndDate, holidays).ToList()
+            : Enumerable.Range(0, l.EndDate.DayNumber - l.StartDate.DayNumber + 1).Select(i => l.StartDate.AddDays(i)).ToList();
+        decimal full = typeUnpaid ? 0 : l.FullPayDays, half = typeUnpaid ? 0 : l.HalfPayDays, unpaid = typeUnpaid ? Math.Min(l.Days, dates.Count) : l.UnpaidDays;
+        var deduct = 0m;
+        for (var i = 0; i < dates.Count; i++)
+        {
+            var position = i + 1m;
+            if (dates[i] < periodStart || dates[i] > periodEnd || position <= full) continue;
+            if (position <= full + half) deduct += 0.5m;
+            else if (position <= full + half + unpaid) deduct += 1m;
+        }
+        return deduct;
     }
 
     /// <summary>Builds the engine input for one employee, or returns the reasons it cannot be built.</summary>
@@ -172,11 +219,14 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
             foreach (var v in vars)
                 if (ctx.Components.TryGetValue(v.SalaryComponentId, out var c)) AddComponent(c, v.Amount, earnings, deductions);
 
-        // Loan instalments.
+        // Loan instalments; in the employee's final period the whole outstanding balance is recovered.
+        var finalPeriod = emp.TerminationDate is { } leaving && leaving <= ctx.Period.PeriodEnd;
         if (ctx.Loans.TryGetValue(emp.Id, out var loans))
             foreach (var loan in loans)
             {
-                var instalment = Math.Min(loan.InstalmentAmount, loan.Balance);
+                var instalment = finalPeriod ? loan.Balance : Math.Min(loan.InstalmentAmount, loan.Balance);
+                if (finalPeriod && loan.Balance > loan.InstalmentAmount)
+                    issues.Add(new(ValidationSeverity.Warning, "FINAL_LOAN", $"Final pay recovers the full loan balance {loan.Balance:N2} ({loan.Reference})."));
                 if (instalment <= 0 || !ctx.Components.TryGetValue(loan.SalaryComponentId, out var c)) continue;
                 deductions.Add(new DeductionInput(c.Code, $"{c.Name} ({loan.Reference})", instalment, c.DeductionTreatment, 0m, c.Id, c.GlAccountCode));
             }
@@ -186,6 +236,23 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
             foreach (var a in adjs)
                 if (ctx.Components.TryGetValue(a.SalaryComponentId, out var c))
                     AddComponent(c, a.Amount, earnings, deductions, $"{c.Name} (adjustment: {a.Type})");
+
+        // One-off scheduled items (final dues, bonuses, reimbursements).
+        if (ctx.ScheduledItems.TryGetValue(emp.Id, out var items))
+            foreach (var item in items)
+                if (ctx.Components.TryGetValue(item.SalaryComponentId, out var c))
+                {
+                    if (c.Type == ComponentType.Earning) earnings.Add(new EarningInput(c.Code, item.Description, item.Amount, c.Taxable, c.Pensionable, false, c.Id, c.GlAccountCode));
+                    else deductions.Add(new DeductionInput(c.Code, item.Description, item.Amount, c.DeductionTreatment, 0m, c.Id, c.GlAccountCode));
+                }
+
+        // Medical cover: employee share of the premium.
+        if (ctx.BenefitDeductions.TryGetValue(emp.Id, out var benefitItems))
+            foreach (var (componentId, name, monthly) in benefitItems)
+            {
+                var c = componentId is { } cid ? ctx.Components.GetValueOrDefault(cid) : null;
+                deductions.Add(new DeductionInput(c?.Code ?? "MEDICAL", name, Math.Round(monthly * ctx.PeriodFactor, 2), c?.DeductionTreatment ?? DeductionTreatment.QualifyingInsurancePremium, 0m, c?.Id, c?.GlAccountCode));
+            }
 
         // Unpaid leave and unauthorised absence are valued at the daily rate of monthly basic.
         var settings = ctx.Entity.Settings;

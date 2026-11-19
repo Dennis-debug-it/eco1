@@ -77,6 +77,11 @@ api.MapCompensation();
 api.MapStatutory();
 api.MapPayrollRuns();
 api.MapSelfService();
+api.MapLeave();
+api.MapSeparations();
+api.MapPerformance();
+api.MapLearning();
+api.MapHr();
 api.MapReports();
 
 // Static SPA (built React app copied into wwwroot in the container image).
@@ -93,6 +98,8 @@ using (var scope = app.Services.CreateScope())
     await seeder.SeedPlatformRulesAsync();
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && await seeder.SeedDemoTenantAsync())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
+    if (app.Configuration.GetValue("Payroll:SeedDemoData", false))
+        await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoHrDataAsync();
 }
 
 await app.RunAsync();

@@ -52,6 +52,17 @@ public static class DependencyInjection
         services.AddScoped<DemoDataSeeder>();
         services.AddScoped<NotificationService>();
         services.AddScoped<LeaveBalanceService>();
+        services.AddScoped<Services.Hr.HrAccess>();
+        services.AddScoped<Services.Hr.FileStore>();
+        services.AddScoped<Services.Hr.WorkCalendar>();
+        services.AddScoped<Services.Hr.SystemComponents>();
+        services.AddScoped<Services.Hr.LeaveService>();
+        services.AddScoped<Services.Hr.SeparationService>();
+        services.AddScoped<Services.Hr.PerformanceService>();
+        services.AddScoped<Services.Hr.LearningService>();
+        services.AddScoped<Services.Hr.HrOperationsService>();
+        services.AddSingleton<Services.Hr.HrReminderJob>();
+        if (config.GetValue("Notifications:Enabled", true)) services.AddHostedService(sp => sp.GetRequiredService<Services.Hr.HrReminderJob>());
         services.AddSingleton(TimeProvider.System);
         if (config["Notifications:Provider"] == "Ecosys")
             services.AddHttpClient<INotificationSender, EcosysNotificationSender>(c =>

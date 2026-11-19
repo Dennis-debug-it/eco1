@@ -22,7 +22,7 @@ namespace Ecosys.Payroll.Infrastructure.Persistence;
 /// request's <see cref="ITenantContext"/>; every tenant entity is also stamped on insert so a
 /// service cannot accidentally write into another tenant.
 /// </summary>
-public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenantContext tenant, FieldEncryptor encryptor) : DbContext(options)
+public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenantContext tenant, FieldEncryptor encryptor) : DbContext(options)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -84,6 +84,11 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
             // Keys are generated client-side (Guid.NewGuid in Entity); tell EF so graph-discovered entities are inserted, not updated.
             foreach (var p in et.FindPrimaryKey()?.Properties.Where(p => p.ClrType == typeof(Guid)) ?? [])
                 p.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+            // PostgreSQL timestamptz accepts only UTC offsets; clients in Kenya send +03:00. Normalise on write.
+            foreach (var p in et.GetProperties().Where(p => p.ClrType == typeof(DateTimeOffset) && p.GetValueConverter() is null))
+                p.SetValueConverter(new ValueConverter<DateTimeOffset, DateTimeOffset>(v => v.ToUniversalTime(), v => v));
+            foreach (var p in et.GetProperties().Where(p => p.ClrType == typeof(DateTimeOffset?) && p.GetValueConverter() is null))
+                p.SetValueConverter(new ValueConverter<DateTimeOffset?, DateTimeOffset?>(v => v.HasValue ? v.Value.ToUniversalTime() : v, v => v));
             foreach (var p in et.GetProperties().Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
                 p.SetColumnType("numeric(18,4)");
             foreach (var p in et.GetProperties().Where(p => p.ClrType.IsEnum || Nullable.GetUnderlyingType(p.ClrType)?.IsEnum == true))
@@ -236,6 +241,9 @@ public class PayrollDbContext(DbContextOptions<PayrollDbContext> options, ITenan
         Scoped<LeaveType>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());
         Scoped<EmployeeLeaveBalance>(b, e => { e.HasIndex(x => new { x.EmployeeId, x.LeaveTypeId, x.Year }).IsUnique(); e.Ignore(x => x.Available); });
         Scoped<LeaveRequest>(b, e => e.HasIndex(x => new { x.EmployeeId, x.Status }));
+
+        ConfigureHr(b);
+        ConfigureLeaveAndJournals(b);
 
         // ---- Identity ---------------------------------------------------------------------
         TenantEntity<User>(b, e =>
