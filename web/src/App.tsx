@@ -24,6 +24,7 @@ import PeopleRecordsPage from './pages/PeopleRecords'
 import CasesPage from './pages/Cases'
 import ExpensesPage from './pages/Expenses'
 import HrAnalyticsPage from './pages/HrAnalytics'
+import DataProtectionPage from './pages/DataProtection'
 import { useHrMe } from './lib/lookups'
 
 export default function App() {
@@ -59,6 +60,7 @@ export default function App() {
     { to: '/statutory', label: 'Statutory compliance', show: can(P.StatutoryManage) || can(P.StatutoryApprove) || can(P.SalaryRead) },
     { to: '/reports', label: 'Reports & audit', show: can(P.ReportsRead) || can(P.AuditRead) },
     { to: '/settings', label: 'Settings & security', show: true, section: 'Administration' },
+    { to: '/data-protection', label: 'Data protection', show: can(P.OrganisationManage), section: 'Administration' },
   ]
 
   return (
@@ -101,6 +103,7 @@ export default function App() {
           <Route path="/cases" element={<CasesPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/hr-analytics" element={<HrAnalyticsPage />} />
+          <Route path="/data-protection" element={<DataProtectionPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

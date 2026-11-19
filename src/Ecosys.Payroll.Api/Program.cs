@@ -111,6 +111,7 @@ api.MapSeparations();
 api.MapPerformance();
 api.MapLearning();
 api.MapHr();
+api.MapDataProtection();
 api.MapReports();
 
 // Static SPA (built React app copied into wwwroot in the container image).

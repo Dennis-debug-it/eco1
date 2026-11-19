@@ -22,6 +22,8 @@ public class Employee : LegalEntityScopedEntity
     public string? PhysicalAddress { get; set; }
     public string? EmergencyContactName { get; set; }
     public string? EmergencyContactPhone { get; set; }
+    /// <summary>Set when personal data was removed after the statutory retention period (Data Protection Act s.39).</summary>
+    public DateTimeOffset? AnonymisedAt { get; set; }
 
     // Current employment (history lives in EmploymentRecord)
     public EmploymentType EmploymentType { get; set; } = EmploymentType.Permanent;

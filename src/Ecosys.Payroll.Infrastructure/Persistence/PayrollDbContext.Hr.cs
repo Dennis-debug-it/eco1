@@ -10,6 +10,7 @@ namespace Ecosys.Payroll.Infrastructure.Persistence;
 public partial class PayrollDbContext
 {
     public DbSet<PublicHoliday> PublicHolidays => Set<PublicHoliday>();
+    public DbSet<Domain.Organisation.DataBreach> DataBreaches => Set<Domain.Organisation.DataBreach>();
     public DbSet<StoredFile> StoredFiles => Set<StoredFile>();
     public DbSet<ScheduledPayItem> ScheduledPayItems => Set<ScheduledPayItem>();
     public DbSet<Separation> Separations => Set<Separation>();
@@ -52,6 +53,11 @@ public partial class PayrollDbContext
 
     private void ConfigureHr(ModelBuilder b)
     {
+        TenantEntity<Domain.Organisation.DataBreach>(b, e =>
+        {
+            e.HasIndex(x => new { x.TenantId, x.Reference }).IsUnique();
+            e.Ignore(x => x.CommissionerDeadline);
+        });
         TenantEntity<StoredFile>(b, e => { e.HasIndex(x => new { x.OwnerType, x.OwnerId }); e.HasIndex(x => x.EmployeeId); });
         Scoped<ScheduledPayItem>(b, e => { e.HasIndex(x => new { x.EmployeeId, x.Status, x.DueDate }); e.HasIndex(x => new { x.SourceType, x.SourceId }); });
 

@@ -201,7 +201,10 @@ function Profile({ employeeId }: { employeeId: string }) {
     <div className="grid c2">
       <div className="card"><h2>Personal details</h2><dl className="kv"><dt>Employee number</dt><dd className="mono">{e.employeeNumber}</dd><dt>Name</dt><dd>{e.firstName} {e.middleName} {e.lastName}</dd><dt>Job title</dt><dd>{e.jobTitle}</dd><dt>Email</dt><dd>{e.email}</dd><dt>Phone</dt><dd>{e.phone}</dd><dt>Hire date</dt><dd>{fmt.date(e.hireDate)}</dd><dt>Employment</dt><dd>{e.employmentType} · <Badge status={e.status} /></dd></dl>
         {e.terminationDate && <button className="btn" style={{ marginTop: 10 }} onClick={() => api.download(`/api/payroll/employees/${employeeId}/certificate-of-service.pdf`)}>Certificate of service</button>}
-        <p className="muted small">To change personal details, contact HR — changes are audited.</p></div>
+        <p className="muted small">To change personal details, contact HR — changes are audited.</p>
+        <h2 style={{ marginTop: 14 }}>Your data</h2>
+        <p className="small">Under the Data Protection Act 2019 you can get a copy of the personal data held about you, and ask HR to correct anything that's wrong.</p>
+        <button className="btn" onClick={() => api.download('/api/payroll/self-service/data-export')}>Download my data (JSON)</button></div>
       <div className="card"><h2>Bank accounts</h2>{!q.data!.bankAccounts.length ? <Empty>No bank account on file.</Empty> : <table><tbody>{q.data!.bankAccounts.map(b => <tr key={b.id}><td>{b.bankName}</td><td className="mono">{b.accountNumber}</td><td>{b.isPrimary && <Badge status="Active">Primary</Badge>}</td><td>{b.isVerified ? <Badge status="Active">Verified</Badge> : <Badge status="Pending">Awaiting verification</Badge>}</td></tr>)}</tbody></table>}
         <h2 style={{ marginTop: 14 }}>Statutory numbers</h2><dl className="kv"><dt>KRA PIN</dt><dd className="mono">{q.data!.statutory?.kraPin ?? '—'}</dd><dt>NSSF</dt><dd className="mono">{q.data!.statutory?.nssfNumber ?? '—'}</dd><dt>SHIF</dt><dd className="mono">{q.data!.statutory?.shifNumber ?? '—'}</dd></dl></div>
     </div>
