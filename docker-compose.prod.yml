@@ -1,0 +1,33 @@
+# Production override: HTTPS on 443 through Caddy (automatic Let's Encrypt certificates), the app reachable only
+# through the proxy, and the proxy's forwarded headers trusted.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  payroll:
+    ports: !reset []
+    expose:
+      - "8080"
+    environment:
+      Payroll__BehindProxy: "true"
+      Payroll__PortalUrl: https://${DOMAIN:?set DOMAIN in .env}
+      Cors__Origins__0: https://${DOMAIN}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - payroll
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env (certificate expiry notices)}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

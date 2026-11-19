@@ -62,6 +62,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Hr.LearningService>();
         services.AddScoped<Services.Hr.HrOperationsService>();
         services.AddScoped<DataProtectionService>();
+        services.AddScoped<Seed.TenantProvisioner>();
         services.AddSingleton<Services.Hr.HrReminderJob>();
         if (config.GetValue("Notifications:Enabled", true)) services.AddHostedService(sp => sp.GetRequiredService<Services.Hr.HrReminderJob>());
         services.AddSingleton(TimeProvider.System);

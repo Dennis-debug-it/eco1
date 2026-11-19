@@ -1,6 +1,8 @@
-# Local / single-host deployment: PostgreSQL + Ecosys Payroll (API and web app on :8080).
+# Single-host deployment: PostgreSQL + Ecosys Payroll (API and web app) + nightly encrypted backups.
 #   cp .env.example .env   # then set the keys
-#   docker compose up -d --build
+#   docker compose up -d --build                                                    # local / trial, http://localhost:8080
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build   # production: HTTPS via Caddy on 443
+# See docs/operations.md for backups, restores, upgrades and monitoring.
 services:
   db:
     image: postgres:16-alpine
@@ -30,6 +32,7 @@ services:
       ConnectionStrings__Payroll: Host=db;Port=5432;Database=ecosys_payroll;Username=payroll;Password=${POSTGRES_PASSWORD}
       Payroll__Encryption__Key: ${PAYROLL_ENCRYPTION_KEY:?set PAYROLL_ENCRYPTION_KEY in .env}
       Payroll__SeedDemoData: ${SEED_DEMO_DATA:-false}
+      Payroll__AllowDemoData: ${ALLOW_DEMO_DATA:-false}
       Payroll__PortalUrl: ${PORTAL_URL:-http://localhost:8080}
       Auth__Mode: ${AUTH_MODE:-Local}
       Auth__SigningKey: ${AUTH_SIGNING_KEY:-}
@@ -39,6 +42,31 @@ services:
       Notifications__Ecosys__BaseUrl: ${NOTIFICATIONS_BASE_URL:-}
       Notifications__Ecosys__ApiKey: ${NOTIFICATIONS_API_KEY:-}
       Cors__Origins__0: ${PORTAL_URL:-http://localhost:8080}
+      Payroll__TimeZone: Africa/Nairobi
+      Payroll__Retention__EmployeeRecordYears: ${RETENTION_EMPLOYEE_YEARS:-7}
+      TZ: Africa/Nairobi
+
+  backup:
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
+    image: ecosys/payroll-backup:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: payroll
+      PGDATABASE: ecosys_payroll
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_AT: ${BACKUP_AT:-01:30}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-12}
+      TZ: Africa/Nairobi
+    volumes:
+      - ${BACKUP_PATH:-./backups}:/backups
 
 volumes:
   pgdata:

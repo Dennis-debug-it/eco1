@@ -97,6 +97,20 @@ app.UseMiddleware<TenantContextMiddleware>();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Ecosys Payroll", version = "1.0.0" })).AllowAnonymous();
+// Readiness for load balancers and monitoring: the database must answer and the outbox must not be backing up.
+app.MapGet("/health/ready", async (PayrollDbContext db, CancellationToken ct) =>
+{
+    try
+    {
+        db.IgnoreTenantFilter = true;
+        var stuck = await db.NotificationMessages.CountAsync(m => m.Status == Ecosys.Payroll.Domain.Payroll.NotificationStatus.Failed && m.CreatedAt > DateTimeOffset.UtcNow.AddDays(-1), ct);
+        return Results.Ok(new { status = "ready", database = "ok", failedNotifications24h = stuck });
+    }
+    catch (Exception ex) when (ex is not OperationCanceledException)
+    {
+        return Results.Json(new { status = "unavailable", database = "unreachable" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+}).AllowAnonymous();
 
 var api = app.MapGroup("/api/payroll");
 api.MapAuth();
@@ -130,6 +144,39 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false))
         await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoHrDataAsync();
+}
+
+// One-off command: create a customer organisation and its first administrator, then exit.
+//   docker compose run --rm payroll provision-tenant --name "Acme Kenya" --slug acme --entity "Acme Kenya Ltd" \
+//     --kra-pin P051234567A --admin-email hr.lead@acme.co.ke --admin-name "Jane Wanjiku"
+if (args.FirstOrDefault() == "provision-tenant")
+{
+    string? Arg(string name) { var i = Array.IndexOf(args, "--" + name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
+    string Req(string name) => Arg(name) ?? throw new ArgumentException($"--{name} is required");
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<TenantProvisioner>().ProvisionAsync(new TenantProvisionRequest(
+            Req("name"), Req("slug"), Arg("entity") ?? Req("name"), Req("kra-pin"), Req("admin-email"), Req("admin-name"),
+            Arg("registration-number"), Arg("nssf-number"), Arg("sha-number"), Arg("nita-number"), Arg("address"), Arg("email"), Arg("phone"),
+            int.TryParse(Arg("pay-day"), out var payDay) ? payDay : 28));
+        Console.WriteLine($"""
+
+            Organisation created.
+              Sign-in code (organisation): {result.Slug}
+              Administrator:               {result.AdminEmail}
+              One-time password:           {result.TemporaryPassword}
+
+            Give the password to the administrator directly (not by email). At first sign-in they choose their own
+            password and set up an authenticator app. It will not be shown again.
+            """);
+        return 0;
+    }
+    catch (Exception ex) when (ex is ArgumentException or Ecosys.Payroll.Domain.Common.DomainException)
+    {
+        Console.Error.WriteLine($"provision-tenant: {ex.Message}");
+        return 2;
+    }
 }
 
 await app.RunAsync();

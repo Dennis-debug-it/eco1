@@ -10,3 +10,4 @@ web/dist/
 appsettings.*.local.json
 tsconfig.tsbuildinfo
 src/Ecosys.Payroll.Api/wwwroot/
+backups/

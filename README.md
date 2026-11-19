@@ -62,13 +62,15 @@ Key decisions (PRD §19):
 cp .env.example .env
 ```
 
-Set `POSTGRES_PASSWORD`, `PAYROLL_ENCRYPTION_KEY` (`openssl rand -base64 32`) and `AUTH_SIGNING_KEY` in `.env`. To try it with sample data, also set `SEED_DEMO_DATA=true`.
+Set `POSTGRES_PASSWORD`, `PAYROLL_ENCRYPTION_KEY` (`openssl rand -base64 32`) and `AUTH_SIGNING_KEY` (`openssl rand -base64 48`) in `.env`. To try it with sample data on a demo server, also set `SEED_DEMO_DATA=true` and `ALLOW_DEMO_DATA=true`. Demo users with payroll roles will be asked to set up an authenticator app.
 
 ```bash
 docker compose up -d --build
 ```
 
 Open http://localhost:8080.
+
+For a production install (HTTPS, backups, creating the customer's organisation with `provision-tenant`), follow [docs/operations.md](docs/operations.md).
 
 ### Local development
 
@@ -196,8 +198,12 @@ amounts that the next regular run picks up at calculation, marks processed at fi
 
 - **Roles → permissions.** `salary.read` is separate from `employees.read`, so HR can manage people without seeing remuneration.
 - **Legal-entity scoping.** A user can be restricted to specific legal entities.
-- **Separation of duties.** The preparer or submitter of a run cannot approve it. Rule authors cannot approve their own rules, and adjustment requesters cannot approve their own adjustments.
-- **TOTP MFA** for privileged roles. A password-only token for such a user can only reach `/auth/*` endpoints.
+- **Separation of duties.** The preparer or submitter of a run cannot review or approve it. When the legal entity requires review, a reviewer signs off first. With `MinimumApprovals` above one, that many different approvers must approve. Rule authors cannot approve their own rules, and adjustment requesters cannot approve their own adjustments.
+- **TOTP MFA** for privileged roles. A password-only token for such a user can only reach `/auth/*` endpoints. Codes can't be replayed.
+- **Sign-in protection.** Five failures lock an account for 15 minutes, with an email to the user. Each address is rate-limited. Passwords are checked against a common-password list, and administrator-issued passwords must be changed at first sign-in.
+- **Session revocation.** A password change, deactivation, role change or "Sign out everywhere" ends existing sessions within 30 seconds, through a per-user security stamp.
+- **Production guard.** The app refuses to start outside Development with demo data, development keys, MFA off or a default database password.
+- **Data protection (Kenya DPA 2019).** Subject-access export, retention-based anonymisation, applicant purge and a breach register with the 72-hour deadline. See Administration → Data protection.
 - **Audit trail.** Logins (including failures), every workflow action, sensitive data changes, exports and payslip downloads.
 - **Self-service bank changes.** Bank accounts added by employees stay unverified, and are never paid, until HR verifies them.
 - **CSV exports** neutralise spreadsheet formula injection.
@@ -237,7 +243,7 @@ These are the things to resolve before go-live, or to plan for in later phases:
    - the identity provider's claim names
 
    Align both with the platform teams.
-5. **Approval depth.** One approval is required. The `MinimumApprovals` and `RequireReviewBeforeApproval` legal-entity settings are stored but not yet enforced (no multi-level approval chain).
+5. **Deployment.** See [docs/kenya-deployment-readiness.md](docs/kenya-deployment-readiness.md) for the open go-live items (statutory filing templates, bank specifications, ODPC registration, notifications provider, independent testing) and [docs/operations.md](docs/operations.md) for installing, backing up and upgrading.
 6. **Attendance** is imported from CSV, or captured manually. Direct biometric or time-system integrations are Phase 3.
 7. **Multi-country.** Only the Kenya calculator exists. The engine is jurisdiction-pluggable (`IPayrollCalculator`).
 8. **HR modules.** Some parts of these modules are simplified or need checking before go-live:
