@@ -8,7 +8,7 @@ import type { Journal, Payment, RunEmployeeDetail, RunEmployeeRow, RunStatus, Ru
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
 
 const flow: RunStatus[] = ['Draft', 'Prepared', 'Calculated', 'UnderReview', 'Approved', 'PaymentProcessing', 'Paid', 'Finalised']
-type Tab = 'summary' | 'employees' | 'exceptions' | 'inputs' | 'attendance' | 'payments' | 'journal' | 'history'
+type Tab = 'summary' | 'employees' | 'exceptions' | 'inputs' | 'attendance' | 'payments' | 'journal' | 'parallel' | 'history'
 
 export default function PayrollRunDetailPage() {
   const { id = '' } = useParams()
@@ -66,7 +66,7 @@ export default function PayrollRunDetailPage() {
       </div>
 
       <div style={{ marginTop: 16 }}>
-        <Tabs value={tab} onChange={setTab} tabs={[{ id: 'summary', label: 'Summary' }, { id: 'employees', label: `Employees (${r.employeeCount})` }, { id: 'exceptions', label: `Exceptions (${r.errorCount + r.warningCount})` }, { id: 'inputs', label: 'Variable inputs' }, { id: 'attendance', label: 'Attendance' }, { id: 'payments', label: 'Payments' }, { id: 'journal', label: 'Journal' }, { id: 'history', label: 'Approval history' }]} />
+        <Tabs value={tab} onChange={setTab} tabs={[{ id: 'summary', label: 'Summary' }, { id: 'employees', label: `Employees (${r.employeeCount})` }, { id: 'exceptions', label: `Exceptions (${r.errorCount + r.warningCount})` }, { id: 'inputs', label: 'Variable inputs' }, { id: 'attendance', label: 'Attendance' }, { id: 'payments', label: 'Payments' }, { id: 'journal', label: 'Journal' }, ...(can(P.SalaryRead) && !['Draft', 'Prepared'].includes(r.status) ? [{ id: 'parallel' as const, label: 'Parallel run' }] : []), { id: 'history', label: 'Approval history' }]} />
       </div>
 
       {tab === 'summary' && (
@@ -113,6 +113,7 @@ export default function PayrollRunDetailPage() {
       {tab === 'attendance' && <Attendance runId={id} editable={editable && can(P.PayrollPrepare)} employees={emps.data ?? []} onChange={refresh} />}
       {tab === 'payments' && <Payments runId={id} batches={s.batches} />}
       {tab === 'journal' && <JournalView runId={id} has={s.hasJournal} />}
+      {tab === 'parallel' && <ParallelRun runId={id} />}
       {tab === 'history' && (
         <div className="card">{s.approvals.length === 0 ? <Empty>No workflow actions yet.</Empty> : (
           <table><thead><tr><th>When</th><th>Action</th><th>By</th><th>From</th><th>To</th><th>Comment</th></tr></thead>
@@ -289,5 +290,59 @@ function ConfirmDialog({ runId, batches, onClose }: { runId: string; batches: Ru
       <Field label="Bank confirmation reference"><input value={ref} onChange={e => setRef(e.target.value)} /></Field>
       <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!batchId || m.isPending} onClick={() => m.mutate()}>Mark as paid</button></div>
     </Modal>
+  )
+}
+
+type Diff = { field: string; ecosys: number; legacy: number; difference: number }
+type Recon = { tolerance: number; employees: number; matched: number; different: number; onlyInEcosys: number; onlyInLegacy: number; fullyReconciled: boolean; columns: string[]; warnings: string[]
+  totals: { field: string; ecosys: number; legacy: number; difference: number }[]; rows: { employeeNumber: string; name: string; status: string; differences: Diff[] }[] }
+const fieldLabel: Record<string, string> = { Gross: 'Gross', Taxable: 'Taxable pay', PAYE: 'PAYE', NSSF: 'NSSF', SHIF: 'SHIF', HousingLevy: 'Housing levy', OtherDeductions: 'Other deductions', Net: 'Net pay' }
+
+/** Parallel run (PRD §18): upload the outgoing system's register for the same period and compare. */
+function ParallelRun({ runId }: { runId: string }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [tolerance, setTolerance] = useState('0')
+  const [result, setResult] = useState<Recon | null>(null)
+  const [err, setErr] = useState<unknown>(null)
+  const [busy, setBusy] = useState(false)
+  const [show, setShow] = useState<'issues' | 'all'>('issues')
+  const send = async (format?: string) => {
+    if (!file) return
+    setErr(null); setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${runId}/reconcile?tolerance=${tolerance}${format ? `&format=${format}` : ''}`, { method: 'POST', headers: { 'Content-Type': 'text/csv', Authorization: `Bearer ${tokenStore.get() ?? ''}` }, body: await file.text() })
+      if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})))
+      if (!format) { setResult(await res.json()); return }
+      const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+      a.download = /filename=([^;]+)/.exec(res.headers.get('Content-Disposition') ?? '')?.[1]?.replace(/"/g, '') ?? `parallel-run.${format}`; a.click()
+    } catch (x) { setErr(x) } finally { setBusy(false) }
+  }
+  const rows = result?.rows.filter(r => show === 'all' || r.status !== 'Matched') ?? []
+  return (
+    <div className="card">
+      <h2>Parallel run</h2>
+      <p className="small">Before go-live, run the same month in your current payroll system and here, then compare every employee. Export the outgoing system's payroll register as CSV with an employee number column and any of: Gross, Taxable, PAYE, NSSF, SHIF, Housing Levy, Other deductions, Net. Only the columns you include are compared. <a href="#" onClick={e => { e.preventDefault(); api.download('/api/payroll/runs/reconcile-template.csv') }}>Download a template</a>.</p>
+      <ErrorBox error={err} />
+      <div className="toolbar">
+        <input type="file" accept=".csv,text/csv" onChange={e => { setFile(e.target.files?.[0] ?? null); setResult(null) }} aria-label="Outgoing system register (CSV)" />
+        <label className="small">Tolerance <select value={tolerance} onChange={e => setTolerance(e.target.value)} aria-label="Tolerance"><option value="0">exact (to the cent)</option><option value="0.5">KES 0.50</option><option value="1">KES 1 (whole-shilling rounding)</option></select></label>
+        <button className="btn primary" disabled={!file || busy} onClick={() => send()}>{busy ? 'Comparing…' : 'Compare'}</button>
+        {result && <><button className="btn" disabled={busy} onClick={() => send('xlsx')}>Excel</button><button className="btn" disabled={busy} onClick={() => send('pdf')}>PDF</button></>}
+      </div>
+      {result && <>
+        {result.fullyReconciled ? <div className="alert ok">All {result.employees} employees match on {result.columns.map(c => fieldLabel[c]).join(', ')}{result.tolerance > 0 ? ` within KES ${result.tolerance}` : ''}. Keep the Excel or PDF for the sign-off pack.</div>
+          : <div className="alert warn">{result.matched} of {result.employees} employees match. {result.different > 0 && `${result.different} differ. `}{result.onlyInEcosys > 0 && `${result.onlyInEcosys} only in Ecosys. `}{result.onlyInLegacy > 0 && `${result.onlyInLegacy} only in the outgoing system. `}Open an employee in the Employees tab to see how each Ecosys figure was worked out.</div>}
+        {result.warnings.map(w => <div key={w} className="alert info">{w}</div>)}
+        <h3>Totals</h3>
+        <table><thead><tr><th>Figure</th><th className="num">Ecosys</th><th className="num">Outgoing system</th><th className="num">Difference</th></tr></thead>
+          <tbody>{result.totals.map(t => <tr key={t.field}><td>{fieldLabel[t.field]}</td><td className="num">{fmt.num(t.ecosys)}</td><td className="num">{fmt.num(t.legacy)}</td><td className="num" style={{ color: t.difference ? 'var(--danger)' : undefined }}>{fmt.num(t.difference)}</td></tr>)}</tbody></table>
+        <div className="toolbar" style={{ marginTop: 14 }}><h3 style={{ margin: 0 }}>Employees</h3><span style={{ flex: 1 }} /><select value={show} onChange={e => setShow(e.target.value as 'issues' | 'all')} aria-label="Show"><option value="issues">Differences only</option><option value="all">Everyone</option></select></div>
+        {!rows.length ? <Empty>No differences.</Empty> : <div className="table-wrap"><table><thead><tr><th>No.</th><th>Name</th><th>Result</th><th>Figure</th><th className="num">Ecosys</th><th className="num">Outgoing</th><th className="num">Difference</th></tr></thead>
+          <tbody>{rows.flatMap(r => (r.differences.length ? r.differences : [null]).map((d, i) => <tr key={r.employeeNumber + i}>
+            <td className="mono">{i === 0 ? r.employeeNumber : ''}</td><td>{i === 0 ? r.name : ''}</td>
+            <td>{i === 0 && <Badge status={r.status === 'Matched' ? 'Active' : r.status === 'Different' ? 'Error' : 'Warning'}>{r.status === 'OnlyInEcosys' ? 'Only in Ecosys' : r.status === 'OnlyInLegacy' ? 'Only in outgoing' : r.status}</Badge>}</td>
+            <td>{d ? fieldLabel[d.field] : ''}</td><td className="num">{d ? fmt.num(d.ecosys) : ''}</td><td className="num">{d ? fmt.num(d.legacy) : ''}</td><td className="num" style={{ color: 'var(--danger)' }}>{d ? fmt.num(d.difference) : ''}</td></tr>))}</tbody></table></div>}
+      </>}
+    </div>
   )
 }

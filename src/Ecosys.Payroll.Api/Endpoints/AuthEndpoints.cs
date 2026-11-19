@@ -114,6 +114,13 @@ public static class AuthEndpoints
             return Results.NoContent();
         }).RequireAuthorization();
 
+        // What the sign-in page may show before anyone is signed in. Demo hints only on servers that load demo data.
+        g.MapGet("/options", (IConfiguration config) => Results.Ok(new
+        {
+            demo = config.GetValue("Payroll:SeedDemoData", false),
+            localLogin = config["Auth:Mode"] != "Ecosys",
+        })).AllowAnonymous();
+
         g.MapGet("/me", async (HttpContext http, ITenantContext ctx, PayrollDbContext db, IConfiguration config, CancellationToken ct) =>
         {
             var user = await db.Users.FirstOrDefaultAsync(u => u.Id == ctx.UserId, ct);

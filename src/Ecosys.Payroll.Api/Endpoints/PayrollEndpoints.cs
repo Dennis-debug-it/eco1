@@ -1,3 +1,5 @@
+using Ecosys.Payroll.Infrastructure.Documents;
+using System.Text;
 using Ecosys.Payroll.Api.Infrastructure;
 using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Compensation;
@@ -176,6 +178,36 @@ public static class PayrollEndpoints
                 parsed.Add(new AttendanceRow(c[Col("employeenumber")], D("daysworked"), D("absentdays"), D("overtimehours"), D("restdayovertimehours"), Col("note") is var n && n >= 0 && n < c.Length ? c[n] : null));
             }
             return Results.Ok(await SaveAttendanceAsync(id, parsed, "import", ctx, svc, db, audit, ct));
+        }).Accepts<string>("text/csv");
+
+        // ---- Parallel run (PRD §18): compare the outgoing system's register with this run ----
+        g.MapGet("/reconcile-template.csv", () => Results.File(Encoding.UTF8.GetBytes(ParallelRunReconciler.Template), "text/csv", "parallel-run-register-template.csv"));
+        g.MapPost("/{id:guid}/reconcile", async (Guid id, HttpRequest http, decimal? tolerance, string? format, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        {
+            ctx.Require(Permissions.SalaryRead);
+            if (!ctx.Has(Permissions.PayrollReview) && !ctx.Has(Permissions.PayrollPrepare) && !ctx.Has(Permissions.PayrollApprove))
+                throw new ForbiddenException("Reconciling a parallel run needs payroll preparer, reviewer or approver access.");
+            var run = await svc.GetAsync(id, includeEmployees: true, ct);
+            if (run.Status is PayrollRunStatus.Draft or PayrollRunStatus.Prepared) throw new InvalidStateException("Calculate the run before reconciling it.");
+            using var reader = new StreamReader(http.Body);
+            var (legacy, columns, warnings) = ParallelRunReconciler.ParseCsv(await reader.ReadToEndAsync(ct));
+            var ours = run.Employees.Select(e => new RegisterFigures(e.EmployeeNumber, e.EmployeeName, e.GrossPay, e.TaxablePay, e.Paye, e.Nssf, e.Shif, e.HousingLevy, e.TotalOtherDeductions, e.NetPay)).ToList();
+            var tol = Math.Clamp(tolerance ?? 0m, 0m, 100m);
+            var result = ParallelRunReconciler.Reconcile(ours, legacy, columns, tol, warnings);
+            audit.Record("payroll.run.reconciled", nameof(PayrollRun), run.Id, new { result.Employees, result.Matched, result.Different, result.OnlyInEcosys, result.OnlyInLegacy, tolerance = tol, columns }, run.LegalEntityId);
+            await db.SaveChangesAsync(ct);
+            if (TabularExport.Parse(format) is not { } f) return Results.Ok(result);
+
+            // Evidence file for the sign-off pack: every employee, one line per differing figure.
+            var lines = result.Rows.SelectMany(r => r.Differences.Count == 0
+                ? [(r, (FieldDifference?)null)]
+                : r.Differences.Select(d => (r, (FieldDifference?)d))).ToList();
+            var file = TabularExport.Build(f, "Parallel run reconciliation", $"{run.Reference} · tolerance {tol:N2} · {result.Matched} of {result.Employees} matched", $"{run.Reference}-parallel-run", lines,
+            [
+                new("Employee no.", x => x.r.EmployeeNumber), new("Name", x => x.r.Name), new("Result", x => x.r.Status.ToString()),
+                new("Figure", x => x.Item2?.Field), new("Ecosys", x => x.Item2?.Ecosys, true), new("Outgoing system", x => x.Item2?.Legacy, true), new("Difference", x => x.Item2?.Difference, true),
+            ]);
+            return Results.File(file.Content, file.ContentType, file.FileName);
         }).Accepts<string>("text/csv");
 
         g.MapPost("/{id:guid}/prepare", async (Guid id, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.PrepareAsync(id, ct)));

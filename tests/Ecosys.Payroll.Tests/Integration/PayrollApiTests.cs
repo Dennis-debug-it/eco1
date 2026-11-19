@@ -195,6 +195,35 @@ public class PayrollApiTests(PayrollApiFixture app)
     }
 
     [Fact]
+    public async Task Parallel_run_reconciliation_compares_the_outgoing_register()
+    {
+        var payroll = await app.LoginAsync("payroll@demo.ecosys");
+        var run = await CalculatedRunAsync(payroll, "December 2025");
+        var rows = (await payroll.GetJson($"{B}/runs/{run}/employees")).AsArray();
+        // Build the "legacy" register from our own figures, then introduce one PAYE error and drop one employee.
+        var csv = new System.Text.StringBuilder("Payroll No,Name,Gross Pay,PAYE,Net Pay\n");
+        foreach (var r in rows.Skip(1))
+        {
+            var paye = r!["paye"].Dec() + (r["employeeNumber"].Str() == "SL003" ? 150m : 0m);
+            csv.Append($"{r["employeeNumber"].Str()},\"{r["employeeName"].Str()}\",\"{r["grossPay"].Dec():N2}\",{paye:F2},{r["netPay"].Dec():F2}\n");
+        }
+        var missing = rows[0]!["employeeNumber"].Str();
+        var res = await payroll.PostAsync($"{B}/runs/{run}/reconcile", new StringContent(csv.ToString(), System.Text.Encoding.UTF8, "text/csv"));
+        var result = await res.Json();
+        Assert.Equal(1, result["different"]!.GetValue<int>());
+        Assert.Equal(1, result["onlyInEcosys"]!.GetValue<int>());
+        var diff = result["rows"]!.AsArray().Single(r => r!["status"].Str() == "Different")!;
+        Assert.Equal("SL003", diff["employeeNumber"].Str());
+        Assert.Equal(-150m, diff["differences"]![0]!["difference"].Dec());
+        Assert.Equal(missing, result["rows"]!.AsArray().Single(r => r!["status"].Str() == "OnlyInEcosys")!["employeeNumber"].Str());
+
+        var xlsx = await payroll.PostAsync($"{B}/runs/{run}/reconcile?format=xlsx", new StringContent(csv.ToString(), System.Text.Encoding.UTF8, "text/csv"));
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsx.Content.Headers.ContentType!.MediaType);
+        // HR without salary access can't see it.
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await app.LoginAsync("hr@demo.ecosys")).PostAsync($"{B}/runs/{run}/reconcile", new StringContent(csv.ToString(), System.Text.Encoding.UTF8, "text/csv"))).StatusCode);
+    }
+
+    [Fact]
     public async Task Minimum_approvals_needs_that_many_different_approvers()
     {
         var payroll = await app.LoginAsync("payroll@demo.ecosys");

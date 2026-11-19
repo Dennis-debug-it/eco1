@@ -9,7 +9,7 @@ Last reviewed: 19 November 2026.
 
 | Area | Status |
 |---|---|
-| Statutory calculation (PAYE, NSSF, SHIF, AHL, NITA) | Built and unit-tested. **Waiting for practitioner sign-off and two reconciled parallel runs.** |
+| Statutory calculation (PAYE, NSSF, SHIF, AHL, NITA) | Built and unit-tested; the parallel-run comparison tool is ready. **Waiting for practitioner sign-off and two reconciled parallel runs.** |
 | Security (sign-in, sessions, keys, headers) | Done (see A1–A6) |
 | Kenyan data quality (dates, identifiers) | Done (B1–B2) |
 | Approval controls | Done (C1) |
@@ -92,7 +92,7 @@ Last reviewed: 19 November 2026.
 - **S1. Statutory sign-off (PRD §18).**
   - A qualified payroll or tax practitioner must confirm every parameter in [statutory-verification.md](statutory-verification.md) against primary sources: Finance Acts, the NSSF Act 2013 Year 4 notice, the Social Health Insurance Act 2023 and regulations, the Affordable Housing Act 2024, and the NITA levy order.
   - Two parallel payrolls must then be reconciled to the shilling against the outgoing system.
-  - *Owner: customer's payroll practitioner. Tool: parallel-run reconciliation (in progress).*
+  - *Owner: customer's payroll practitioner. Tool: each payroll run's **Parallel run** tab. Upload the outgoing system's register (CSV) and every employee is compared figure by figure, at a tolerance from exact to KES 1. Export the result to Excel or PDF for the sign-off pack. Each comparison is audited.*
 - **F1. KRA iTax P10.** The PAYE return exports as CSV, Excel and PDF, but not yet in the column layout of KRA's current P10 Excel template. *Next step: get the current template from iTax, map the columns, and confirm one upload in iTax's validation step.*
 - **F2. NSSF return.** Confirm the employer portal's upload format and map to it.
 - **F3. SHA return.** Confirm the SHA employer portal's contribution upload format and map to it.
