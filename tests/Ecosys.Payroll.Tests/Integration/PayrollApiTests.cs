@@ -45,6 +45,7 @@ public class PayrollApiTests(PayrollApiFixture app)
         var approver = await app.LoginAsync("approver@demo.ecosys");
         var id = await CalculatedRunAsync(payroll, periodName);
         await payroll.PostJson($"{B}/runs/{id}/submit", new { text = "ready" });
+        await (await app.LoginAsync("reviewer@demo.ecosys")).PostJson($"{B}/runs/{id}/review", new { text = "checked" });
         await approver.PostJson($"{B}/runs/{id}/approve", new { text = "ok" });
         return id;
     }
@@ -132,7 +133,15 @@ public class PayrollApiTests(PayrollApiFixture app)
 
         // Preparer lacks approve permission; a reviewer can't approve either.
         Assert.Equal(HttpStatusCode.Forbidden, (await payroll.PostAsJsonAsync($"{B}/runs/{run}/approve", new { })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await (await app.LoginAsync("reviewer@demo.ecosys")).PostAsJsonAsync($"{B}/runs/{run}/approve", new { })).StatusCode);
+        var reviewer = await app.LoginAsync("reviewer@demo.ecosys");
+        Assert.Equal(HttpStatusCode.Forbidden, (await reviewer.PostAsJsonAsync($"{B}/runs/{run}/approve", new { })).StatusCode);
+        // Review comes before approval (legal entity setting), and only once per submission.
+        var early = await approver.PostAsJsonAsync($"{B}/runs/{run}/approve", new { });
+        Assert.Equal(HttpStatusCode.Conflict, early.StatusCode);
+        Assert.Contains("must be reviewed", await early.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Forbidden, (await payroll.PostAsJsonAsync($"{B}/runs/{run}/review", new { })).StatusCode); // preparer
+        await reviewer.PostJson($"{B}/runs/{run}/review", new { text = "Variances explained" });
+        Assert.Equal(HttpStatusCode.Conflict, (await reviewer.PostAsJsonAsync($"{B}/runs/{run}/review", new { })).StatusCode);
         Assert.Equal("Approved", (await approver.PostJson($"{B}/runs/{run}/approve", new { text = "ok" }))["status"].Str());
 
         // Approved payroll cannot be edited.
@@ -184,6 +193,36 @@ public class PayrollApiTests(PayrollApiFixture app)
         Assert.True(sent >= queued);
         Assert.Equal(0, await app.WithDbAsync(null, db => db.NotificationMessages.CountAsync(m => m.EntityId == run && m.Status == NotificationStatus.Pending)));
     }
+
+    [Fact]
+    public async Task Minimum_approvals_needs_that_many_different_approvers()
+    {
+        var payroll = await app.LoginAsync("payroll@demo.ecosys");
+        var approver = await app.LoginAsync("approver@demo.ecosys");
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var run = await CalculatedRunAsync(payroll, "September 2025");
+        var le = await app.WithDbAsync(null, db => db.PayrollRuns.Where(r => r.Id == run).Select(r => r.LegalEntityId).FirstAsync());
+        await SetMinimumApprovals(le, 2);
+        try
+        {
+            await payroll.PostJson($"{B}/runs/{run}/submit");
+            await (await app.LoginAsync("reviewer@demo.ecosys")).PostJson($"{B}/runs/{run}/review");
+            var first = await approver.PostJson($"{B}/runs/{run}/approve", new { text = "Finance ok" });
+            Assert.Equal("UnderReview", first["status"].Str());
+            Assert.Equal(1, first["approvalsReceived"]!.GetValue<int>());
+            Assert.Equal(2, first["approvalsRequired"]!.GetValue<int>());
+            Assert.Equal(HttpStatusCode.Conflict, (await approver.PostAsJsonAsync($"{B}/runs/{run}/approve", new { })).StatusCode); // same person twice
+            Assert.Equal("Approved", (await admin.PostJson($"{B}/runs/{run}/approve", new { text = "MD ok" }))["status"].Str());
+        }
+        finally { await SetMinimumApprovals(le, 1); }
+    }
+
+    private Task<int> SetMinimumApprovals(Guid legalEntityId, int n) => app.WithDbAsync(null, async db =>
+    {
+        var e = await db.LegalEntities.FirstAsync(x => x.Id == legalEntityId);
+        e.Settings.MinimumApprovals = n;
+        return await db.SaveChangesAsync();
+    });
 
     [Fact]
     public async Task Preparer_cannot_approve_own_payroll_even_with_approver_role()

@@ -188,6 +188,7 @@ public static class PayrollEndpoints
             return Results.Ok(new { run.Status, run.ErrorCount, run.WarningCount, canSubmit = run.Status == PayrollRunStatus.Calculated && run.ErrorCount == 0, issues });
         });
         g.MapPost("/{id:guid}/submit", async (Guid id, Comment? c, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.SubmitAsync(id, c?.Text, ct)));
+        g.MapPost("/{id:guid}/review", async (Guid id, Comment? c, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.ReviewAsync(id, c?.Text, ct)));
         g.MapPost("/{id:guid}/approve", async (Guid id, Comment? c, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.ApproveAsync(id, c?.Text, ct)));
         g.MapPost("/{id:guid}/reject", async (Guid id, Reason r, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.RejectAsync(id, r.Text, ct)));
         g.MapPost("/{id:guid}/finalise", async (Guid id, PayrollRunService svc, CancellationToken ct) => Results.Ok(await svc.FinaliseAsync(id, ct)));

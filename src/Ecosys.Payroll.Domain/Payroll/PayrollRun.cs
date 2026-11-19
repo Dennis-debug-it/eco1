@@ -36,6 +36,12 @@ public class PayrollRun : LegalEntityScopedEntity
     public DateTimeOffset? CalculatedAt { get; set; }
     public Guid? SubmittedBy { get; set; }
     public DateTimeOffset? SubmittedAt { get; set; }
+    /// <summary>Set when a reviewer has checked the run in the current submission (legal entity setting RequireReviewBeforeApproval).</summary>
+    public Guid? ReviewedBy { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+    /// <summary>Distinct approvals received in the current submission; the run is approved once it reaches MinimumApprovals.</summary>
+    public int ApprovalsReceived { get; set; }
+    public int ApprovalsRequired { get; set; } = 1;
     public Guid? ApprovedBy { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
     public Guid? FinalisedBy { get; set; }

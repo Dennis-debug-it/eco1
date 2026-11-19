@@ -6179,6 +6179,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("ApprovalsReceived")
+                        .HasColumnType("integer")
+                        .HasColumnName("approvals_received");
+
+                    b.Property<int>("ApprovalsRequired")
+                        .HasColumnType("integer")
+                        .HasColumnName("approvals_required");
+
                     b.Property<DateTimeOffset?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("approved_at");
@@ -6281,6 +6289,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ReversedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("reversed_by");
+
+                    b.Property<DateTimeOffset?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by");
 
                     b.Property<string>("RunType")
                         .IsRequired()

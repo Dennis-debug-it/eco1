@@ -115,6 +115,7 @@ public class HrModulesTests(PayrollApiFixture app)
         Assert.True(row["grossPay"].Dec() > 58_000m + lines["NOTICE_PAY"] + lines["SEVERANCE"]);
 
         await payroll.PostJson($"{B}/runs/{run}/submit");
+        await (await app.LoginAsync("reviewer@demo.ecosys")).PostJson($"{B}/runs/{run}/review");
         await approver.PostJson($"{B}/runs/{run}/approve");
         await approver.PostJson($"{B}/runs/{run}/finalise");
         Assert.Equal(0, await app.WithDbAsync(null, db => db.ScheduledPayItems.CountAsync(i => i.SourceId == id && i.Status == PayItemStatus.Pending)));

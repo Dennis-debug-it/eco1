@@ -35,14 +35,16 @@ public sealed class NotificationService(PayrollDbContext db, ITenantContext tena
         if (!string.IsNullOrWhiteSpace(u.Phone)) Enqueue(NotificationChannel.WhatsApp, u.Phone, u.DisplayName, template, subject, body, entityType, entityId);
     }
 
-    public async Task PayrollSubmittedAsync(PayrollRun run, CancellationToken ct)
+    /// <summary>Tells the next people in the chain: reviewers when a review is required and not yet done, otherwise approvers.</summary>
+    public async Task PayrollSubmittedAsync(PayrollRun run, CancellationToken ct, bool forReview = false)
     {
-        var approvers = (await db.Users.Where(u => u.IsActive).ToListAsync(ct))
-            .Where(u => u.Roles.Contains(Roles.PayrollApprover) && u.Id != run.PreparedBy && u.Id != run.SubmittedBy
+        var role = forReview ? Roles.PayrollReviewer : Roles.PayrollApprover;
+        var recipients = (await db.Users.Where(u => u.IsActive).ToListAsync(ct))
+            .Where(u => u.Roles.Contains(role) && u.Id != run.PreparedBy && u.Id != run.SubmittedBy && u.Id != run.ReviewedBy
                         && (u.LegalEntityIds.Count == 0 || u.LegalEntityIds.Contains(run.LegalEntityId)));
-        foreach (var u in approvers)
-            ToUser(u, "payroll.submitted", $"Payroll {run.Reference} awaits your approval",
-                $"Payroll run {run.Reference} ({run.EmployeeCount} employees) has been submitted for review. Review it at {PortalUrl}/payroll/{run.Id}.", nameof(PayrollRun), run.Id);
+        foreach (var u in recipients)
+            ToUser(u, forReview ? "payroll.review" : "payroll.submitted", $"Payroll {run.Reference} awaits your {(forReview ? "review" : "approval")}",
+                $"Payroll run {run.Reference} ({run.EmployeeCount} employees) {(forReview ? "has been submitted for review" : run.ReviewedBy is null ? "has been submitted for approval" : "has been reviewed and awaits approval")}. Open it at {PortalUrl}/payroll/{run.Id}.", nameof(PayrollRun), run.Id);
     }
 
     public async Task PayrollDecidedAsync(PayrollRun run, bool approved, string? comment, CancellationToken ct)

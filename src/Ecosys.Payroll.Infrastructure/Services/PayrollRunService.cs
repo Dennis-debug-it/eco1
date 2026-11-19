@@ -198,17 +198,49 @@ public sealed class PayrollRunService(
         if (run.Status != PayrollRunStatus.Calculated) throw new InvalidStateException("Only a calculated run can be submitted for review.");
         if (run.ErrorCount > 0) throw new InvalidStateException($"Run has {run.ErrorCount} validation error(s) that must be resolved before submission.");
         if (run.EmployeeCount == 0) throw new InvalidStateException("Run has no employees.");
+        var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
         var from = run.Status;
         run.Transition(PayrollRunStatus.UnderReview);
         run.SubmittedBy = tenant.UserId;
         run.SubmittedAt = DateTimeOffset.UtcNow;
+        // Each submission starts a fresh review and approval round.
+        run.ReviewedBy = null; run.ReviewedAt = null;
+        run.ApprovalsReceived = 0; run.ApprovalsRequired = Math.Max(1, entity.Settings.MinimumApprovals);
         Approval(run, ApprovalAction.Submitted, from, comment);
+        await notifications.PayrollSubmittedAsync(run, ct, forReview: entity.Settings.RequireReviewBeforeApproval);
+        await db.SaveChangesAsync(ct);
+        return run;
+    }
+
+    /// <summary>
+    /// Reviewer sign-off between submission and approval, required when the legal entity's RequireReviewBeforeApproval
+    /// is on. The reviewer must be someone other than the preparer, and cannot also approve the same submission.
+    /// </summary>
+    public async Task<PayrollRun> ReviewAsync(Guid runId, string? comment, CancellationToken ct = default)
+    {
+        tenant.Require(Permissions.PayrollReview);
+        var run = await LoadAsync(runId, includeEmployees: false, ct);
+        if (run.Status != PayrollRunStatus.UnderReview) throw new InvalidStateException("Only a submitted run can be reviewed.");
+        if (run.ReviewedBy is not null) throw new InvalidStateException("This submission has already been reviewed.");
+        if (run.ErrorCount > 0) throw new InvalidStateException("The run has validation errors; send it back instead.");
+        var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
+        var me = tenant.RequireUser();
+        if (!entity.Settings.AllowPreparerToApprove && (run.PreparedBy == me || run.SubmittedBy == me))
+            throw new ForbiddenException("The preparer of a payroll cannot review it (separation of duties).");
+        run.ReviewedBy = me;
+        run.ReviewedAt = DateTimeOffset.UtcNow;
+        Approval(run, ApprovalAction.Reviewed, run.Status, comment);
+        audit.Record("payroll.run.reviewed", nameof(PayrollRun), run.Id, new { comment }, run.LegalEntityId);
         await notifications.PayrollSubmittedAsync(run, ct);
         await db.SaveChangesAsync(ct);
         return run;
     }
 
-    /// <summary>Maker-checker approval: the preparer/submitter cannot approve unless the legal entity explicitly allows it.</summary>
+    /// <summary>
+    /// Maker-checker approval. The preparer/submitter cannot approve unless the legal entity explicitly allows it; the
+    /// reviewer cannot approve the run they reviewed; and with MinimumApprovals above one, the run stays under review
+    /// until that many different approvers have approved this submission.
+    /// </summary>
     public async Task<PayrollRun> ApproveAsync(Guid runId, string? comment, CancellationToken ct = default)
     {
         tenant.Require(Permissions.PayrollApprove);
@@ -218,8 +250,26 @@ public sealed class PayrollRunService(
         var me = tenant.RequireUser();
         if (!entity.Settings.AllowPreparerToApprove && (run.PreparedBy == me || run.SubmittedBy == me))
             throw new ForbiddenException("The preparer of a payroll cannot approve it (separation of duties).");
+        if (entity.Settings.RequireReviewBeforeApproval && run.ReviewedBy is null)
+            throw new InvalidStateException("This run must be reviewed before it can be approved. A payroll reviewer marks it reviewed first.");
+        if (run.ReviewedBy == me)
+            throw new ForbiddenException("You reviewed this run, so a different person must approve it (separation of duties).");
+
+        var since = run.SubmittedAt ?? DateTimeOffset.MinValue;
+        var earlier = await db.PayrollApprovals.Where(a => a.PayrollRunId == run.Id && a.Action == ApprovalAction.Approved && a.CreatedAt >= since)
+            .Select(a => a.ActorId).Distinct().ToListAsync(ct);
+        if (earlier.Contains(me)) throw new InvalidStateException("You have already approved this run. It needs approval from someone else.");
+        run.ApprovalsRequired = Math.Max(1, entity.Settings.MinimumApprovals);
+        run.ApprovalsReceived = earlier.Count + 1;
 
         var from = run.Status;
+        if (run.ApprovalsReceived < run.ApprovalsRequired)
+        {
+            Approval(run, ApprovalAction.Approved, from, comment); // partial: the run stays under review
+            audit.Record("payroll.run.approval.partial", nameof(PayrollRun), run.Id, new { received = run.ApprovalsReceived, required = run.ApprovalsRequired }, run.LegalEntityId);
+            await db.SaveChangesAsync(ct);
+            return run;
+        }
         run.Transition(PayrollRunStatus.Approved);
         run.ApprovedBy = me;
         run.ApprovedAt = DateTimeOffset.UtcNow;
