@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { byId, useBranches, useCostCentres, useDepartments, useLegalEntities, usePayrollGroups } from '../lib/lookups'
 import type { Employee, EmployeeListItem, Page } from '../lib/types'
@@ -67,7 +67,7 @@ export function EmployeeForm({ initial, onClose }: { initial?: Employee; onClose
   const qc = useQueryClient()
   const nav = useNavigate()
   const les = useLegalEntities()
-  const [form, setForm] = useState<Partial<Employee>>(initial ?? { gender: 'Unspecified', employmentType: 'Permanent', status: 'Active', hireDate: new Date().toISOString().slice(0, 10) })
+  const [form, setForm] = useState<Partial<Employee>>(initial ?? { gender: 'Unspecified', employmentType: 'Permanent', status: 'Active', hireDate: isoDate() })
   const le = form.legalEntityId || les.data?.[0]?.id
   const depts = useDepartments(le); const branches = useBranches(le); const ccs = useCostCentres(le); const groups = usePayrollGroups(le)
   const set = (k: keyof Employee, v: unknown) => setForm(f => ({ ...f, [k]: v === '' ? undefined : v }))

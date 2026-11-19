@@ -1,3 +1,4 @@
+using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Compensation;
 using Ecosys.Payroll.Domain.Employees;
 using Ecosys.Payroll.Domain.Hr;
@@ -23,7 +24,7 @@ public sealed partial class DemoDataSeeder
         var le = await db.LegalEntities.FirstAsync(ct);
         var emps = await db.Employees.Where(e => e.LegalEntityId == le.Id).ToDictionaryAsync(e => e.EmployeeNumber, ct);
         Employee E(string no) => emps[no];
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = BusinessClock.Today();
 
         // Reporting lines: MD at the top; managers below.
         if (emps.Values.All(e => e.ReportingManagerId is null) && emps.Count >= 16)

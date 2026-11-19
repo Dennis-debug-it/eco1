@@ -222,7 +222,7 @@ public static class HrEndpoints
                 else { ctx.Require(Permissions.HrDocuments); q = q.Where(d => d.EmployeeId == e); }
             }
             else ctx.Require(Permissions.HrDocuments);
-            if (expiringWithinDays is { } days) { var limit = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(days); q = q.Where(d => d.ExpiresOn != null && d.ExpiresOn <= limit); }
+            if (expiringWithinDays is { } days) { var limit = BusinessClock.Today().AddDays(days); q = q.Where(d => d.ExpiresOn != null && d.ExpiresOn <= limit); }
             return Results.Ok(await q.Join(db.Employees, d => d.EmployeeId, x => x.Id, (d, x) => new { d.Id, d.EmployeeId, employee = x.FirstName + " " + x.LastName, x.EmployeeNumber, d.Category, d.Title, d.StoredFileId, d.IssuedOn, d.ExpiresOn, d.Version, d.VisibleToEmployee, d.CreatedAt })
                 .OrderBy(d => d.ExpiresOn ?? DateOnly.MaxValue).ToListAsync(ct));
         });
@@ -546,7 +546,7 @@ public static class HrEndpoints
             ctx.Require(Permissions.HrAssets);
             var a = await db.Assets.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Asset), id);
             var assignment = await db.AssetAssignments.FirstOrDefaultAsync(x => x.AssetId == id && x.ReturnedOn == null, ct) ?? throw new InvalidStateException("The asset is not issued.");
-            assignment.ReturnedOn = DateOnly.FromDateTime(DateTime.UtcNow); assignment.ConditionIn = body.Condition;
+            assignment.ReturnedOn = BusinessClock.Today(); assignment.ConditionIn = body.Condition;
             a.Status = body.NewStatus ?? AssetStatus.InStock;
             // Keep any open exit checklist in step.
             var sep = await db.Separations.FirstOrDefaultAsync(s => s.EmployeeId == assignment.EmployeeId && s.Status != SeparationStatus.Cancelled && s.Status != SeparationStatus.Completed, ct);
@@ -567,7 +567,7 @@ public static class HrEndpoints
         api.MapGet("/hr-analytics", async (Guid? legalEntityId, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
             ctx.Require(Permissions.ReportsRead);
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = BusinessClock.Today();
             var emps = await db.Employees.Where(e => legalEntityId == null || e.LegalEntityId == legalEntityId).ToListAsync(ct);
             int Headcount(DateOnly d) => emps.Count(e => e.HireDate <= d && (e.TerminationDate == null || e.TerminationDate >= d));
             var months = Enumerable.Range(0, 12).Select(i => new DateOnly(today.Year, today.Month, 1).AddMonths(i - 11)).ToList();

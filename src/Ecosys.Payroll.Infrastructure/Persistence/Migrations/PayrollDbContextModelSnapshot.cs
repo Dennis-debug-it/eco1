@@ -4357,6 +4357,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("external_subject");
 
+                    b.Property<int>("FailedLoginCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_login_count");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -4369,10 +4373,18 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
 
+                    b.Property<long?>("LastTotpStep")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_totp_step");
+
                     b.PrimitiveCollection<string>("LegalEntityIds")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("legal_entity_ids");
+
+                    b.Property<DateTimeOffset?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_until");
 
                     b.Property<bool>("MfaEnabled")
                         .HasColumnType("boolean")
@@ -4381,6 +4393,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<string>("MfaSecret")
                         .HasColumnType("text")
                         .HasColumnName("mfa_secret");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("boolean")
+                        .HasColumnName("must_change_password");
+
+                    b.Property<DateTimeOffset?>("PasswordChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("password_changed_at");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text")
@@ -4394,6 +4414,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("roles");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

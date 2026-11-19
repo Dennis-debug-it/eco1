@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useDepartments, useEmployeeOptions, useLegalEntities } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, Tabs } from '../components/ui'
@@ -42,7 +42,7 @@ function Documents() {
     onSuccess: () => { setFile(null); setF({ ...f, title: '' }); qc.invalidateQueries({ queryKey: ['documents'] }) },
   })
   const del = useMutation({ mutationFn: (id: string) => api.del(`/api/payroll/documents/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ['documents'] }) })
-  const soon = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10)
+  const soon = isoDate(60)
   return (
     <div className="card">
       <div className="toolbar">
@@ -110,9 +110,9 @@ function Benefits() {
   const les = useLegalEntities(); const emps = useEmployeeOptions()
   const schemes = useQuery({ queryKey: ['schemes'], queryFn: () => api.get<{ id: string; name: string; provider: string; policyNumber?: string; premiumByCover: Record<string, number>; employeeSharePercent: number }[]>('/api/payroll/benefits/schemes') })
   const enrol = useQuery({ queryKey: ['enrolments-all'], queryFn: () => api.get<{ id: string; employee: string; employeeNumber: string; scheme: string; cover: string; startDate: string; endDate?: string; membershipNumber?: string; premiumByCover: Record<string, number>; employeeSharePercent: number }[]>('/api/payroll/benefits/enrolments') })
-  const [f, setF] = useState({ employeeId: '', medicalSchemeId: '', cover: 'M', startDate: new Date().toISOString().slice(0, 8) + '01', membershipNumber: '' })
+  const [f, setF] = useState({ employeeId: '', medicalSchemeId: '', cover: 'M', startDate: isoDate().slice(0, 8) + '01', membershipNumber: '' })
   const add = useMutation({ mutationFn: () => api.post('/api/payroll/benefits/enrolments', { ...f, employeeId: f.employeeId || emps.data?.[0]?.id, medicalSchemeId: f.medicalSchemeId || schemes.data?.[0]?.id, coveredDependantIds: [] }), onSuccess: () => qc.invalidateQueries({ queryKey: ['enrolments-all'] }) })
-  const end = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/benefits/enrolments/${id}/end?endDate=${new Date().toISOString().slice(0, 10)}`), onSuccess: () => qc.invalidateQueries({ queryKey: ['enrolments-all'] }) })
+  const end = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/benefits/enrolments/${id}/end?endDate=${isoDate()}`), onSuccess: () => qc.invalidateQueries({ queryKey: ['enrolments-all'] }) })
   const [scheme, setScheme] = useState({ name: '', provider: '', policyNumber: '', m: 3500, m1: 6000, m2: 8000, m3: 9500, share: 25 })
   const addScheme = useMutation({ mutationFn: () => api.post('/api/payroll/benefits/schemes', { legalEntityId: les.data?.[0]?.id, name: scheme.name, provider: scheme.provider, policyNumber: scheme.policyNumber, premiumByCover: { M: scheme.m, 'M+1': scheme.m1, 'M+2': scheme.m2, 'M+3': scheme.m3 }, employeeSharePercent: scheme.share }), onSuccess: () => qc.invalidateQueries({ queryKey: ['schemes'] }) })
   const current = schemes.data?.find(s => s.id === (f.medicalSchemeId || schemes.data?.[0]?.id))
@@ -147,7 +147,7 @@ function Assets() {
   const [f, setF] = useState({ tag: '', name: '', category: 'IT', serialNumber: '', value: 0 })
   const add = useMutation({ mutationFn: () => api.post('/api/payroll/assets', { ...f, legalEntityId: les.data?.[0]?.id }), onSuccess: () => { setF({ tag: '', name: '', category: 'IT', serialNumber: '', value: 0 }); refresh() } })
   const [issue, setIssue] = useState<{ id: string; employeeId: string } | null>(null)
-  const doIssue = useMutation({ mutationFn: () => api.post(`/api/payroll/assets/${issue!.id}/issue`, { employeeId: issue!.employeeId || emps.data?.[0]?.id, issuedOn: new Date().toISOString().slice(0, 10), condition: 'Good' }), onSuccess: () => { setIssue(null); refresh() } })
+  const doIssue = useMutation({ mutationFn: () => api.post(`/api/payroll/assets/${issue!.id}/issue`, { employeeId: issue!.employeeId || emps.data?.[0]?.id, issuedOn: isoDate(), condition: 'Good' }), onSuccess: () => { setIssue(null); refresh() } })
   const ret = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/assets/${id}/return`, { condition: 'Returned in good order' }), onSuccess: refresh })
   return (
     <div className="card">

@@ -100,7 +100,7 @@ public static class SeparationEndpoints
             var signatory = ctx.EmployeeId == employeeId ? null : ctx.UserName;
             audit.Record("certificate_of_service.issued", "Employee", employeeId, new { self = ctx.EmployeeId == employeeId }, e.LegalEntityId);
             await db.SaveChangesAsync(ct);
-            return Results.File(HrDocumentRenderer.CertificateOfService(le, e, collapsed, DateOnly.FromDateTime(DateTime.UtcNow), signatory), "application/pdf", $"certificate-of-service-{e.EmployeeNumber}.pdf");
+            return Results.File(HrDocumentRenderer.CertificateOfService(le, e, collapsed, BusinessClock.Today(), signatory), "application/pdf", $"certificate-of-service-{e.EmployeeNumber}.pdf");
         }).RequireAuthorization();
     }
 }

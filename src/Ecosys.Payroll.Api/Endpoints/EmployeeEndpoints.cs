@@ -19,6 +19,39 @@ public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalarySt
 public static class EmployeeEndpoints
 {
     /// <summary>Organisational references must exist within the employee's own legal entity (and therefore tenant).</summary>
+    /// <summary>Normalises Kenyan identifiers in place and rejects malformed ones, listing every problem at once.</summary>
+    private static void ValidateIdentifiers(Employee e)
+    {
+        var problems = new List<string>();
+        e.NationalId = KenyaIdentifiers.NormaliseNationalId(e.NationalId);
+        if (e.NationalId is not null && !KenyaIdentifiers.IsValidNationalId(e.NationalId)) problems.Add("National ID should be 6–9 digits. For non-citizens, leave it blank and enter the passport or alien ID number.");
+        e.PassportNumber = string.IsNullOrWhiteSpace(e.PassportNumber) ? null : e.PassportNumber.Trim().ToUpperInvariant();
+        foreach (var (label, value, set) in new (string, string?, Action<string?>)[] { ("Phone", e.Phone, v => e.Phone = v), ("Emergency contact phone", e.EmergencyContactPhone, v => e.EmergencyContactPhone = v) })
+        {
+            if (string.IsNullOrWhiteSpace(value)) { set(null); continue; }
+            var n = KenyaIdentifiers.NormalisePhone(value);
+            if (n is null) problems.Add($"{label} '{value}' isn't a valid number. Use 07XX XXX XXX, 01XX XXX XXX or +country code.");
+            else set(n);
+        }
+        e.Email = string.IsNullOrWhiteSpace(e.Email) ? null : e.Email.Trim().ToLowerInvariant();
+        if (e.Email is not null && (!e.Email.Contains('@') || e.Email.Contains(' '))) problems.Add($"Email '{e.Email}' isn't valid.");
+        if (problems.Count > 0) throw new DomainException(string.Join(" ", problems), "VALIDATION");
+    }
+
+    private static void ValidateStatutory(EmployeeStatutoryDetails s)
+    {
+        var problems = new List<string>();
+        s.KraPin = KenyaIdentifiers.NormalisePin(s.KraPin);
+        if (s.KraPin is not null && !KenyaIdentifiers.IsValidPin(s.KraPin))
+            problems.Add(s.KraPin.StartsWith('P') ? "KRA PIN starting with P belongs to a company. An employee's PIN starts with A." : "KRA PIN should be 11 characters: A, nine digits and a letter (e.g. A012345678Z).");
+        s.NssfNumber = KenyaIdentifiers.NormaliseMembership(s.NssfNumber);
+        if (s.NssfNumber is not null && !KenyaIdentifiers.IsPlausibleMembership(s.NssfNumber)) problems.Add("NSSF number should be 4–20 letters or digits.");
+        s.ShifNumber = KenyaIdentifiers.NormaliseMembership(s.ShifNumber);
+        if (s.ShifNumber is not null && !KenyaIdentifiers.IsPlausibleMembership(s.ShifNumber)) problems.Add("SHA (SHIF) number should be 4–20 letters or digits.");
+        s.NhifNumber = KenyaIdentifiers.NormaliseMembership(s.NhifNumber);
+        if (problems.Count > 0) throw new DomainException(string.Join(" ", problems), "VALIDATION");
+    }
+
     private static async Task ValidateReferencesAsync(Employee e, PayrollDbContext db, CancellationToken ct)
     {
         if (!await db.PayrollGroups.AnyAsync(x => x.Id == e.PayrollGroupId && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Payroll group is not valid for this legal entity.", "VALIDATION");
@@ -56,7 +89,7 @@ public static class EmployeeEndpoints
             var ids = rows.Select(r => r.Id).ToList();
             var depts = await db.Departments.ToDictionaryAsync(d => d.Id, d => d.Name, ct);
             var branches = await db.Branches.ToDictionaryAsync(b => b.Id, b => b.Name, ct);
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = BusinessClock.Today();
             var salaries = ctx.Has(Permissions.SalaryRead)
                 ? (await db.EmployeeSalaryAssignments.Where(a => ids.Contains(a.EmployeeId) && a.EffectiveFrom <= today && (a.EffectiveTo == null || a.EffectiveTo >= today)).ToListAsync(ct))
                     .GroupBy(a => a.EmployeeId).ToDictionary(x => x.Key, x => x.OrderByDescending(a => a.EffectiveFrom).First().BasicSalary)
@@ -99,6 +132,7 @@ public static class EmployeeEndpoints
             if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
                 throw new DomainException($"Employee number {body.EmployeeNumber} already exists.", "DUPLICATE");
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.UserId = null;
+            ValidateIdentifiers(body);
             await ValidateReferencesAsync(body, db, ct);
             db.Employees.Add(body);
             db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = body.LegalEntityId, EmployeeId = body.Id, EffectiveFrom = body.HireDate, EmploymentType = body.EmploymentType, Status = body.Status, JobTitle = body.JobTitle, DepartmentId = body.DepartmentId, BranchId = body.BranchId, CostCentreId = body.CostCentreId, PayrollGroupId = body.PayrollGroupId, ChangeReason = "Hired" });
@@ -122,10 +156,11 @@ public static class EmployeeEndpoints
             e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
             e.PositionId = body.PositionId; e.NoticePeriodDays = body.NoticePeriodDays; e.ProbationEndDate = body.ProbationEndDate;
             if (e.ReportingManagerId == e.Id) throw new DomainException("An employee cannot report to themselves.", "VALIDATION");
+            ValidateIdentifiers(e);
             await ValidateReferencesAsync(e, db, ct);
             if (employmentChanged)
             {
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var today = BusinessClock.Today();
                 var open = await db.EmploymentRecords.Where(r => r.EmployeeId == id && r.EffectiveTo == null).ToListAsync(ct);
                 foreach (var r in open) r.EffectiveTo = today.AddDays(-1);
                 db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = e.LegalEntityId, EmployeeId = id, EffectiveFrom = today, EmploymentType = e.EmploymentType, Status = e.Status, JobTitle = e.JobTitle, DepartmentId = e.DepartmentId, BranchId = e.BranchId, CostCentreId = e.CostCentreId, PayrollGroupId = e.PayrollGroupId, ChangeReason = "Updated" });
@@ -142,7 +177,10 @@ public static class EmployeeEndpoints
             ctx.RequireLegalEntity(e.LegalEntityId);
             var s = await db.EmployeeStatutoryDetails.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
             if (s is null) { s = new EmployeeStatutoryDetails { LegalEntityId = e.LegalEntityId, EmployeeId = id }; db.EmployeeStatutoryDetails.Add(s); }
-            s.KraPin = body.KraPin?.Trim().ToUpperInvariant(); s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
+            ValidateStatutory(body);
+            if (body.KraPin is not null && await db.EmployeeStatutoryDetails.AnyAsync(x => x.EmployeeId != id && x.LegalEntityId == e.LegalEntityId && x.KraPin == body.KraPin, ct))
+                throw new DomainException("Another employee in this legal entity already has that KRA PIN.", "DUPLICATE");
+            s.KraPin = body.KraPin; s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
             s.HasDisabilityExemption = body.HasDisabilityExemption; s.DisabilityExemptionCertificate = body.DisabilityExemptionCertificate; s.DisabilityExemptAmount = body.DisabilityExemptAmount;
             s.DisabilityExemptionExpiry = body.DisabilityExemptionExpiry; s.StatutoryExemptions = body.StatutoryExemptions;
             audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions }, e.LegalEntityId);

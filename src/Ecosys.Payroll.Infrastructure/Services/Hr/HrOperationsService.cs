@@ -81,7 +81,7 @@ public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tena
         {
             case CaseStatus.ShowCauseIssued:
                 if (c.Type != CaseType.Disciplinary) throw new InvalidStateException("Show-cause letters apply to disciplinary cases.");
-                c.ShowCauseIssuedOn = step.ShowCauseIssuedOn ?? DateOnly.FromDateTime(DateTime.UtcNow);
+                c.ShowCauseIssuedOn = step.ShowCauseIssuedOn ?? BusinessClock.Today();
                 c.ResponseDueOn = step.ResponseDueOn ?? c.ShowCauseIssuedOn.Value.AddDays(7);
                 break;
             case CaseStatus.HearingScheduled:
@@ -98,13 +98,13 @@ public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tena
                     // in the presence of a colleague or union representative of their choice if they wish.
                     if (c.ShowCauseIssuedOn is null || !c.HearingHeld)
                         throw new InvalidStateException("A hearing must have been held after a show-cause letter before this sanction (Employment Act s.41).");
-                    if (c.ResponseDueOn is { } due && due > DateOnly.FromDateTime(DateTime.UtcNow) && outcome == CaseOutcome.Dismissal)
+                    if (c.ResponseDueOn is { } due && due > BusinessClock.Today() && outcome == CaseOutcome.Dismissal)
                         throw new InvalidStateException("The employee's response period has not ended.");
                 }
                 if (c.Type == CaseType.Grievance && outcome is not (CaseOutcome.GrievanceUpheld or CaseOutcome.GrievanceNotUpheld or CaseOutcome.NoAction))
                     throw new DomainException("A grievance is upheld, not upheld, or closed with no action.", "VALIDATION");
                 c.Outcome = outcome; c.OutcomeReason = step.Note;
-                c.AppealDeadline = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14);
+                c.AppealDeadline = BusinessClock.Today().AddDays(14);
                 break;
             case CaseStatus.Appealed:
                 if (c.Status != CaseStatus.Decided) throw new InvalidStateException("Only a decided case can be appealed.");
@@ -178,7 +178,7 @@ public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tena
             if (c.Route == ReimbursementRoute.Payroll)
             {
                 var nonTaxable = c.Total - c.TaxableAmount;
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                var today = BusinessClock.Today();
                 if (nonTaxable > 0)
                 {
                     var comp = await components.EnsureAsync(c.TenantId, c.LegalEntityId, "REIMB", ct);
@@ -205,7 +205,7 @@ public sealed class HrReminderJob(Microsoft.Extensions.DependencyInjection.IServ
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await RunOnceAsync(DateOnly.FromDateTime(DateTime.UtcNow), stoppingToken); }
+            try { await RunOnceAsync(BusinessClock.Today(), stoppingToken); }
             catch (Exception ex) when (ex is not OperationCanceledException) { log.LogError(ex, "HR reminder job failed"); }
             try { await Task.Delay(TimeSpan.FromHours(24), stoppingToken); } catch (OperationCanceledException) { break; }
         }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useDepartments, useEmployeeOptions, useLegalEntities, usePayrollGroups } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
@@ -145,7 +145,7 @@ function Onboarding() {
   const [openOnly, setOpenOnly] = useState(true)
   const q = useQuery({ queryKey: ['onboarding', openOnly], queryFn: () => api.get<{ id: string; employee: string; employeeNumber: string; title: string; owner: string; dueDate: string; done: boolean; doneBy?: string }[]>(`/api/payroll/recruitment/onboarding?openOnly=${openOnly}`) })
   const toggle = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/recruitment/onboarding/${id}/done`), onSuccess: () => qc.invalidateQueries({ queryKey: ['onboarding'] }) })
-  const today = new Date().toISOString().slice(0, 10)
+  const today = isoDate()
   return (
     <div className="card">
       <label className="field inline"><input type="checkbox" checked={openOnly} onChange={e => setOpenOnly(e.target.checked)} /> Open tasks only</label>

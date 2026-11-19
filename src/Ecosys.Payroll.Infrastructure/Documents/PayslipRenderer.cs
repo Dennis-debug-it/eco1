@@ -1,3 +1,4 @@
+using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Employees;
 using Ecosys.Payroll.Domain.Organisation;
 using Ecosys.Payroll.Domain.Payroll;
@@ -77,7 +78,7 @@ public static class PayslipRenderer
         y += 14;
         pdf.Line(left, y, right, y, 0.5f, 0.6f); y += 12;
         pdf.Text(left, y, entity.Settings.PayslipFooter, 7.5f);
-        pdf.Text(right, y, $"Issued {payslip.IssuedAt:dd MMM yyyy HH:mm} UTC · Run {run.Reference}", 7.5f, align: TextAlign.Right);
+        pdf.Text(right, y, $"Issued {BusinessClock.ToLocal(payslip.IssuedAt):dd MMM yyyy HH:mm} {BusinessClock.Abbreviation} · Run {run.Reference}", 7.5f, align: TextAlign.Right);
         return pdf.ToBytes();
     }
 

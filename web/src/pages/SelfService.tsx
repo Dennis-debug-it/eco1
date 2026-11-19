@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, ApiError, fmt } from '../lib/api'
+import { api, ApiError, fmt, isoDate } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useHrMe } from '../lib/lookups'
 import type { EmployeeDetail, LeaveBalance, LeaveType, Payslip } from '../lib/types'
@@ -157,7 +157,7 @@ function MyLearning() {
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: () => api.get<{ id: string; course: string; startDate: string; venue?: string; capacity: number; enrolled: number; status: string }[]>('/api/payroll/learning/sessions') })
   const [err, setErr] = useState<unknown>(null)
   const join = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/learning/sessions/${id}/nominate`, { employeeId: user!.employeeId }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['my-learning'] }); qc.invalidateQueries({ queryKey: ['sessions'] }) }, onError: setErr })
-  const soon = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10)
+  const soon = isoDate(60)
   const upcoming = sessions.data?.filter(s => s.status === 'Planned') ?? []
   return (
     <div className="grid c2">

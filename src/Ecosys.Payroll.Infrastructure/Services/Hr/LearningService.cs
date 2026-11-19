@@ -107,7 +107,7 @@ public sealed class LearningService(PayrollDbContext db, ITenantContext tenant, 
     public async Task<List<ComplianceRow>> ComplianceAsync(Guid legalEntityId, int expiringWithinDays, CancellationToken ct = default)
     {
         tenant.Require(Permissions.HrLearning);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = BusinessClock.Today();
         var reqs = await db.TrainingRequirements.Where(r => r.LegalEntityId == legalEntityId).ToListAsync(ct);
         var courses = await db.TrainingCourses.Where(c => c.LegalEntityId == legalEntityId).ToDictionaryAsync(c => c.Id, ct);
         var emps = await db.Employees.Where(e => e.LegalEntityId == legalEntityId && e.TerminationDate == null).ToListAsync(ct);

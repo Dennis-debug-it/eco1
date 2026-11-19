@@ -56,12 +56,20 @@ export const api = {
   },
 }
 
+/** Kenya: East Africa Time (UTC+3, no daylight saving). Dates are business dates in this zone, not the browser's UTC date. */
+export const TZ = 'Africa/Nairobi'
+/** Today's date (or N days from now) as YYYY-MM-DD in Nairobi. */
+export const isoDate = (addDays = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + addDays * 864e5))
+
+/** First day of next month (YYYY-MM-DD) in Nairobi. */
+export const nextMonthStart = () => { const [y, m] = isoDate().split('-').map(Number); return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01` }
+
 export const fmt = {
   money: (v: number | null | undefined, currency = 'KES') =>
     v === null || v === undefined ? '—' : new Intl.NumberFormat('en-KE', { style: 'currency', currency, minimumFractionDigits: 2 }).format(v),
   num: (v: number | null | undefined) => (v === null || v === undefined ? '—' : new Intl.NumberFormat('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)),
   int: (v: number | null | undefined) => (v === null || v === undefined ? '—' : new Intl.NumberFormat('en-KE').format(v)),
   date: (v: string | null | undefined) => (v ? new Date(v.length === 10 ? v + 'T00:00:00' : v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'),
-  dateTime: (v: string | null | undefined) => (v ? new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'),
+  dateTime: (v: string | null | undefined) => (v ? new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ }) : '—'),
   pct: (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toFixed(1)}%`),
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useHrMe, useLegalEntities } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Stars, Tabs } from '../components/ui'
@@ -170,7 +170,7 @@ function Plans() {
   const me = useHrMe()
   const q = useQuery({ queryKey: ['plans'], queryFn: () => api.get<Plan[]>('/api/payroll/performance/plans') })
   const [show, setShow] = useState(false)
-  const [f, setF] = useState({ employeeId: '', startDate: new Date().toISOString().slice(0, 10), endDate: '', reason: '', objective: '', measure: '' })
+  const [f, setF] = useState({ employeeId: '', startDate: isoDate(), endDate: '', reason: '', objective: '', measure: '' })
   const create = useMutation({ mutationFn: () => api.post('/api/payroll/performance/plans', { employeeId: f.employeeId || me.data?.team[0]?.id, startDate: f.startDate, endDate: f.endDate, reason: f.reason, objectives: [{ description: f.objective, successMeasure: f.measure, dueDate: f.endDate, met: false }] }), onSuccess: () => { setShow(false); qc.invalidateQueries({ queryKey: ['plans'] }) } })
   const close = useMutation({ mutationFn: ({ p, status }: { p: Plan['plan']; status: string }) => api.put(`/api/payroll/performance/plans/${p.id}`, { ...p, status, outcome: status === 'Successful' ? 'Objectives met' : 'Objectives not met' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }) })
   return (

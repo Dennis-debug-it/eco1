@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useHrMe, useLegalEntities } from '../lib/lookups'
 import type { LeaveType } from '../lib/types'
@@ -154,7 +154,7 @@ function Types() {
 function Liability() {
   const { can } = useAuth()
   const les = useLegalEntities(); const le = les.data?.[0]?.id
-  const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
+  const [asOf, setAsOf] = useState(isoDate())
   const q = useQuery({ queryKey: ['leave-liability', le, asOf], enabled: !!le, queryFn: () => api.get<{ rows: { employeeId: string; employeeNumber: string; employeeName: string; department?: string; daysAvailable: number; dailyRate: number; liability: number }[]; totalDays: number; total: number }>(`/api/payroll/leave/liability?legalEntityId=${le}&asOf=${asOf}`) })
   const post = useMutation({ mutationFn: () => api.post<{ reference: string; narrative: string; lines: { accountCode: string; description: string; debit: number; credit: number }[] }>('/api/payroll/leave/liability/post', { legalEntityId: le, asOf }) })
   return (

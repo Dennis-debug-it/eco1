@@ -20,16 +20,19 @@ public static class Totp
     public static string Code(string secret, DateTimeOffset at) => Code(Base32Decode(secret), at.ToUnixTimeSeconds() / Step);
 
     /// <summary>Accepts the current code and one step either side to tolerate clock drift.</summary>
-    public static bool Verify(string secret, string? code, DateTimeOffset now)
+    public static bool Verify(string secret, string? code, DateTimeOffset now) => Match(secret, code, now) is not null;
+
+    /// <summary>Returns the time step the code belongs to (for replay protection), or null if it doesn't match.</summary>
+    public static long? Match(string secret, string? code, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(code)) return false;
+        if (string.IsNullOrWhiteSpace(code)) return null;
         code = code.Trim().Replace(" ", "");
-        if (code.Length != Digits || !code.All(char.IsAsciiDigit)) return false;
+        if (code.Length != Digits || !code.All(char.IsAsciiDigit)) return null;
         var key = Base32Decode(secret);
         var counter = now.ToUnixTimeSeconds() / Step;
         for (var d = -1; d <= 1; d++)
-            if (CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Code(key, counter + d)), Encoding.ASCII.GetBytes(code))) return true;
-        return false;
+            if (CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Code(key, counter + d)), Encoding.ASCII.GetBytes(code))) return counter + d;
+        return null;
     }
 
     private static string Code(byte[] key, long counter)

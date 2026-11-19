@@ -1,3 +1,4 @@
+using Ecosys.Payroll.Domain.Common;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security;
@@ -39,7 +40,7 @@ public static class TabularExport
         null => "",
         decimal d => d.ToString("0.00", CultureInfo.InvariantCulture),
         DateOnly d => d.ToString("yyyy-MM-dd"),
-        DateTimeOffset d => d.ToString("yyyy-MM-dd HH:mm"),
+        DateTimeOffset d => BusinessClock.ToLocal(d).ToString("yyyy-MM-dd HH:mm"),
         _ => Convert.ToString(v, CultureInfo.InvariantCulture) ?? "",
     };
 
@@ -162,7 +163,7 @@ public static class TabularExport
         Header();
         foreach (var r in rows) Line(cols.Select(c => (Display(c.Value(r), c.Numeric), c.Numeric)).ToList(), false);
         if (totals is not null) Line(totals.Select((t, i) => (Display(t, i < cols.Count && cols[i].Numeric), i < cols.Count && cols[i].Numeric)).ToList(), true);
-        pdf.Text(margin, pdf.Height - 14, $"Generated {DateTimeOffset.UtcNow:dd MMM yyyy HH:mm} UTC · Ecosys Payroll · Confidential", 7);
+        pdf.Text(margin, pdf.Height - 14, $"Generated {BusinessClock.Now():dd MMM yyyy HH:mm} {BusinessClock.Abbreviation} · Ecosys Payroll · Confidential", 7);
         return pdf.ToBytes();
     }
 

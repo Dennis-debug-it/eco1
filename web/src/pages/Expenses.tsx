@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useHrMe } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, ReasonDialog, Tabs, UploadButton } from '../components/ui'
@@ -56,7 +56,7 @@ export function MyClaims() {
 }
 
 function NewClaim({ categories, onClose }: { categories: Category[]; onClose: () => void }) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = isoDate()
   const [title, setTitle] = useState('')
   const [route, setRoute] = useState('Payroll')
   const [lines, setLines] = useState<Line[]>([{ categoryId: categories[0]?.id ?? '', date: today, amount: 0, days: 1, description: '' }])

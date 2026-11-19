@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import type { ResultLine, StatutoryRule } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
@@ -28,7 +28,7 @@ function Rules({ canManage, canApprove }: { canManage: boolean; canApprove: bool
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorBox error={q.error} />
   const groups = Object.entries((q.data ?? []).reduce<Record<string, StatutoryRule[]>>((acc, r) => { (acc[r.ruleCode] ??= []).push(r); return acc }, {}))
-  const today = new Date().toISOString().slice(0, 10)
+  const today = isoDate()
   const isCurrent = (r: StatutoryRule) => r.approvalStatus === 'Approved' && r.effectiveFrom <= today && (!r.effectiveTo || r.effectiveTo >= today)
   return (
     <>
@@ -86,7 +86,7 @@ function DraftModal({ draft, onClose }: { draft: StatutoryRule; onClose: () => v
 }
 
 function Simulator() {
-  const [basic, setBasic] = useState(100000); const [allow, setAllow] = useState(0); const [pension, setPension] = useState(0); const [insurance, setInsurance] = useState(0); const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
+  const [basic, setBasic] = useState(100000); const [allow, setAllow] = useState(0); const [pension, setPension] = useState(0); const [insurance, setInsurance] = useState(0); const [asOf, setAsOf] = useState(isoDate())
   const m = useMutation({ mutationFn: () => api.post<{ grossPay: number; taxablePay: number; grossTax: number; totalReliefs: number; paye: number; netPay: number; totalEmployerCost: number; lines: ResultLine[] }>('/api/payroll/statutory-rules/simulate', {
     jurisdiction: 'KE', asOf, basicSalary: basic, otherEarnings: allow ? [{ code: 'ALLOW', name: 'Allowances', amount: allow, taxable: true, pensionable: false }] : [],
     deductions: [...(pension ? [{ code: 'PENSION', name: 'Pension', amount: pension, treatment: 'RegisteredPension' }] : []), ...(insurance ? [{ code: 'INS', name: 'Insurance premium', amount: insurance, treatment: 'QualifyingInsurancePremium' }] : [])],

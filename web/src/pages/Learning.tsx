@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useDepartments, useEmployeeOptions, useHrMe, useLegalEntities } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Stat, Tabs } from '../components/ui'
@@ -148,7 +148,7 @@ function Nita() {
   const year = new Date().getFullYear()
   const pos = useQuery({ queryKey: ['nita-position', le, year], enabled: !!le, queryFn: () => api.get<{ levyPaid: number; claimed: number; approved: number; received: number }>(`/api/payroll/learning/nita/position?legalEntityId=${le}&year=${year}`) })
   const q = useQuery({ queryKey: ['nita-claims'], queryFn: () => api.get<{ id: string; reference: string; periodStart: string; periodEnd: string; status: string; totalClaimed: number; amountApproved?: number; nitaReference?: string; lines: unknown[] }[]>('/api/payroll/learning/nita/claims') })
-  const [f, setF] = useState({ from: `${year}-01-01`, to: new Date().toISOString().slice(0, 10) })
+  const [f, setF] = useState({ from: `${year}-01-01`, to: isoDate() })
   const refresh = () => { qc.invalidateQueries({ queryKey: ['nita-claims'] }); qc.invalidateQueries({ queryKey: ['nita-position'] }) }
   const create = useMutation({ mutationFn: () => api.post('/api/payroll/learning/nita/claims', { legalEntityId: le, ...f }), onSuccess: refresh })
   const status = useMutation({ mutationFn: (x: { id: string; status: string; amountApproved?: number; nitaReference?: string }) => api.post(`/api/payroll/learning/nita/claims/${x.id}/status`, x), onSuccess: refresh })

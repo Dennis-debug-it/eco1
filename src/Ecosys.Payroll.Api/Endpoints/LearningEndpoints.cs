@@ -141,7 +141,7 @@ public static class LearningEndpoints
             if (e.Status != EnrolmentStatus.Completed) throw new InvalidStateException("A bond applies to completed training.");
             var amount = body.Amount ?? e.CostAllocated;
             if (body.Months is < 1 or > 60 || amount <= 0) throw new DomainException("A bond needs 1–60 months and a positive amount.", "VALIDATION");
-            var bond = new TrainingBond { LegalEntityId = e.LegalEntityId, EmployeeId = e.EmployeeId, TrainingEnrolmentId = e.Id, Amount = amount, StartDate = e.CertifiedOn ?? DateOnly.FromDateTime(DateTime.UtcNow), Months = body.Months, Notes = body.Notes };
+            var bond = new TrainingBond { LegalEntityId = e.LegalEntityId, EmployeeId = e.EmployeeId, TrainingEnrolmentId = e.Id, Amount = amount, StartDate = e.CertifiedOn ?? BusinessClock.Today(), Months = body.Months, Notes = body.Notes };
             db.TrainingBonds.Add(bond);
             audit.Record("learning.bond.created", nameof(TrainingBond), bond.Id, new { e.EmployeeId, amount, body.Months }, e.LegalEntityId);
             await db.SaveChangesAsync(ct);
@@ -150,7 +150,7 @@ public static class LearningEndpoints
         g.MapGet("/bonds", async (ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
             ctx.Require(Permissions.HrLearning);
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var today = BusinessClock.Today();
             var rows = await db.TrainingBonds.Join(db.Employees, b => b.EmployeeId, e => e.Id, (b, e) => new { b, employee = e.FirstName + " " + e.LastName, e.EmployeeNumber }).ToListAsync(ct);
             return Results.Ok(rows.Select(x => new { x.b.Id, x.employee, x.EmployeeNumber, x.b.Amount, x.b.StartDate, x.b.Months, endsOn = x.b.StartDate.AddMonths(x.b.Months), x.b.Status, outstanding = x.b.OutstandingOn(today) }));
         });

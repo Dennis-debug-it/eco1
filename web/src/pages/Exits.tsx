@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useEmployeeOptions } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog } from '../components/ui'
@@ -40,7 +40,7 @@ export default function ExitsPage() {
 
 function StartExit({ onClose }: { onClose: (id?: string) => void }) {
   const emps = useEmployeeOptions()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = isoDate()
   const [f, setF] = useState({ employeeId: '', type: 'Resignation', noticeDate: today, lastWorkingDay: '', noticeDaysServed: 30, settleNoticeInLieu: false, reason: '' })
   const m = useMutation({ mutationFn: () => api.post<{ id: string }>('/api/payroll/separations', { ...f, employeeId: f.employeeId || emps.data?.[0]?.id }), onSuccess: r => onClose(r.id) })
   return (

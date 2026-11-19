@@ -54,7 +54,7 @@ public static class LeaveEndpoints
         leave.MapGet("/balances/{employeeId:guid}", async (Guid employeeId, int? year, HrAccess access, PayrollDbContext db, LeaveBalanceService balances, CancellationToken ct) =>
         {
             await access.RequireSelfManagerOrAsync(employeeId, Permissions.EmployeesRead, ct);
-            var y = year ?? DateTime.UtcNow.Year;
+            var y = year ?? BusinessClock.Today().Year;
             await balances.EnsureAsync(employeeId, y, ct);
             await db.SaveChangesAsync(ct);
             var rows = await db.EmployeeLeaveBalances.Where(b => b.EmployeeId == employeeId && b.Year == y)
@@ -184,7 +184,7 @@ public static class LeaveEndpoints
         leave.MapGet("/liability", async (Guid legalEntityId, DateOnly? asOf, string? format, LeaveService svc, ITenantContext ctx, CancellationToken ct) =>
         {
             ctx.Require(Permissions.ReportsRead); ctx.RequireLegalEntity(legalEntityId);
-            var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var date = asOf ?? BusinessClock.Today();
             var rows = await svc.LiabilityAsync(legalEntityId, date, ct);
             if (TabularExport.Parse(format) is { } f)
             {

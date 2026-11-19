@@ -1,3 +1,4 @@
+using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Leave;
 using Ecosys.Payroll.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +18,7 @@ public sealed class LeaveBalanceService(PayrollDbContext db, TimeProvider clock)
         if (emp is null) return;
         var types = await db.LeaveTypes.Where(t => t.LegalEntityId == emp.LegalEntityId && t.IsActive && t.IsPaid && t.AnnualEntitlementDays > 0).ToListAsync(ct);
         var balances = await db.EmployeeLeaveBalances.Where(b => b.EmployeeId == employeeId && (b.Year == year || b.Year == year - 1)).ToListAsync(ct);
-        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var today = BusinessClock.Today(clock);
 
         foreach (var t in types)
         {

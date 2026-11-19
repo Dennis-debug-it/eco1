@@ -3,6 +3,7 @@ import { P, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
 import MfaEnrol from './components/MfaEnrol'
+import ChangePassword from './components/ChangePassword'
 import DashboardPage from './pages/Dashboard'
 import EmployeesPage from './pages/Employees'
 import EmployeeDetailPage from './pages/EmployeeDetail'
@@ -27,9 +28,10 @@ import { useHrMe } from './lib/lookups'
 
 export default function App() {
   const { user, loading, logout, can } = useAuth()
-  const hrMe = useHrMe(!!user && (!user.mfaRequired || user.mfaSatisfied))
+  const hrMe = useHrMe(!!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied))
   if (loading) return <Loading what="Signing in" />
   if (!user) return <LoginPage />
+  if (user.mustChangePassword) return <ChangePassword gate />
   if (user.mfaRequired && !user.mfaSatisfied) return user.mfaEnabled
     ? <div className="login"><div className="card"><h2>Sign in again</h2><p className="small">Your session was started without a verification code. Sign out and sign in with your authenticator code.</p><button className="btn primary" onClick={logout}>Sign out</button></div></div>
     : <MfaEnrol gate />

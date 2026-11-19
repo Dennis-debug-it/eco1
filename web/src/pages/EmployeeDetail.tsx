@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate, nextMonthStart } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { byId, useBranches, useComponents, useDepartments, useStructures } from '../lib/lookups'
 import type { BankAccount, EmployeeDetail, Payslip, StatutoryDetails } from '../lib/types'
@@ -142,7 +142,7 @@ function SalaryModal({ employeeId, legalEntityId, currentBasic, onClose }: { emp
   const structures = useStructures(legalEntityId)
   const [basic, setBasic] = useState(currentBasic ?? 0)
   const [structureId, setStructureId] = useState('')
-  const [from, setFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().slice(0, 10))
+  const [from, setFrom] = useState(nextMonthStart())
   const [reason, setReason] = useState('')
   const m = useMutation({ mutationFn: () => api.post(`/api/payroll/employees/${employeeId}/salary`, { basicSalary: basic, salaryStructureId: structureId || null, effectiveFrom: from, changeReason: reason }), onSuccess: onClose })
   return (
@@ -209,7 +209,7 @@ function StatutoryModal({ employeeId, initial, onClose }: { employeeId: string; 
 function LoanModal({ employeeId, legalEntityId, onClose }: { employeeId: string; legalEntityId: string; onClose: () => void }) {
   const comps = useComponents(legalEntityId)
   const deductions = comps.data?.filter(c => c.type === 'Deduction' && c.method === 'Variable') ?? []
-  const [f, setF] = useState({ reference: '', principal: 0, instalmentAmount: 0, startDate: new Date().toISOString().slice(0, 10), salaryComponentId: '' })
+  const [f, setF] = useState({ reference: '', principal: 0, instalmentAmount: 0, startDate: isoDate(), salaryComponentId: '' })
   const m = useMutation({ mutationFn: () => api.post(`/api/payroll/employees/${employeeId}/loans`, { ...f, salaryComponentId: f.salaryComponentId || deductions[0]?.id }), onSuccess: onClose })
   return (
     <Modal title="New loan or advance" onClose={onClose}>

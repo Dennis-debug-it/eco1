@@ -1,6 +1,6 @@
 export type Page<T> = { items: T[]; total: number; offset: number; limit: number }
 
-export type Me = { id: string; email: string; displayName: string; tenantId: string; tenantName: string; employeeId?: string; roles: string[]; permissions: string[]; legalEntityIds: string[]; mfaEnabled: boolean; mfaRequired: boolean; mfaSatisfied: boolean }
+export type Me = { id: string; email: string; displayName: string; tenantId: string; tenantName: string; employeeId?: string; roles: string[]; permissions: string[]; legalEntityIds: string[]; mfaEnabled: boolean; mfaRequired: boolean; mfaSatisfied: boolean; mustChangePassword?: boolean }
 
 export type LegalEntity = { id: string; name: string; registrationNumber: string; taxPin: string; nssfEmployerNumber?: string; shifEmployerNumber?: string; nitaRegistrationNumber?: string; jurisdiction: string; currencyCode: string; address?: string; email?: string; phone?: string; financialYearStartMonth: number; isActive: boolean; settings: { allowPreparerToApprove: boolean; requireReviewBeforeApproval: boolean; minimumApprovals: number; salaryVarianceWarningPercent: number; payslipFooter: string; standardMonthlyHours: number; standardMonthlyWorkingDays: number; overtimeMultiplier: number; restDayOvertimeMultiplier: number; notifyEmployeesOnPayslip: boolean } }
 export type Lookup = { id: string; legalEntityId: string; code: string; name: string; isActive: boolean; [k: string]: unknown }

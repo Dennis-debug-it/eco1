@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, fmt } from '../lib/api'
+import { api, fmt, isoDate } from '../lib/api'
 import { useEmployeeOptions } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui'
 
@@ -31,7 +31,7 @@ export default function CasesPage() {
 
 function NewCase({ onClose }: { onClose: () => void }) {
   const emps = useEmployeeOptions()
-  const [f, setF] = useState({ type: 'Disciplinary', employeeId: '', category: '', summary: '', incidentDate: new Date().toISOString().slice(0, 10) })
+  const [f, setF] = useState({ type: 'Disciplinary', employeeId: '', category: '', summary: '', incidentDate: isoDate() })
   const m = useMutation({ mutationFn: () => api.post('/api/payroll/cases', { ...f, employeeId: f.employeeId || emps.data?.[0]?.id }), onSuccess: onClose })
   return (
     <Modal title="Open a case" onClose={onClose}>

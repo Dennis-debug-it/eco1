@@ -50,6 +50,16 @@ public static class PeriodCalendar
 
 public static class OrganisationEndpoints
 {
+    /// <summary>The employer PIN goes on every P10 return and NSSF/SHA schedule, so a typo here breaks every filing.</summary>
+    private static void ValidateEntity(LegalEntity e)
+    {
+        e.TaxPin = KenyaIdentifiers.NormalisePin(e.TaxPin) ?? "";
+        if (e.Jurisdiction == "KE" && !KenyaIdentifiers.IsValidPin(e.TaxPin, individual: false))
+            throw new DomainException("Employer KRA PIN should be 11 characters: P (or A for a sole proprietor), nine digits and a letter, e.g. P051234567A.", "VALIDATION");
+        if (!string.IsNullOrWhiteSpace(e.Phone))
+            e.Phone = KenyaIdentifiers.NormalisePhone(e.Phone) ?? throw new DomainException($"Phone '{e.Phone}' isn't a valid number.", "VALIDATION");
+    }
+
     public static void MapOrganisation(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/organisation").RequireAuthorization();
@@ -64,6 +74,7 @@ public static class OrganisationEndpoints
         {
             ctx.Require(Permissions.OrganisationManage);
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant();
+            ValidateEntity(body);
             db.LegalEntities.Add(body);
             audit.Record("legal_entity.created", nameof(LegalEntity), body.Id, new { body.Name, body.TaxPin });
             await db.SaveChangesAsync(ct);
@@ -73,6 +84,7 @@ public static class OrganisationEndpoints
         {
             ctx.Require(Permissions.OrganisationManage); ctx.RequireLegalEntity(id);
             var e = await db.LegalEntities.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(LegalEntity), id);
+            ValidateEntity(body);
             e.Name = body.Name; e.RegistrationNumber = body.RegistrationNumber; e.TaxPin = body.TaxPin; e.NssfEmployerNumber = body.NssfEmployerNumber; e.ShifEmployerNumber = body.ShifEmployerNumber;
             e.NitaRegistrationNumber = body.NitaRegistrationNumber; e.Address = body.Address; e.Email = body.Email; e.Phone = body.Phone; e.CurrencyCode = body.CurrencyCode;
             e.FinancialYearStartMonth = body.FinancialYearStartMonth; e.IsActive = body.IsActive; e.Settings = body.Settings;

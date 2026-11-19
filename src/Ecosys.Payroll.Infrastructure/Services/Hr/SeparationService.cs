@@ -71,7 +71,7 @@ public sealed class SeparationService(PayrollDbContext db, ITenantContext tenant
             var a = await db.AssetAssignments.FirstOrDefaultAsync(x => x.Id == assignmentId, ct);
             if (a is not null)
             {
-                a.ReturnedOn = done ? DateOnly.FromDateTime(DateTime.UtcNow) : null; a.ConditionIn = note;
+                a.ReturnedOn = done ? BusinessClock.Today() : null; a.ConditionIn = note;
                 var asset = await db.Assets.FirstAsync(x => x.Id == a.AssetId, ct);
                 asset.Status = done ? AssetStatus.InStock : AssetStatus.Issued;
             }

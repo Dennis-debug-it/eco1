@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Ecosys.Payroll.Api.Endpoints;
 using Ecosys.Payroll.Api.Infrastructure;
 using Ecosys.Payroll.Infrastructure;
@@ -18,6 +20,8 @@ if (args.Contains("--healthcheck"))
 }
 
 var builder = WebApplication.CreateBuilder(args);
+ProductionGuard.Check(builder.Configuration, builder.Environment);
+Ecosys.Payroll.Domain.Common.BusinessClock.Configure(builder.Configuration["Payroll:TimeZone"]);
 
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
@@ -29,6 +33,27 @@ builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddPayrollInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<SessionValidator>();
+
+// Sign-in throttling per client address, on top of per-account lockout.
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.OnRejected = async (c, ct) => await c.HttpContext.Response.WriteAsJsonAsync(new { title = "Too many requests", status = 429, code = "RATE_LIMITED", detail = "Too many sign-in attempts from this network. Wait a minute and try again." }, ct);
+    o.AddPolicy(AuthEndpoints.LoginRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 10), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
+
+// Behind a TLS-terminating proxy (Caddy, nginx, a cloud load balancer) trust its X-Forwarded-* headers so client
+// addresses in the audit log and rate limiter are real, and HTTPS is recognised.
+if (builder.Configuration.GetValue("Payroll:BehindProxy", false))
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+        o.KnownIPNetworks.Clear(); o.KnownProxies.Clear(); // the proxy is the only route in (container network)
+        o.ForwardLimit = 1;
+    });
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:5173"])
     .AllowAnyHeader().AllowAnyMethod().WithExposedHeaders("Content-Disposition")));
@@ -60,9 +85,13 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+if (app.Configuration.GetValue("Payroll:BehindProxy", false)) app.UseForwardedHeaders();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing")) app.UseHsts();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<TenantContextMiddleware>();
 app.UseAuthorization();

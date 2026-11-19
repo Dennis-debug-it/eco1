@@ -118,4 +118,16 @@ public class User : TenantEntity
     public string? MfaSecret { get; set; }
     public string? Phone { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
+
+    /// <summary>Changes whenever credentials or access change; tokens carrying an older stamp are rejected.</summary>
+    public Guid SecurityStamp { get; set; } = Guid.NewGuid();
+    public int FailedLoginCount { get; set; }
+    public DateTimeOffset? LockedUntil { get; set; }
+    public DateTimeOffset? PasswordChangedAt { get; set; }
+    /// <summary>Set for administrator-issued passwords; the user must choose their own before reaching payroll data.</summary>
+    public bool MustChangePassword { get; set; }
+    /// <summary>Last TOTP time step accepted at sign-in, so a code cannot be replayed.</summary>
+    public long? LastTotpStep { get; set; }
+
+    public void RotateSecurityStamp() => SecurityStamp = Guid.NewGuid();
 }

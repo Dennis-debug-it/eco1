@@ -4,7 +4,10 @@ using System.Text;
 using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Identity;
 using Ecosys.Payroll.Infrastructure.Security;
+using Ecosys.Payroll.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Ecosys.Payroll.Api.Infrastructure;
@@ -16,12 +19,40 @@ public static class ClaimNames
     public const string LegalEntityIds = "legal_entity_ids";
     public const string Role = "role";
     public const string AuthMethod = "amr";
+    public const string SecurityStamp = "sstamp";
+    public const string MustChangePassword = "pwd_change";
+}
+
+/// <summary>
+/// Confirms a locally issued token still matches the user's security stamp, so password changes, deactivation,
+/// role changes and "sign out everywhere" take effect within seconds instead of when the token expires.
+/// </summary>
+public sealed class SessionValidator(IMemoryCache cache)
+{
+    private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(30);
+    private static string Key(Guid userId) => $"sstamp:{userId}";
+
+    public async Task<bool> IsCurrentAsync(PayrollDbContext db, Guid userId, string? stamp, CancellationToken ct)
+    {
+        if (!Guid.TryParse(stamp, out var claimed)) return false;
+        if (!cache.TryGetValue(Key(userId), out Guid? current))
+        {
+            var was = db.IgnoreTenantFilter;
+            db.IgnoreTenantFilter = true;
+            try { current = await db.Users.Where(u => u.Id == userId && u.IsActive).Select(u => (Guid?)u.SecurityStamp).FirstOrDefaultAsync(ct); }
+            finally { db.IgnoreTenantFilter = was; }
+            cache.Set(Key(userId), current, Ttl);
+        }
+        return current == claimed;
+    }
+
+    public void Invalidate(Guid userId) => cache.Remove(Key(userId));
 }
 
 /// <summary>Builds the per-request <see cref="TenantContext"/> from the validated principal.</summary>
 public sealed class TenantContextMiddleware(RequestDelegate next, IConfiguration config)
 {
-    public async Task InvokeAsync(HttpContext http, TenantContext ctx)
+    public async Task InvokeAsync(HttpContext http, TenantContext ctx, SessionValidator sessions, PayrollDbContext db)
     {
         var user = http.User;
         if (user.Identity?.IsAuthenticated == true)
@@ -38,6 +69,27 @@ public sealed class TenantContextMiddleware(RequestDelegate next, IConfiguration
                 .Select(v => Guid.TryParse(v, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToHashSet();
         }
         ctx.IpAddress = http.Connection.RemoteIpAddress?.ToString();
+
+        // Locally issued tokens are checked against the user's security stamp (revocation). Tokens from the shared
+        // Ecosys identity provider are governed by that provider's session lifetime instead.
+        if (user.Identity?.IsAuthenticated == true && config["Auth:Mode"] != "Ecosys" && ctx.UserId is { } sessionUser
+            && !await sessions.IsCurrentAsync(db, sessionUser, user.FindFirstValue(ClaimNames.SecurityStamp), http.RequestAborted))
+        {
+            http.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await http.Response.WriteAsJsonAsync(new { title = "Session ended", status = 401, code = "SESSION_REVOKED",
+                detail = "Your session has ended because your password or access changed, or you signed out everywhere. Sign in again." });
+            return;
+        }
+
+        // Administrator-issued passwords must be replaced before the user reaches payroll data.
+        if (user.Identity?.IsAuthenticated == true && user.FindFirstValue(ClaimNames.MustChangePassword) == "1"
+            && !http.Request.Path.StartsWithSegments("/api/payroll/auth"))
+        {
+            http.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await http.Response.WriteAsJsonAsync(new { title = "Password change required", status = 403, code = "PASSWORD_CHANGE_REQUIRED",
+                detail = "Choose a new password before continuing." });
+            return;
+        }
 
         // PRD §13.5: privileged roles must complete MFA. A password-only token for such a user may only
         // reach the auth endpoints (to enrol or verify), never payroll data.
@@ -70,7 +122,9 @@ public sealed class TokenService(IConfiguration config)
             new(ClaimNames.TenantId, tenant.Id.ToString()),
             new("tenant_slug", tenant.Slug),
             new(ClaimNames.AuthMethod, mfa ? "mfa" : "pwd"),
+            new(ClaimNames.SecurityStamp, user.SecurityStamp.ToString()),
         };
+        if (user.MustChangePassword) claims.Add(new Claim(ClaimNames.MustChangePassword, "1"));
         if (user.EmployeeId is { } eid) claims.Add(new Claim(ClaimNames.EmployeeId, eid.ToString()));
         if (user.LegalEntityIds.Count > 0) claims.Add(new Claim(ClaimNames.LegalEntityIds, string.Join(',', user.LegalEntityIds)));
         claims.AddRange(user.Roles.Select(r => new Claim(ClaimNames.Role, r)));

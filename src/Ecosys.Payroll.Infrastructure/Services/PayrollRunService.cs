@@ -408,7 +408,7 @@ public sealed class PayrollRunService(
         var journal = await db.PayrollJournals.Include(j => j.Lines).FirstOrDefaultAsync(j => j.PayrollRunId == run.Id && j.Status == JournalStatus.Posted, ct);
         if (journal is not null)
         {
-            var contra = JournalBuilder.Reverse(journal, DateOnly.FromDateTime(DateTime.UtcNow), reason);
+            var contra = JournalBuilder.Reverse(journal, BusinessClock.Today(), reason);
             journal.Status = JournalStatus.Reversed;
             db.PayrollJournals.Add(contra);
         }

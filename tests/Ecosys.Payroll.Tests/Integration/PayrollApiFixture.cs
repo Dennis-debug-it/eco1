@@ -49,6 +49,7 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             ["Auth:Mode"] = "Local",
             ["Auth:SigningKey"] = "integration-test-signing-key-0123456789abcdefghij",
             ["Auth:RequireMfaForPrivilegedRoles"] = RequireMfa ? "true" : "false",
+            ["Auth:LoginAttemptsPerMinute"] = "100000", // every test signs in from the same in-memory client address
             ["Notifications:Enabled"] = "false", // tests drive the dispatcher explicitly
             ["Logging:LogLevel:Default"] = "Warning",
         })

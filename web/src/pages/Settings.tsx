@@ -5,8 +5,9 @@ import { P, useAuth } from '../lib/auth'
 import { useLegalEntities } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
 import MfaEnrol from '../components/MfaEnrol'
+import ChangePassword from '../components/ChangePassword'
 
-type User = { id: string; email: string; displayName: string; roles: string[]; employeeId?: string; legalEntityIds: string[]; isActive: boolean; lastLoginAt?: string; mfaEnabled: boolean; phone?: string }
+type User = { id: string; email: string; displayName: string; roles: string[]; employeeId?: string; legalEntityIds: string[]; isActive: boolean; lastLoginAt?: string; mfaEnabled: boolean; phone?: string; lockedUntil?: string; mustChangePassword: boolean; passwordChangedAt?: string }
 type Notification = { id: string; channel: string; recipient: string; recipientName?: string; template: string; subject: string; status: string; attempts: number; sentAt?: string; lastError?: string; createdAt: string }
 const human = (r: string) => r.replace(/([A-Z])/g, ' $1').trim()
 
@@ -26,6 +27,23 @@ export default function SettingsPage() {
 }
 
 function MySecurity() {
+  const { logout } = useAuth()
+  const revoke = useMutation({ mutationFn: () => api.post('/api/payroll/auth/sessions/revoke'), onSuccess: logout })
+  return (
+    <>
+      <TwoStep />
+      <ChangePassword />
+      <div className="card">
+        <h2>Sessions</h2>
+        <p className="small">Signed in on a shared or lost device? Sign out everywhere, including this browser.</p>
+        <ErrorBox error={revoke.error} />
+        <button className="btn danger" disabled={revoke.isPending} onClick={() => { if (confirm('Sign out of Ecosys Payroll on every device?')) revoke.mutate() }}>Sign out everywhere</button>
+      </div>
+    </>
+  )
+}
+
+function TwoStep() {
   const { user, logout } = useAuth()
   const [code, setCode] = useState('')
   const disable = useMutation({ mutationFn: () => api.post('/api/payroll/auth/mfa/disable', { code }), onSuccess: logout })
@@ -52,13 +70,23 @@ function Users() {
   const m = useMutation({ mutationFn: () => api.post('/api/payroll/auth/users', { ...f, employeeId: f.employeeId || null, phone: f.phone || null }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); setShow(false) } })
   const reset = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/auth/users/${id}/mfa/reset`), onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }) })
   const toggle = (r: string) => setF({ ...f, roles: f.roles.includes(r) ? f.roles.filter(x => x !== r) : [...f.roles, r] })
+  const refresh = () => qc.invalidateQueries({ queryKey: ['users'] })
+  const unlock = useMutation({ mutationFn: (id: string) => api.post(`/api/payroll/auth/users/${id}/unlock`), onSuccess: refresh })
+  const resetPwd = useMutation({ mutationFn: (u: User) => api.post<{ temporaryPassword: string }>(`/api/payroll/auth/users/${u.id}/password`, {}).then(r => ({ ...r, user: u })), onSuccess: refresh })
+  const [edit, setEdit] = useState<User | null>(null)
+  const locked = (u: User) => !!u.lockedUntil && new Date(u.lockedUntil) > new Date()
   return (
     <>
       <div className="actions" style={{ marginBottom: 12 }}><button className="btn primary" onClick={() => setShow(true)}>New user</button><span className="muted small">Salary visibility is a separate permission — HR administrators do not see remuneration by default.</span></div>
       <div className="grid c2">
-        <div className="card"><h2>Users</h2><ErrorBox error={reset.error} />{users.isLoading ? <Loading /> : !users.data?.length ? <Empty>No users.</Empty> : <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>2-step</th><th>Last sign-in</th><th /></tr></thead>
-          <tbody>{users.data.map(u => <tr key={u.id}><td>{u.displayName}</td><td className="mono small">{u.email}</td><td style={{ whiteSpace: 'normal' }}>{u.roles.map(r => <Badge key={r} status="neutral">{human(r)}</Badge>)}</td><td>{u.mfaEnabled ? <Badge status="Active">On</Badge> : <span className="muted small">Off</span>}</td><td>{fmt.dateTime(u.lastLoginAt)}</td>
-            <td>{u.mfaEnabled && u.id !== me?.id && <button className="btn sm" onClick={() => { if (confirm(`Reset two-step verification for ${u.displayName}? They will need to enrol again.`)) reset.mutate(u.id) }}>Reset 2-step</button>}</td></tr>)}</tbody></table></div>}</div>
+        <div className="card"><h2>Users</h2><ErrorBox error={reset.error ?? unlock.error ?? resetPwd.error} />
+          {resetPwd.data && <div className="alert info">Temporary password for {resetPwd.data.user.displayName}: <b className="mono">{resetPwd.data.temporaryPassword}</b>. Give it to them in person or by phone. It works once; they choose their own at sign-in. It won't be shown again.</div>}{users.isLoading ? <Loading /> : !users.data?.length ? <Empty>No users.</Empty> : <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>2-step</th><th>Status</th><th>Last sign-in</th><th /></tr></thead>
+          <tbody>{users.data.map(u => <tr key={u.id}><td>{u.displayName}</td><td className="mono small">{u.email}</td><td style={{ whiteSpace: 'normal' }}>{u.roles.map(r => <Badge key={r} status="neutral">{human(r)}</Badge>)}</td><td>{u.mfaEnabled ? <Badge status="Active">On</Badge> : <span className="muted small">Off</span>}</td><td>{!u.isActive ? <Badge status="Cancelled">Inactive</Badge> : locked(u) ? <Badge status="Error">Locked</Badge> : u.mustChangePassword ? <Badge status="Pending">Password to set</Badge> : <Badge status="Active">Active</Badge>}</td><td>{fmt.dateTime(u.lastLoginAt)}</td>
+            <td className="actions">{u.id !== me?.id && <>
+              <button className="btn sm" onClick={() => setEdit(u)}>Edit</button>
+              {locked(u) && <button className="btn sm" onClick={() => unlock.mutate(u.id)}>Unlock</button>}
+              {u.isActive && <button className="btn sm" onClick={() => { if (confirm(`Issue a temporary password for ${u.displayName}? Their current sessions end.`)) resetPwd.mutate(u) }}>Reset password</button>}
+              {u.mfaEnabled && <button className="btn sm" onClick={() => { if (confirm(`Reset two-step verification for ${u.displayName}? They will need to enrol again.`)) reset.mutate(u.id) }}>Reset 2-step</button>}</>}</td></tr>)}</tbody></table></div>}</div>
         <div className="card"><h2>Roles and permissions</h2>{roles.isLoading ? <Loading /> : <table><thead><tr><th>Role</th><th>Permissions</th></tr></thead><tbody>{roles.data?.map(r => <tr key={r.role}><td><b>{human(r.role)}</b></td><td style={{ whiteSpace: 'normal' }} className="small mono">{r.permissions.join(' · ')}</td></tr>)}</tbody></table>}</div>
       </div>
       {show && <Modal title="New user" onClose={() => setShow(false)}>
@@ -66,7 +94,7 @@ function Users() {
         <div className="form-grid">
           <Field label="Email *"><input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
           <Field label="Display name *"><input value={f.displayName} onChange={e => setF({ ...f, displayName: e.target.value })} /></Field>
-          <Field label="Initial password * (10+ chars)"><input type="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} /></Field>
+          <Field label="Temporary password * (10+ chars; they change it at first sign-in)"><input type="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} /></Field>
           <Field label="Mobile (WhatsApp alerts)"><input value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} placeholder="+2547…" /></Field>
           <Field label="Linked employee id (self-service)"><input value={f.employeeId} onChange={e => setF({ ...f, employeeId: e.target.value })} placeholder="optional" /></Field>
         </div>
@@ -74,7 +102,29 @@ function Users() {
         {les.data && les.data.length > 1 && <><h3>Restrict to legal entities (none = all)</h3>{les.data.map(l => <label key={l.id} className="field inline"><input type="checkbox" checked={f.legalEntityIds.includes(l.id)} onChange={() => setF({ ...f, legalEntityIds: f.legalEntityIds.includes(l.id) ? f.legalEntityIds.filter(x => x !== l.id) : [...f.legalEntityIds, l.id] })} /> {l.name}</label>)}</>}
         <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={() => setShow(false)}>Cancel</button><button className="btn primary" disabled={m.isPending || !f.email || !f.displayName || f.password.length < 10 || f.roles.length === 0} onClick={() => m.mutate()}>Create</button></div>
       </Modal>}
+      {edit && <EditUser user={edit} roles={roles.data?.map(r => r.role).filter(r => r !== 'PlatformAdministrator') ?? []} onClose={() => { setEdit(null); refresh() }} />}
     </>
+  )
+}
+
+function EditUser({ user, roles, onClose }: { user: User; roles: string[]; onClose: () => void }) {
+  const les = useLegalEntities()
+  const [f, setF] = useState({ displayName: user.displayName, roles: user.roles, isActive: user.isActive, phone: user.phone ?? '', employeeId: user.employeeId ?? '', legalEntityIds: user.legalEntityIds })
+  const m = useMutation({ mutationFn: () => api.put(`/api/payroll/auth/users/${user.id}`, { ...f, phone: f.phone || null, employeeId: f.employeeId || null }), onSuccess: onClose })
+  return (
+    <Modal title={`Edit ${user.displayName}`} onClose={onClose}>
+      <ErrorBox error={m.error} />
+      <div className="form-grid">
+        <Field label="Display name"><input value={f.displayName} onChange={e => setF({ ...f, displayName: e.target.value })} /></Field>
+        <Field label="Mobile (WhatsApp alerts)"><input value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} placeholder="+2547…" /></Field>
+        <Field label="Linked employee id"><input value={f.employeeId} onChange={e => setF({ ...f, employeeId: e.target.value })} /></Field>
+      </div>
+      <h3>Roles</h3>{roles.map(r => <label key={r} className="field inline"><input type="checkbox" checked={f.roles.includes(r)} onChange={() => setF({ ...f, roles: f.roles.includes(r) ? f.roles.filter(x => x !== r) : [...f.roles, r] })} /> {human(r)}</label>)}
+      {les.data && les.data.length > 1 && <><h3>Restrict to legal entities (none = all)</h3>{les.data.map(l => <label key={l.id} className="field inline"><input type="checkbox" checked={f.legalEntityIds.includes(l.id)} onChange={() => setF({ ...f, legalEntityIds: f.legalEntityIds.includes(l.id) ? f.legalEntityIds.filter(x => x !== l.id) : [...f.legalEntityIds, l.id] })} /> {l.name}</label>)}</>}
+      <label className="field inline" style={{ marginTop: 10 }}><input type="checkbox" checked={f.isActive} onChange={e => setF({ ...f, isActive: e.target.checked })} /> Active (untick when someone leaves; their sessions end immediately)</label>
+      <p className="small muted">Changing roles, entities or status signs the user out so the change applies at once.</p>
+      <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={m.isPending || !f.displayName || f.roles.length === 0} onClick={() => m.mutate()}>Save</button></div>
+    </Modal>
   )
 }
 
