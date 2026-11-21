@@ -115,6 +115,7 @@ app.MapGet("/health/ready", async (PayrollDbContext db, CancellationToken ct) =>
 var api = app.MapGroup("/api/payroll");
 api.MapAuth();
 api.MapOrganisation();
+api.MapBanking();
 api.MapEmployees();
 api.MapCompensation();
 api.MapStatutory();
@@ -140,6 +141,7 @@ using (var scope = app.Services.CreateScope())
     if (app.Configuration.GetValue("Payroll:MigrateOnStartup", true)) await db.Database.MigrateAsync();
     var seeder = scope.ServiceProvider.GetRequiredService<DemoDataSeeder>();
     await seeder.SeedPlatformRulesAsync();
+    await seeder.SeedPlatformBanksAsync();
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && await seeder.SeedDemoTenantAsync())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false))

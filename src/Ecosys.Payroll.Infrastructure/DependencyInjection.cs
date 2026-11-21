@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<ReportingService>();
         services.AddScoped<DemoDataSeeder>();
         services.AddScoped<NotificationService>();
+        services.AddScoped<BankDirectoryService>();
         services.AddScoped<LeaveBalanceService>();
         services.AddScoped<Services.Hr.HrAccess>();
         services.AddScoped<Services.Hr.FileStore>();

@@ -49,6 +49,17 @@ public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext te
         db.IgnoreTenantFilter = false;
     }
 
+    /// <summary>Adds platform bank-directory rows that are missing. Existing rows are left alone so a correction made in the app sticks.</summary>
+    public async Task SeedPlatformBanksAsync(CancellationToken ct = default)
+    {
+        db.IgnoreTenantFilter = true;
+        var existing = (await db.BankDirectoryBanks.IgnoreQueryFilters().Where(b => b.TenantId == null).Select(b => b.Code).ToListAsync(ct)).ToHashSet();
+        foreach (var (code, name) in KenyaBanks.All.Where(b => !existing.Contains(b.Code)))
+            db.BankDirectoryBanks.Add(new BankDirectoryBank { Code = code, Name = name });
+        await db.SaveChangesAsync(ct);
+        db.IgnoreTenantFilter = false;
+    }
+
     public async Task<bool> SeedDemoTenantAsync(CancellationToken ct = default)
     {
         db.IgnoreTenantFilter = true;

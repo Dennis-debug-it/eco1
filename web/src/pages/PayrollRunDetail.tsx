@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { api, ApiError, fmt, tokenStore } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
-import { useComponents } from '../lib/lookups'
+import { useComponents, usePayingAccounts } from '../lib/lookups'
 import type { Journal, Payment, RunEmployeeDetail, RunEmployeeRow, RunStatus, RunSummary } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
 
@@ -126,7 +126,7 @@ export default function PayrollRunDetailPage() {
       {dialog === 'approve' && <ReasonDialog title="Approve payroll" confirmLabel="Approve" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/approve`, { text: t }).then(refresh)}><p>Approving locks all calculations. Net payroll <b>{fmt.money(r.totalNet, cur)}</b> for {r.employeeCount} employees; total employer cost {fmt.money(r.totalEmployerCost, cur)}.</p></ReasonDialog>}
       {dialog === 'reject' && <ReasonDialog title="Reject payroll" label="Reason" required confirmLabel="Reject" danger onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/reject`, { text: t }).then(refresh)} />}
       {dialog === 'reverse' && <ReasonDialog title="Reverse payroll run" label="Reason" required confirmLabel="Reverse" danger onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/reverse`, { text: t }).then(refresh)}><p>Nothing is deleted: a contra journal is posted, the period is reopened and this run is marked Reversed. Process a corrected run afterwards.</p></ReasonDialog>}
-      {dialog === 'payfile' && <PayFileDialog runId={id} payDate={s.payDate} onClose={() => { setDialog(null); refresh() }} />}
+      {dialog === 'payfile' && <PayFileDialog runId={id} legalEntityId={s.run.legalEntityId} payDate={s.payDate} onClose={() => { setDialog(null); refresh() }} />}
       {dialog === 'confirm' && <ConfirmDialog runId={id} batches={s.batches} onClose={() => { setDialog(null); refresh() }} />}
     </>
   )
@@ -265,14 +265,26 @@ function JournalView({ runId, has }: { runId: string; has: boolean }) {
         <tfoot><tr><td colSpan={4}>Totals {j.totalDebit === j.totalCredit ? <Badge status="Posted">Balanced</Badge> : <Badge status="Error">Unbalanced</Badge>}</td><td className="num">{fmt.num(j.totalDebit)}</td><td className="num">{fmt.num(j.totalCredit)}</td></tr></tfoot></table></div>))}</>
 }
 
-function PayFileDialog({ runId, payDate, onClose }: { runId: string; payDate: string; onClose: () => void }) {
+/** Bank whose own bulk format must be debited from an account at that bank. */
+const formatBank: Record<string, string> = { KcbBulk: '01', EquityBulk: '68', CoopBulk: '11' }
+
+function PayFileDialog({ runId, legalEntityId, payDate, onClose }: { runId: string; legalEntityId: string; payDate: string; onClose: () => void }) {
   const [format, setFormat] = useState('GenericCsv'); const [valueDate, setValueDate] = useState(payDate); const [err, setErr] = useState<unknown>(null); const [busy, setBusy] = useState(false)
-  const go = async () => { setBusy(true); setErr(null); try { await api.download(`/api/payroll/runs/${runId}/payment-file`, { format, valueDate }); onClose() } catch (e) { setErr(e) } finally { setBusy(false) } }
+  const [debit, setDebit] = useState('')
+  const accounts = (usePayingAccounts(legalEntityId).data ?? []).filter(a => a.isActive && (!formatBank[format] || a.bankCode === formatBank[format]))
+  const go = async () => { setBusy(true); setErr(null); try { await api.download(`/api/payroll/runs/${runId}/payment-file`, { format, valueDate, debitAccountId: debit || undefined }); onClose() } catch (e) { setErr(e) } finally { setBusy(false) } }
   return (
     <Modal title="Generate bank payment file" onClose={onClose}>
       <ErrorBox error={err} />
       <p className="small muted">The file total is reconciled to the approved net payroll before it is released. Regenerating cancels earlier un-sent instructions.</p>
-      <Field label="Bank format"><select value={format} onChange={e => setFormat(e.target.value)}>{[['GenericCsv', 'Generic CSV'], ['KcbBulk', 'KCB bulk upload'], ['EquityBulk', 'Equity bulk upload'], ['CoopBulk', 'Co-operative Bank bulk'], ['MpesaB2C', 'M-PESA B2C']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+      <Field label="Bank format"><select value={format} onChange={e => { setFormat(e.target.value); setDebit('') }}>{[['GenericCsv', 'Generic CSV'], ['KcbBulk', 'KCB bulk upload'], ['EquityBulk', 'Equity bulk upload'], ['CoopBulk', 'Co-operative Bank bulk'], ['MpesaB2C', 'M-PESA B2C']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+      <Field label="Debit account">
+        <select value={debit} onChange={e => setDebit(e.target.value)}>
+          <option value="">{format === 'MpesaB2C' ? 'M-PESA short code (no bank account)' : 'Default for this format'}</option>
+          {accounts.map(a => <option key={a.id} value={a.id}>{a.label} — {a.bankName} {a.accountNumber}</option>)}
+        </select>
+        {format !== 'MpesaB2C' && accounts.length === 0 && <span className="muted small">No {formatBank[format] ? 'account at this bank' : 'paying account'} is set up. Add one under Organisation → Paying accounts.</span>}
+      </Field>
       <Field label="Value date"><input type="date" value={valueDate} onChange={e => setValueDate(e.target.value)} /></Field>
       <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={go}>{busy ? 'Generating…' : 'Generate & download'}</button></div>
     </Modal>

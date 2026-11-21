@@ -26,6 +26,14 @@ public sealed partial class DemoDataSeeder
         Employee E(string no) => emps[no];
         var today = BusinessClock.Today();
 
+        // The company's paying account, needed to generate bank payment files.
+        if (!await db.CompanyBankAccounts.AnyAsync(a => a.LegalEntityId == le.Id, ct))
+            db.CompanyBankAccounts.Add(new Domain.Organisation.CompanyBankAccount
+            {
+                TenantId = t.Id, LegalEntityId = le.Id, Label = "Salaries account (KCB)", BankCode = "01", BankName = "KCB Bank Kenya",
+                BranchCode = "091", BranchName = "Moi Avenue", AccountName = le.Name, AccountNumber = "1107654321", IsDefault = true,
+            });
+
         // Reporting lines: MD at the top; managers below.
         if (emps.Values.All(e => e.ReportingManagerId is null) && emps.Count >= 16)
         {

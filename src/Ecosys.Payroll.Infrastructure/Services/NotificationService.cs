@@ -68,6 +68,21 @@ public sealed class NotificationService(PayrollDbContext db, ITenantContext tena
         }
     }
 
+    /// <summary>
+    /// Tells the employee, through the contact details already on file, that their pay account changed — the main way
+    /// a diverted salary is caught before payday. Carries only the bank and the last digits, never amounts.
+    /// </summary>
+    public void BankDetailsChanged(Domain.Employees.Employee e, Domain.Employees.EmployeeBankAccount account, bool verified)
+    {
+        var where = $"{account.BankName ?? account.Method.ToString()} account {FieldEncryptor.Mask(account.AccountNumber)}";
+        var body = verified
+            ? $"Hello {e.FirstName}, {where} has been verified on your payroll record and your pay will now go there. If you didn't ask for this, contact HR immediately."
+            : $"Hello {e.FirstName}, {where} was added to your payroll record. It will be used once HR verifies it. If you didn't ask for this, contact HR immediately.";
+        const string subject = "Your pay account details changed";
+        if (!string.IsNullOrWhiteSpace(e.Email)) Enqueue(NotificationChannel.Email, e.Email, e.FirstName, "employee.bank.changed", subject, body, nameof(Domain.Employees.EmployeeBankAccount), account.Id, e.TenantId);
+        if (!string.IsNullOrWhiteSpace(e.Phone)) Enqueue(NotificationChannel.WhatsApp, e.Phone, e.FirstName, "employee.bank.changed", subject, body, nameof(Domain.Employees.EmployeeBankAccount), account.Id, e.TenantId);
+    }
+
     public async Task LeaveDecidedAsync(Domain.Leave.LeaveRequest r, bool approved, CancellationToken ct)
     {
         var e = await db.Employees.Where(x => x.Id == r.EmployeeId).Select(x => new { x.FirstName, x.Email, x.Phone }).FirstOrDefaultAsync(ct);

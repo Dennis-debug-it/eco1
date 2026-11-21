@@ -86,7 +86,10 @@ public class EmployeeBankAccount : LegalEntityScopedEntity
     /// <summary>Encrypted at rest (see Infrastructure value converter).</summary>
     public required string AccountNumber { get; set; }
     public bool IsPrimary { get; set; } = true;
+    /// <summary>Only verified accounts are paid. A different person from the one who entered it must verify (maker-checker).</summary>
     public bool IsVerified { get; set; }
+    public Guid? VerifiedBy { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
     /// <summary>Percent of net pay to this account; primary gets the remainder.</summary>
     public decimal SplitPercent { get; set; } = 100m;
 }

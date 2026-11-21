@@ -129,9 +129,11 @@ public sealed class PayrollRunService(
         ResetTotals(run);
 
         var seenAccounts = new Dictionary<string, string>();
+        var unprovenAccounts = await UnprovenPayAccountsAsync(ctx.Employees.Select(e => e.Id).ToList(), ct);
         foreach (var emp in ctx.Employees)
         {
             var (input, issues) = assembler.Build(ctx, emp);
+            foreach (var w in unprovenAccounts.GetValueOrDefault(emp.Id) ?? []) issues.Add(w);
             var pre = new PayrollRunEmployee
             {
                 TenantId = run.TenantId, LegalEntityId = run.LegalEntityId, PayrollRunId = run.Id, EmployeeId = emp.Id,
@@ -294,14 +296,14 @@ public sealed class PayrollRunService(
     }
 
     /// <summary>Generates payment instructions and a bank file for an approved run (step 6).</summary>
-    public async Task<(PaymentBatch Batch, byte[] Content)> GeneratePaymentFileAsync(Guid runId, PaymentFileFormat format, DateOnly? valueDate, CancellationToken ct = default)
+    public async Task<(PaymentBatch Batch, byte[] Content)> GeneratePaymentFileAsync(Guid runId, PaymentFileFormat format, DateOnly? valueDate, Guid? debitAccountId = null, CancellationToken ct = default)
     {
         tenant.Require(Permissions.PaymentsManage);
         var run = await LoadAsync(runId, includeEmployees: true, ct);
         if (run.Status is not (PayrollRunStatus.Approved or PayrollRunStatus.PaymentProcessing)) throw new InvalidStateException("Payment files can only be generated for an approved run.");
 
         var period = await db.PayrollPeriods.FirstAsync(p => p.Id == run.PayrollPeriodId, ct);
-        var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
+        var debit = await ResolveDebitAccountAsync(run, format, debitAccountId, ct);
         var ids = run.Employees.Select(e => e.EmployeeId).ToList();
         var banks = (await db.EmployeeBankAccounts.Where(b => ids.Contains(b.EmployeeId) && b.IsVerified).ToListAsync(ct))
             .GroupBy(b => b.EmployeeId).ToDictionary(g => g.Key, g => g.ToList());
@@ -314,7 +316,7 @@ public sealed class PayrollRunService(
         var batch = new PaymentBatch
         {
             TenantId = run.TenantId, LegalEntityId = run.LegalEntityId, PayrollRunId = run.Id,
-            Reference = $"{run.Reference}-PAY{batchNo}", Format = format, GeneratedBy = tenant.RequireUser(),
+            Reference = $"{run.Reference}-PAY{batchNo}", Format = format, DebitAccountId = debit?.Id, GeneratedBy = tenant.RequireUser(),
             ValueDate = valueDate ?? period.PayDate, FileName = "", ContentHash = "",
         };
         var payments = new List<PayrollPayment>();
@@ -328,14 +330,14 @@ public sealed class PayrollRunService(
                 payments.Add(new PayrollPayment
                 {
                     TenantId = run.TenantId, LegalEntityId = run.LegalEntityId, PayrollRunId = run.Id, PayrollRunEmployeeId = e.Id, EmployeeId = e.EmployeeId,
-                    PaymentBatchId = batch.Id, Reference = $"{batch.Reference}-{++n:D4}", Amount = amount, CurrencyCode = run.CurrencyCode,
+                    PaymentBatchId = batch.Id, EmployeeBankAccountId = bank.Id, Reference = $"{batch.Reference}-{++n:D4}", Amount = amount, CurrencyCode = run.CurrencyCode,
                     Method = bank.Method, BankName = bank.BankName, BankCode = bank.BankCode, BranchCode = bank.BranchCode,
                     AccountName = bank.AccountName, AccountNumber = bank.AccountNumber, Status = PaymentStatus.FileGenerated,
                 });
             }
         }
 
-        var file = PaymentFileWriter.Write(format, entity, batch, payments, period);
+        var file = PaymentFileWriter.Write(format, debit, batch, payments, period);
         batch.FileName = file.FileName;
         batch.ContentHash = file.Hash;
         batch.PaymentCount = payments.Count;
@@ -351,9 +353,59 @@ public sealed class PayrollRunService(
         db.PaymentBatches.Add(batch);
         db.PayrollPayments.AddRange(payments);
         if (run.Status == PayrollRunStatus.Approved) { var from = run.Status; run.Transition(PayrollRunStatus.PaymentProcessing); Approval(run, ApprovalAction.PaymentGenerated, from, $"{batch.Reference} {format} {batch.PaymentCount} payments {batch.TotalAmount:N2}"); }
-        audit.Record("payroll.payment.file", nameof(PaymentBatch), batch.Id, new { batch.Reference, format, batch.PaymentCount, batch.TotalAmount, batch.ContentHash }, run.LegalEntityId);
+        audit.Record("payroll.payment.file", nameof(PaymentBatch), batch.Id, new { batch.Reference, format, batch.PaymentCount, batch.TotalAmount, batch.ContentHash, debitAccount = debit is null ? null : $"{debit.Label} {FieldEncryptor.Mask(debit.AccountNumber)}" }, run.LegalEntityId);
         await db.SaveChangesAsync(ct);
         return (batch, file.Content);
+    }
+
+    /// <summary>
+    /// Warns when an existing employee's pay would go to a verified account that has never been paid — the moment a
+    /// diverted salary can still be stopped. New hires are not flagged: all their accounts are new. Accounts verified
+    /// before verification dates were recorded are not flagged either.
+    /// </summary>
+    private async Task<Dictionary<Guid, List<PayrollValidationIssue>>> UnprovenPayAccountsAsync(List<Guid> employeeIds, CancellationToken ct)
+    {
+        var candidates = await db.EmployeeBankAccounts.AsNoTracking()
+            .Where(b => employeeIds.Contains(b.EmployeeId) && b.IsVerified && b.VerifiedAt != null
+                        && !db.PayrollPayments.Any(p => p.EmployeeBankAccountId == b.Id && p.Status == PaymentStatus.Confirmed))
+            .ToListAsync(ct);
+        if (candidates.Count == 0) return [];
+        var ids = candidates.Select(c => c.EmployeeId).Distinct().ToList();
+        var paidBefore = (await db.PayrollPayments.Where(p => ids.Contains(p.EmployeeId) && p.Status == PaymentStatus.Confirmed).Select(p => p.EmployeeId).Distinct().ToListAsync(ct)).ToHashSet();
+        var people = candidates.SelectMany(c => new[] { c.CreatedBy, c.VerifiedBy }).Where(x => x is not null).Select(x => x!.Value).Distinct().ToList();
+        var names = await db.Users.Where(u => people.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
+        string Name(Guid? id) => id is { } x && names.TryGetValue(x, out var n) ? n : "unknown";
+        return candidates.Where(c => paidBefore.Contains(c.EmployeeId)).GroupBy(c => c.EmployeeId).ToDictionary(g => g.Key, g => g.Select(c =>
+            new PayrollValidationIssue(ValidationSeverity.Warning, "BANK_CHANGED",
+                $"Pay goes to an account not paid before: {c.BankName ?? c.Method.ToString()} {FieldEncryptor.Mask(c.AccountNumber)}, entered by {Name(c.CreatedBy)} and verified by {Name(c.VerifiedBy)} on {BusinessClock.ToLocal(c.VerifiedAt!.Value):dd MMM yyyy}. Confirm the change with the employee on a number you already hold before approving.")).ToList());
+    }
+
+    /// <summary>
+    /// The company account the bank debits. Bank formats need one; a bank's own bulk format must be debited from an
+    /// account at that bank. Without a choice, the default account at the format's bank (or the default account) is used.
+    /// </summary>
+    private async Task<CompanyBankAccount?> ResolveDebitAccountAsync(PayrollRun run, PaymentFileFormat format, Guid? debitAccountId, CancellationToken ct)
+    {
+        var accounts = await db.CompanyBankAccounts.Where(a => a.LegalEntityId == run.LegalEntityId && a.IsActive).ToListAsync(ct);
+        var formatBank = Seed.KenyaBanks.FormatBankCode(format);
+        CompanyBankAccount? debit;
+        if (debitAccountId is { } chosen)
+            debit = accounts.FirstOrDefault(a => a.Id == chosen) ?? throw new DomainException("The chosen paying account isn't an active account of this legal entity.", "VALIDATION");
+        else
+            debit = (formatBank is null ? null : accounts.Where(a => a.BankCode == formatBank).OrderByDescending(a => a.IsDefault).FirstOrDefault())
+                    ?? accounts.FirstOrDefault(a => a.IsDefault);
+
+        if (debit is null)
+        {
+            // M-PESA B2C is funded from the organisation's M-PESA short code, not a bank account.
+            if (format == PaymentFileFormat.MpesaB2C) return null;
+            throw new InvalidStateException("No paying account is set up for this legal entity. Add the company's salaries account under Organisation → Paying accounts.");
+        }
+        if (formatBank is not null && debit.BankCode != formatBank)
+            throw new InvalidStateException($"A {format} file must be debited from an account at that bank; '{debit.Label}' is at {debit.BankName ?? debit.BankCode}.");
+        if (debit.CurrencyCode != run.CurrencyCode)
+            throw new InvalidStateException($"Paying account '{debit.Label}' is in {debit.CurrencyCode} but the payroll is in {run.CurrencyCode}.");
+        return debit;
     }
 
     /// <summary>Records bank confirmation of a batch; marks the run Paid when every payment is confirmed or failed.</summary>

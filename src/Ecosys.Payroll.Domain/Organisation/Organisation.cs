@@ -47,6 +47,11 @@ public sealed class PayrollSettings
     public decimal RestDayOvertimeMultiplier { get; set; } = 2.0m;
     /// <summary>Notify employees by email/WhatsApp when payslips are issued.</summary>
     public bool NotifyEmployeesOnPayslip { get; set; } = true;
+    /// <summary>
+    /// Lets the person who entered an employee's bank details also verify them. Off by default: changing pay
+    /// to a fraudster's account is the classic payroll fraud, so a second person should check.
+    /// </summary>
+    public bool AllowBankDetailSelfVerification { get; set; }
 }
 
 public class Branch : LegalEntityScopedEntity
