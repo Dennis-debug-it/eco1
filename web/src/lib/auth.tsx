@@ -54,5 +54,5 @@ export const P = {
   PayrollApprove: 'payroll.approve', PayrollFinalise: 'payroll.finalise', PayrollReverse: 'payroll.reverse', PaymentsManage: 'payments.manage', JournalsRead: 'journals.read',
   ReportsRead: 'reports.read', AuditRead: 'audit.read', LeaveApprove: 'leave.approve', SelfService: 'self.service',
   HrPerformance: 'hr.performance', HrLearning: 'hr.learning', HrRecruitment: 'hr.recruitment', HrCases: 'hr.cases', HrDocuments: 'hr.documents',
-  HrAssets: 'hr.assets', HrBenefits: 'hr.benefits', HrSeparations: 'hr.separations', ExpensesFinance: 'expenses.finance',
+  HrAssets: 'hr.assets', HrBenefits: 'hr.benefits', HrSeparations: 'hr.separations', ExpensesFinance: 'expenses.finance', BillingManage: 'billing.manage',
 } as const

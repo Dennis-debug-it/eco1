@@ -3,19 +3,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useDepartments, useEmployeeOptions, useLegalEntities } from '../lib/lookups'
+import { Feature, usePlanFeature } from '../lib/billing'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, Tabs } from '../components/ui'
 
 type Tab = 'documents' | 'positions' | 'benefits' | 'assets'
 
 export default function PeopleRecordsPage() {
   const { can } = useAuth()
+  const hrSuite = usePlanFeature(Feature.HrSuite)
   const tabs = [
     ...(can(P.HrDocuments) ? [{ id: 'documents' as Tab, label: 'Documents' }] : []),
-    { id: 'positions' as Tab, label: 'Positions & headcount' },
-    ...(can(P.HrBenefits) ? [{ id: 'benefits' as Tab, label: 'Medical cover' }] : []),
-    ...(can(P.HrAssets) ? [{ id: 'assets' as Tab, label: 'Assets' }] : []),
+    ...(hrSuite ? [{ id: 'positions' as Tab, label: 'Positions & headcount' }] : []),
+    ...(can(P.HrBenefits) && hrSuite ? [{ id: 'benefits' as Tab, label: 'Medical cover' }] : []),
+    ...(can(P.HrAssets) && hrSuite ? [{ id: 'assets' as Tab, label: 'Assets' }] : []),
   ]
-  const [tab, setTab] = useState<Tab>(tabs[0].id)
+  const [tab, setTab] = useState<Tab>(tabs[0]?.id ?? 'documents')
   return (
     <>
       <PageHead title="People records" sub="Contracts and documents with expiry tracking, budgeted positions, medical cover and company property." />

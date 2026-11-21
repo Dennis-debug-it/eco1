@@ -46,13 +46,20 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
 - **Notifications** go through `NotificationService` (outbox). Never put salary figures in a message.
 - **HR modules pay through `ScheduledPayItem`**, not by editing runs. Use `SystemComponents.EnsureAsync` for the component codes. The run claims items at calculate, marks them processed at finalise and releases them on reversal.
 - **HR access** goes through `HrAccess`, which checks self, then line manager, then permission. HR roles do not hold `salary.read`, so hide pay figures from them (see `SeparationEndpoints`, where `duesHidden` is set).
+- **SaaS.** Off unless `Saas:Enabled`. A tenant without a `Subscription` is managed: never limit or bill it.
+  - Check plan limits on the server with `SubscriptionService.EnsureCanAdd*Async` wherever records that count are created or re-activated.
+  - Gate a new HR-suite module by adding its path to `SubscriptionGateMiddleware.HrSuitePaths`.
+  - Read-only accounts must keep reads and exports working. Only `/auth` and `/billing` accept writes.
+  - Cross-tenant billing work belongs in `BillingService` (tenant filter off). Write its audit rows to the customer's tenant.
+  - Call `EntitlementCache.Invalidate` after changing a subscription in a request.
+  - The operator console (`/api/platform`) never returns employee or payroll data.
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout
 
 - `src/Ecosys.Payroll.Engine`: rules, calculator, Kenya seed rules.
 - `src/Ecosys.Payroll.Domain`: entities (`Hr/HrEntities.cs` for HR), state machine, roles and permissions.
-- `src/Ecosys.Payroll.Infrastructure`: `PayrollDbContext` (plus `PayrollDbContext.Hr.cs`), services (run lifecycle, assembler, journals, reports, notifications), `Services/Hr/*` (leave, separations, performance, learning, HR operations, `HrFoundations`), documents (PDF, xlsx), migrations, seeder (`DemoHrSeeder` for HR demo data).
+- `src/Ecosys.Payroll.Infrastructure`: `PayrollDbContext` (plus `PayrollDbContext.Hr.cs`, `PayrollDbContext.Billing.cs`), `Services/Saas/*` (subscriptions, billing cycle), services (run lifecycle, assembler, journals, reports, notifications), `Services/Hr/*` (leave, separations, performance, learning, HR operations, `HrFoundations`), documents (PDF, xlsx), migrations, seeder (`DemoHrSeeder` for HR demo data).
 - `src/Ecosys.Payroll.Api`: `Endpoints/*`, `Infrastructure/ApiSupport.cs` (tenant context middleware, MFA gate, tokens, error mapping).
 - `tests/Ecosys.Payroll.Tests`: `Engine/` (unit) and `Integration/` (HTTP + PostgreSQL).
 - `web/src`: `pages/*`, `components/ui.tsx`, `lib/{api,auth,types,lookups}.ts`.

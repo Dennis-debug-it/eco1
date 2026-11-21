@@ -17,7 +17,7 @@ public sealed record HireRequest(string EmployeeNumber, Guid PayrollGroupId, Gui
 public sealed record CaseStep(CaseStatus To, string Note, DateOnly? ShowCauseIssuedOn = null, DateOnly? ResponseDueOn = null, DateTimeOffset? HearingAt = null, bool? HearingHeld = null, string? Companion = null, CaseOutcome? Outcome = null);
 
 /// <summary>Recruitment hire, disciplinary/grievance case rules and expense claims.</summary>
-public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tenant, HrAccess access, AuditService audit, SystemComponents components)
+public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tenant, HrAccess access, AuditService audit, SystemComponents components, Saas.SubscriptionService plan)
 {
     // ------------------------------------------------------------------ Recruitment
 
@@ -31,6 +31,7 @@ public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tena
         if (app.OfferBasic is not { } basic || app.OfferStartDate is not { } start) throw new InvalidStateException("The offer needs a salary and start date.");
         if (await db.Employees.AnyAsync(e => e.LegalEntityId == reqn.LegalEntityId && e.EmployeeNumber == req.EmployeeNumber, ct)) throw new DomainException($"Employee number {req.EmployeeNumber} already exists.", "DUPLICATE");
         if (!await db.PayrollGroups.AnyAsync(g => g.Id == req.PayrollGroupId && g.LegalEntityId == reqn.LegalEntityId, ct)) throw new DomainException("Payroll group not found.", "VALIDATION");
+        await plan.EnsureCanAddEmployeesAsync(1, ct);
 
         var emp = new Employee
         {

@@ -145,6 +145,7 @@ public sealed class DomainExceptionHandler(ILogger<DomainExceptionHandler> log) 
             NotFoundException => (StatusCodes.Status404NotFound, "Not found", "NOT_FOUND"),
             ForbiddenException => (StatusCodes.Status403Forbidden, "Forbidden", "FORBIDDEN"),
             InvalidStateException => (StatusCodes.Status409Conflict, "Invalid state", "INVALID_STATE"),
+            Domain.Billing.PlanLimitException p => (StatusCodes.Status402PaymentRequired, "Plan limit reached", p.Code),
             DomainException d => (StatusCodes.Status400BadRequest, "Validation failed", d.Code),
             Ecosys.Payroll.Engine.Rules.StatutoryConfigurationException => (StatusCodes.Status422UnprocessableEntity, "Statutory configuration error", "STATUTORY_CONFIG"),
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "Bad request", "BAD_REQUEST"),

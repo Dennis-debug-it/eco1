@@ -64,6 +64,9 @@ public static class AuthEndpoints
 
             if (tenant is null || user?.PasswordHash is null || !PasswordHasher.Verify(req.Password ?? "", user.PasswordHash))
                 return await FailAsync("auth.login.failed", Results.Problem("Invalid tenant, email or password.", statusCode: 401, title: "Unauthorised"));
+            // Self-service sign-ups confirm their email before the first sign-in (checked after the password, so it reveals nothing).
+            if (user.EmailVerificationTokenHash is not null)
+                return Results.Json(new { title = "Confirm your email address", status = 403, code = "EMAIL_NOT_VERIFIED", detail = "Open the confirmation link we emailed you, then sign in. Didn't get it? Request a new link below." }, statusCode: 403);
             if (user.MfaEnabled)
             {
                 if (string.IsNullOrWhiteSpace(req.Code))
@@ -115,10 +118,11 @@ public static class AuthEndpoints
         }).RequireAuthorization();
 
         // What the sign-in page may show before anyone is signed in. Demo hints only on servers that load demo data.
-        g.MapGet("/options", (IConfiguration config) => Results.Ok(new
+        g.MapGet("/options", (IConfiguration config, Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions saas) => Results.Ok(new
         {
             demo = config.GetValue("Payroll:SeedDemoData", false),
             localLogin = config["Auth:Mode"] != "Ecosys",
+            signup = saas.Enabled && saas.SignupEnabled,
         })).AllowAnonymous();
 
         g.MapGet("/me", async (HttpContext http, ITenantContext ctx, PayrollDbContext db, IConfiguration config, CancellationToken ct) =>

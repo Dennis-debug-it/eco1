@@ -70,9 +70,10 @@ public static class OrganisationEndpoints
             if (ctx.LegalEntityIds.Count > 0) q = q.Where(e => ctx.LegalEntityIds.Contains(e.Id));
             return Results.Ok(await q.OrderBy(e => e.Name).ToListAsync(ct));
         });
-        g.MapPost("/legal-entities", async (LegalEntity body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        g.MapPost("/legal-entities", async (LegalEntity body, ITenantContext ctx, PayrollDbContext db, AuditService audit, Ecosys.Payroll.Infrastructure.Services.Saas.SubscriptionService plan, CancellationToken ct) =>
         {
             ctx.Require(Permissions.OrganisationManage);
+            await plan.EnsureCanAddLegalEntityAsync(ct);
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant();
             ValidateEntity(body);
             db.LegalEntities.Add(body);

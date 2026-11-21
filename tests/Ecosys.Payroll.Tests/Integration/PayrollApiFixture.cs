@@ -31,6 +31,8 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     private readonly string _database = $"ecosys_payroll_test_{Guid.NewGuid():N}"[..36];
     private readonly string _key = FieldEncryptor.GenerateKey();
     protected virtual bool RequireMfa => false;
+    /// <summary>Settings a derived fixture adds or overrides (e.g. SaaS mode).</summary>
+    protected virtual IReadOnlyDictionary<string, string> ExtraSettings => new Dictionary<string, string>();
 
     public string ConnectionString => $"{_server};Database={_database}";
     public Guid RivalTenantId { get; private set; }
@@ -52,7 +54,7 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             ["Auth:LoginAttemptsPerMinute"] = "100000", // every test signs in from the same in-memory client address
             ["Notifications:Enabled"] = "false", // tests drive the dispatcher explicitly
             ["Logging:LogLevel:Default"] = "Warning",
-        })
+        }.Concat(ExtraSettings))
             builder.UseSetting(k, v);
     }
 

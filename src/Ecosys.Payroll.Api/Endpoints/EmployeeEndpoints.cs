@@ -6,6 +6,7 @@ using Ecosys.Payroll.Domain.Identity;
 using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Security;
 using Ecosys.Payroll.Infrastructure.Services;
+using Ecosys.Payroll.Infrastructure.Services.Saas;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Payroll.Api.Endpoints;
@@ -124,9 +125,10 @@ public static class EmployeeEndpoints
             return Results.Ok(new EmployeeDetail(e, stat, banks, salary, history, loans));
         });
 
-        g.MapPost("", async (Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        g.MapPost("", async (Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct) =>
         {
             ctx.Require(Permissions.EmployeesWrite); ctx.RequireLegalEntity(body.LegalEntityId);
+            if (SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
             if (string.IsNullOrWhiteSpace(body.EmployeeNumber) || string.IsNullOrWhiteSpace(body.FirstName) || string.IsNullOrWhiteSpace(body.LastName))
                 throw new DomainException("Employee number, first name and last name are required.", "VALIDATION");
             if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
@@ -141,11 +143,13 @@ public static class EmployeeEndpoints
             return Results.Created($"/api/payroll/employees/{body.Id}", body);
         });
 
-        g.MapPut("/{id:guid}", async (Guid id, Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        g.MapPut("/{id:guid}", async (Guid id, Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct) =>
         {
             ctx.Require(Permissions.EmployeesWrite);
             var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
             ctx.RequireLegalEntity(e.LegalEntityId);
+            // Returning a leaver to the books counts against the plan's employee limit.
+            if (!SubscriptionService.CountedStatuses.Contains(e.Status) && SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
             var employmentChanged = e.EmploymentType != body.EmploymentType || e.Status != body.Status || e.JobTitle != body.JobTitle || e.DepartmentId != body.DepartmentId
                                     || e.BranchId != body.BranchId || e.CostCentreId != body.CostCentreId || e.PayrollGroupId != body.PayrollGroupId;
             e.FirstName = body.FirstName; e.MiddleName = body.MiddleName; e.LastName = body.LastName; e.NationalId = body.NationalId; e.PassportNumber = body.PassportNumber;

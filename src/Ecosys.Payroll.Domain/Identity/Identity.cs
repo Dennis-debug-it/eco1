@@ -56,6 +56,8 @@ public static class Permissions
     public const string HrBenefits = "hr.benefits";
     public const string HrSeparations = "hr.separations";
     public const string ExpensesFinance = "expenses.finance";
+    /// <summary>Subscription, plan and invoices. Tenant administrators only: HR administrators manage the organisation but not the contract.</summary>
+    public const string BillingManage = "billing.manage";
 
     public static readonly string[] Hr = [HrPerformance, HrLearning, HrRecruitment, HrCases, HrDocuments, HrAssets, HrBenefits, HrSeparations];
 
@@ -70,7 +72,7 @@ public static class Permissions
                 case Roles.TenantAdministrator:
                     set.UnionWith([OrganisationManage, EmployeesRead, EmployeesWrite, SalaryRead, SalaryWrite, CompensationManage,
                         StatutoryManage, StatutoryApprove, PayrollPrepare, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse,
-                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService, ExpensesFinance, .. Hr]);
+                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService, ExpensesFinance, BillingManage, .. Hr]);
                     break;
                 case Roles.HrAdministrator:
                     set.UnionWith([EmployeesRead, EmployeesWrite, OrganisationManage, LeaveApprove, ReportsRead, SelfService, .. Hr]);
@@ -128,6 +130,10 @@ public class User : TenantEntity
     public bool MustChangePassword { get; set; }
     /// <summary>Last TOTP time step accepted at sign-in, so a code cannot be replayed.</summary>
     public long? LastTotpStep { get; set; }
+    /// <summary>SHA-256 of the pending email verification token. While set, the user cannot sign in (self-service sign-ups only).</summary>
+    public string? EmailVerificationTokenHash { get; set; }
+    public DateTimeOffset? EmailVerificationExpiresAt { get; set; }
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
 
     public void RotateSecurityStamp() => SecurityStamp = Guid.NewGuid();
 }

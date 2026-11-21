@@ -40,4 +40,20 @@ public class ProvisioningTests(PayrollApiFixture app)
         await Assert.ThrowsAsync<Ecosys.Payroll.Domain.Common.DomainException>(() => again.ServiceProvider.GetRequiredService<TenantProvisioner>().ProvisionAsync(
             new("Copy", "kisii-tea", "Copy Ltd", "P051444555M", "x@y.example", "X")));
     }
+
+    [Fact]
+    public async Task Licensed_install_has_no_signup_billing_or_operator_console()
+    {
+        var anon = app.CreateClient();
+        Assert.False((await anon.GetJson("/api/payroll/signup/options"))["enabled"]!.GetValue<bool>());
+        Assert.False((await anon.GetJson("/api/payroll/auth/options"))["signup"]!.GetValue<bool>());
+        var signup = await anon.PostAsJsonAsync("/api/payroll/signup", new { organisationName = "Sneaky Ltd", kraPin = "P051999999Z", adminName = "Sneaky Person", adminEmail = "s@s.example", password = "Blue-heron-4417-river", acceptTerms = true });
+        Assert.Equal(HttpStatusCode.NotFound, signup.StatusCode);
+
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var status = await admin.GetJson("/api/payroll/billing/status");
+        Assert.False(status["saas"]!.GetValue<bool>());
+        Assert.True(status["managed"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/platform/tenants")).StatusCode);
+    }
 }

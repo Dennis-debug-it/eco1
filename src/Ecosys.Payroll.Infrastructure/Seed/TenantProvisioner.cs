@@ -16,9 +16,11 @@ namespace Ecosys.Payroll.Infrastructure.Seed;
 public sealed record TenantProvisionRequest(
     string OrganisationName, string Slug, string LegalEntityName, string KraPin, string AdminEmail, string AdminName,
     string? RegistrationNumber = null, string? NssfEmployerNumber = null, string? ShaEmployerNumber = null, string? NitaNumber = null,
-    string? Address = null, string? Email = null, string? Phone = null, int PayDay = 28);
+    string? Address = null, string? Email = null, string? Phone = null, int PayDay = 28,
+    /// <summary>Self-service sign-up: the administrator's own password. Null issues a one-time password that must be changed.</summary>
+    string? AdminPassword = null);
 
-public sealed record TenantProvisionResult(Guid TenantId, Guid LegalEntityId, string Slug, string AdminEmail, string TemporaryPassword);
+public sealed record TenantProvisionResult(Guid TenantId, Guid LegalEntityId, string Slug, string AdminEmail, string? TemporaryPassword, Guid AdminUserId);
 
 /// <summary>
 /// Creates a real customer organisation: tenant, legal entity, a monthly payroll group with periods, a Kenyan starter
@@ -35,6 +37,7 @@ public sealed class TenantProvisioner(PayrollDbContext db, TenantContext tenant,
         var pin = KenyaIdentifiers.NormalisePin(r.KraPin);
         if (!KenyaIdentifiers.IsValidPin(pin, individual: false)) throw new DomainException("Employer KRA PIN should look like P051234567A.", "VALIDATION");
         var email = r.AdminEmail.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(r.OrganisationName) || string.IsNullOrWhiteSpace(r.AdminName)) throw new DomainException("Enter the organisation's name and the administrator's name.", "VALIDATION");
         if (!email.Contains('@')) throw new DomainException("Enter the administrator's email address.", "VALIDATION");
         db.IgnoreTenantFilter = true;
         if (await db.Tenants.AnyAsync(t => t.Slug == slug, ct)) throw new DomainException($"An organisation with the sign-in code '{slug}' already exists.", "DUPLICATE");
@@ -69,11 +72,13 @@ public sealed class TenantProvisioner(PayrollDbContext db, TenantContext tenant,
         db.SalaryComponents.AddRange(StarterComponents(t.Id, le.Id));
         db.LeaveTypes.AddRange(StarterLeaveTypes(t.Id, le.Id));
 
-        var password = TemporaryPassword();
+        var chosen = !string.IsNullOrEmpty(r.AdminPassword);
+        if (chosen && PasswordPolicy.Validate(r.AdminPassword!, email, r.AdminName) is { } why) throw new DomainException(why, "VALIDATION");
+        var password = chosen ? r.AdminPassword! : TemporaryPassword();
         var admin = new User
         {
             TenantId = t.Id, Email = email, DisplayName = r.AdminName.Trim(), PasswordHash = PasswordHasher.Hash(password),
-            Roles = [Roles.TenantAdministrator], MustChangePassword = true,
+            Roles = [Roles.TenantAdministrator], MustChangePassword = !chosen, PasswordChangedAt = chosen ? DateTimeOffset.UtcNow : null,
         };
         db.Users.Add(admin);
         db.PayrollAuditLogs.Add(new Domain.Payroll.PayrollAuditLog { TenantId = t.Id, ActorName = "provisioning", Action = "tenant.provisioned", EntityType = nameof(Tenant), EntityId = t.Id, Details = $"{{\"slug\":\"{slug}\",\"admin\":\"{email}\"}}" });
@@ -82,7 +87,7 @@ public sealed class TenantProvisioner(PayrollDbContext db, TenantContext tenant,
         await calendar.SeedKenyaAsync(t.Id, le.Id, today.Year, ct);
         await calendar.SeedKenyaAsync(t.Id, le.Id, today.Year + 1, ct);
         await db.SaveChangesAsync(ct);
-        return new TenantProvisionResult(t.Id, le.Id, slug, email, password);
+        return new TenantProvisionResult(t.Id, le.Id, slug, email, chosen ? null : password, admin.Id);
     }
 
     /// <summary>Common Kenyan pay elements. Review GL codes and rates with the customer before the first run.</summary>
@@ -121,4 +126,30 @@ public sealed class TenantProvisioner(PayrollDbContext db, TenantContext tenant,
 
     private static string TemporaryPassword() =>
         string.Join("-", Enumerable.Range(0, 4).Select(_ => Convert.ToHexString(RandomNumberGenerator.GetBytes(2)).ToLowerInvariant())) + "-K";
+}
+
+/// <summary>
+/// The operator's own sign-in: an organisation (sign-in code <c>platform</c>) holding platform administrators, who run
+/// the operator console. It has no legal entities, employees or subscription.
+/// </summary>
+public sealed class PlatformAdminProvisioner(PayrollDbContext db, TenantContext tenant)
+{
+    public const string PlatformSlug = "platform";
+
+    public async Task<(string Slug, string Email, string TemporaryPassword)> CreateAsync(string email, string name, CancellationToken ct = default)
+    {
+        email = email.Trim().ToLowerInvariant();
+        if (!email.Contains('@') || string.IsNullOrWhiteSpace(name)) throw new DomainException("Give an email address and a name.", "VALIDATION");
+        db.IgnoreTenantFilter = true;
+        var t = await db.Tenants.FirstOrDefaultAsync(x => x.Slug == PlatformSlug, ct);
+        if (t is null) { t = new Tenant { Name = "Platform operations", Slug = PlatformSlug }; db.Tenants.Add(t); }
+        if (await db.Users.AnyAsync(u => u.TenantId == t.Id && u.Email == email, ct)) throw new DomainException($"{email} is already a platform administrator.", "DUPLICATE");
+        tenant.TenantId = t.Id; tenant.UserName = "provisioning"; tenant.IsPlatformAdministrator = true;
+        var password = string.Join("-", Enumerable.Range(0, 4).Select(_ => Convert.ToHexString(RandomNumberGenerator.GetBytes(2)).ToLowerInvariant())) + "-P";
+        var user = new User { TenantId = t.Id, Email = email, DisplayName = name.Trim(), PasswordHash = PasswordHasher.Hash(password), Roles = [Roles.PlatformAdministrator], MustChangePassword = true };
+        db.Users.Add(user);
+        db.PayrollAuditLogs.Add(new Domain.Payroll.PayrollAuditLog { TenantId = t.Id, ActorName = "provisioning", Action = "platform.admin.created", EntityType = nameof(User), EntityId = user.Id, Details = $"{{\"email\":\"{email}\"}}" });
+        await db.SaveChangesAsync(ct);
+        return (PlatformSlug, email, password);
+    }
 }

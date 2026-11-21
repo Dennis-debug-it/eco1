@@ -25,19 +25,36 @@ import CasesPage from './pages/Cases'
 import ExpensesPage from './pages/Expenses'
 import HrAnalyticsPage from './pages/HrAnalytics'
 import DataProtectionPage from './pages/DataProtection'
+import BillingPage from './pages/Billing'
+import PlatformPage from './pages/Platform'
+import SignupPage, { VerifyEmailPage } from './pages/Signup'
 import { useHrMe } from './lib/lookups'
+import { Feature, useBillingStatus, type BillingStatus } from './lib/billing'
 
 export default function App() {
   const { user, loading, logout, can } = useAuth()
-  const hrMe = useHrMe(!!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied))
+  const ready = !!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied)
+  const hrMe = useHrMe(ready)
+  const billing = useBillingStatus(ready)
   if (loading) return <Loading what="Signing in" />
-  if (!user) return <LoginPage />
+  if (!user) return (
+    <Routes>
+      <Route path="/signup" element={<SignupPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="*" element={<LoginPage />} />
+    </Routes>
+  )
   if (user.mustChangePassword) return <ChangePassword gate />
   if (user.mfaRequired && !user.mfaSatisfied) return user.mfaEnabled
     ? <div className="login"><div className="card"><h2>Sign in again</h2><p className="small">Your session was started without a verification code. Sign out and sign in with your authenticator code.</p><button className="btn primary" onClick={logout}>Sign out</button></div></div>
     : <MfaEnrol gate />
 
   const employeeOnly = user.roles.length === 1 && user.roles[0] === 'Employee'
+  const platform = user.roles.includes('PlatformAdministrator')
+  // The operator's own organisation holds no payroll: show only the console and personal settings.
+  const operatorOnly = platform && user.roles.length === 1
+  const b = billing.data
+  const hrSuite = !b || b.managed || b.features.includes(Feature.HrSuite)
   const manager = (hrMe.data?.directReports ?? 0) > 0
   const staff = !!user.employeeId
   const count = (n?: number) => (n ? ` (${n})` : '')
@@ -46,14 +63,14 @@ export default function App() {
     { to: '/self-service', label: 'My workspace', show: staff, section: 'Me' },
     { to: '/employees', label: 'Employees', show: can(P.EmployeesRead), section: 'People' },
     { to: '/organisation', label: 'Organisation', show: can(P.OrganisationManage) || can(P.EmployeesRead) },
-    { to: '/people-records', label: 'People records', show: can(P.HrDocuments) || can(P.HrBenefits) || can(P.HrAssets) || can(P.EmployeesRead) },
-    { to: '/recruitment', label: 'Recruitment', show: can(P.HrRecruitment) },
+    { to: '/people-records', label: 'People records', show: can(P.HrDocuments) || (hrSuite && (can(P.HrBenefits) || can(P.HrAssets) || can(P.EmployeesRead))) },
+    { to: '/recruitment', label: 'Recruitment', show: can(P.HrRecruitment) && hrSuite },
     { to: '/exits', label: 'Exits & final dues', show: can(P.HrSeparations) || can(P.PayrollPrepare) || can(P.PayrollApprove) },
     { to: '/leave', label: `Leave${count(hrMe.data?.pendingLeave)}`, show: can(P.LeaveApprove) || manager || staff, section: 'HR' },
-    { to: '/performance', label: `Performance${count(hrMe.data?.reviewsToComplete)}`, show: can(P.HrPerformance) || manager || can(P.SalaryRead) },
-    { to: '/learning', label: `Learning${count(hrMe.data?.pendingNominations)}`, show: can(P.HrLearning) || manager || staff },
+    { to: '/performance', label: `Performance${count(hrMe.data?.reviewsToComplete)}`, show: (can(P.HrPerformance) || manager || can(P.SalaryRead)) && hrSuite },
+    { to: '/learning', label: `Learning${count(hrMe.data?.pendingNominations)}`, show: (can(P.HrLearning) || manager || staff) && hrSuite },
     { to: '/expenses', label: `Expenses${count(hrMe.data?.pendingExpenses)}`, show: can(P.ExpensesFinance) || staff },
-    { to: '/cases', label: 'Cases', show: can(P.HrCases) },
+    { to: '/cases', label: 'Cases', show: can(P.HrCases) && hrSuite },
     { to: '/hr-analytics', label: 'HR analytics', show: can(P.ReportsRead) },
     { to: '/compensation', label: 'Compensation', show: can(P.CompensationManage) || can(P.SalaryRead), section: 'Payroll' },
     { to: '/payroll', label: 'Payroll processing', show: can(P.SalaryRead) },
@@ -61,7 +78,9 @@ export default function App() {
     { to: '/reports', label: 'Reports & audit', show: can(P.ReportsRead) || can(P.AuditRead) },
     { to: '/settings', label: 'Settings & security', show: true, section: 'Administration' },
     { to: '/data-protection', label: 'Data protection', show: can(P.OrganisationManage), section: 'Administration' },
-  ]
+    { to: '/billing', label: 'Billing', show: !!b?.saas && !b.managed && can(P.BillingManage), section: 'Administration' },
+    { to: '/operator', label: 'Operator console', show: platform, section: 'Platform' },
+  ].filter(n => !operatorOnly || n.to === '/operator' || n.to === '/settings')
 
   return (
     <div className="shell">
@@ -82,8 +101,11 @@ export default function App() {
         </div>
       </aside>
       <main className="main">
+        {b && <SubscriptionBanner status={b} admin={can(P.BillingManage)} />}
         <Routes>
-          <Route path="/" element={employeeOnly ? <Navigate to="/self-service" replace /> : <DashboardPage />} />
+          <Route path="/" element={employeeOnly ? <Navigate to="/self-service" replace /> : operatorOnly ? <Navigate to="/operator" replace /> : <DashboardPage />} />
+          <Route path="/billing" element={<BillingPage />} />
+          <Route path="/operator" element={<PlatformPage />} />
           <Route path="/self-service" element={<SelfServicePage />} />
           <Route path="/employees" element={<EmployeesPage />} />
           <Route path="/employees/:id" element={<EmployeeDetailPage />} />
@@ -109,4 +131,16 @@ export default function App() {
       </main>
     </div>
   )
+}
+
+/** Trial countdown, overdue and read-only notices. Everyone sees read-only (it explains blocked changes); only billing admins see trial and payment nags. */
+function SubscriptionBanner({ status: b, admin }: { status: BillingStatus; admin: boolean }) {
+  if (!b.saas || b.managed) return null
+  const link = admin ? <> <NavLink to="/billing">Go to billing</NavLink></> : null
+  if (b.readOnly) return <div className="alert danger" role="status">This organisation's account is read-only{b.status === 'Cancelled' ? ' because the subscription was cancelled' : b.suspensionReason ? `: ${b.suspensionReason.toLowerCase()}` : ''}. You can view and export records but not make changes.{admin ? link : ' Ask your administrator to reactivate it.'}</div>
+  if (!admin) return null
+  if (b.status === 'PastDue') return <div className="alert warn" role="status">An invoice is overdue. Pay it to avoid the account becoming read-only.{link}</div>
+  if (b.status === 'Trialing' && !b.activated && (b.trialDaysLeft ?? 99) <= 7) return <div className="alert info" role="status">Your free trial ends in {b.trialDaysLeft} day{b.trialDaysLeft === 1 ? '' : 's'}. Add billing details to keep going.{link}</div>
+  if (b.cancelAtPeriodEnd) return <div className="alert warn" role="status">Your subscription is set to end at the close of this billing period.{link}</div>
+  return null
 }

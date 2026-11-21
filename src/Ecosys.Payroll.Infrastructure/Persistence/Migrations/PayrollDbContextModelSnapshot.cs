@@ -24,6 +24,443 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pgcrypto");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("subscription_invoice_number")
+                .StartsAt(1001L);
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.Plan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.PrimitiveCollection<string>("Features")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("features");
+
+                    b.Property<int>("IncludedEmployees")
+                        .HasColumnType("integer")
+                        .HasColumnName("included_employees");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_public");
+
+                    b.Property<int?>("MaxEmployees")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_employees");
+
+                    b.Property<int?>("MaxLegalEntities")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_legal_entities");
+
+                    b.Property<decimal>("MonthlyBaseFee")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("monthly_base_fee");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PricePerAdditionalEmployee")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("price_per_additional_employee");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_plans");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_plans_code");
+
+                    b.ToTable("plans", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.Subscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activated_at");
+
+                    b.Property<string>("BillingAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_address");
+
+                    b.Property<string>("BillingEmail")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_email");
+
+                    b.Property<string>("BillingName")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_name");
+
+                    b.Property<string>("BillingTaxPin")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_tax_pin");
+
+                    b.Property<bool>("CancelAtPeriodEnd")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cancel_at_period_end");
+
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("text")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateOnly?>("CurrentPeriodEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("current_period_end");
+
+                    b.Property<DateOnly?>("CurrentPeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("current_period_start");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plan_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SuspendedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("suspended_at");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("suspension_reason");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateOnly?>("TrialEndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("trial_ends_on");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subscriptions");
+
+                    b.HasIndex("PlanId")
+                        .HasDatabaseName("ix_subscriptions_plan_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_subscriptions_status");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscriptions_tenant_id");
+
+                    b.ToTable("subscriptions", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.SubscriptionInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount_paid");
+
+                    b.Property<int>("BillableEmployees")
+                        .HasColumnType("integer")
+                        .HasColumnName("billable_employees");
+
+                    b.Property<string>("BillingName")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_name");
+
+                    b.Property<string>("BillingTaxPin")
+                        .HasColumnType("text")
+                        .HasColumnName("billing_tax_pin");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateOnly>("DueOn")
+                        .HasColumnType("date")
+                        .HasColumnName("due_on");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateOnly>("IssuedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("issued_on");
+
+                    b.Property<string>("Lines")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("lines");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("number");
+
+                    b.Property<DateTimeOffset?>("PaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("date")
+                        .HasColumnName("period_end");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("date")
+                        .HasColumnName("period_start");
+
+                    b.Property<string>("PlanCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("plan_code");
+
+                    b.Property<string>("PlanName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("plan_name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subscription_id");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("total");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<decimal>("Vat")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("vat");
+
+                    b.Property<decimal>("VatRate")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("vat_rate");
+
+                    b.Property<string>("VoidReason")
+                        .HasColumnType("text")
+                        .HasColumnName("void_reason");
+
+                    b.Property<DateTimeOffset?>("VoidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("voided_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_invoices");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_invoices_number");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_subscription_invoices_tenant_id");
+
+                    b.HasIndex("Status", "DueOn")
+                        .HasDatabaseName("ix_subscription_invoices_status_due_on");
+
+                    b.HasIndex("SubscriptionId", "PeriodStart")
+                        .IsUnique()
+                        .HasDatabaseName("ix_subscription_invoices_subscription_id_period_start");
+
+                    b.ToTable("subscription_invoices", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.SubscriptionPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<string>("RecordedByName")
+                        .HasColumnType("text")
+                        .HasColumnName("recorded_by_name");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reference");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_subscription_payments");
+
+                    b.HasIndex("InvoiceId")
+                        .HasDatabaseName("ix_subscription_payments_invoice_id");
+
+                    b.HasIndex("Reference")
+                        .HasDatabaseName("ix_subscription_payments_reference");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_subscription_payments_tenant_id");
+
+                    b.ToTable("subscription_payments", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.EmployeeSalaryAssignment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4354,6 +4791,18 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("email");
 
+                    b.Property<DateTimeOffset?>("EmailVerificationExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("email_verification_expires_at");
+
+                    b.Property<string>("EmailVerificationTokenHash")
+                        .HasColumnType("text")
+                        .HasColumnName("email_verification_token_hash");
+
+                    b.Property<DateTimeOffset?>("EmailVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("email_verified_at");
+
                     b.Property<Guid?>("EmployeeId")
                         .HasColumnType("uuid")
                         .HasColumnName("employee_id");
@@ -4438,6 +4887,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_users");
+
+                    b.HasIndex("EmailVerificationTokenHash")
+                        .HasDatabaseName("ix_users_email_verification_token_hash");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_users_tenant_id");
@@ -6811,6 +7263,36 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_payslips_employee_id_period_end");
 
                     b.ToTable("payslips", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.Subscription", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Billing.Plan", null)
+                        .WithMany()
+                        .HasForeignKey("PlanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_subscriptions_plans_plan_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.SubscriptionInvoice", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Billing.Subscription", null)
+                        .WithMany()
+                        .HasForeignKey("SubscriptionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_subscription_invoices_subscriptions_subscription_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Billing.SubscriptionPayment", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Billing.SubscriptionInvoice", null)
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_subscription_payments_subscription_invoices_invoice_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Compensation.EmployeeSalaryAssignment", b =>

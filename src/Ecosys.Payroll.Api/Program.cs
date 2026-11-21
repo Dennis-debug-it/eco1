@@ -35,6 +35,7 @@ builder.Services.AddPayrollInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SessionValidator>();
+builder.Services.AddSingleton<EntitlementCache>();
 
 // Sign-in throttling per client address, on top of per-account lockout.
 builder.Services.AddRateLimiter(o =>
@@ -43,6 +44,8 @@ builder.Services.AddRateLimiter(o =>
     o.OnRejected = async (c, ct) => await c.HttpContext.Response.WriteAsJsonAsync(new { title = "Too many requests", status = 429, code = "RATE_LIMITED", detail = "Too many sign-in attempts from this network. Wait a minute and try again." }, ct);
     o.AddPolicy(AuthEndpoints.LoginRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 10), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.AddPolicy(SignupEndpoints.SignupRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Saas:SignupAttemptsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
 });
 
 // Behind a TLS-terminating proxy (Caddy, nginx, a cloud load balancer) trust its X-Forwarded-* headers so client
@@ -94,6 +97,7 @@ app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<TenantContextMiddleware>();
+app.UseMiddleware<SubscriptionGateMiddleware>();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Ecosys Payroll", version = "1.0.0" })).AllowAnonymous();
@@ -127,6 +131,9 @@ api.MapLearning();
 api.MapHr();
 api.MapDataProtection();
 api.MapReports();
+api.MapBilling();
+api.MapSignup();
+app.MapPlatform();
 
 // Static SPA (built React app copied into wwwroot in the container image).
 app.UseDefaultFiles();
@@ -140,6 +147,8 @@ using (var scope = app.Services.CreateScope())
     if (app.Configuration.GetValue("Payroll:MigrateOnStartup", true)) await db.Database.MigrateAsync();
     var seeder = scope.ServiceProvider.GetRequiredService<DemoDataSeeder>();
     await seeder.SeedPlatformRulesAsync();
+    if (scope.ServiceProvider.GetRequiredService<Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions>().Enabled && await PlanCatalogue.EnsureAsync(db) > 0)
+        app.Logger.LogInformation("Created the starter price list. Review prices in the operator console before taking sign-ups.");
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && await seeder.SeedDemoTenantAsync())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false))
@@ -175,6 +184,35 @@ if (args.FirstOrDefault() == "provision-tenant")
     catch (Exception ex) when (ex is ArgumentException or Ecosys.Payroll.Domain.Common.DomainException)
     {
         Console.Error.WriteLine($"provision-tenant: {ex.Message}");
+        return 2;
+    }
+}
+
+// One-off command: create an operator (platform administrator) account for the operator console, then exit.
+//   docker compose run --rm payroll create-platform-admin --email ops@example.com --name "Operations"
+if (args.FirstOrDefault() == "create-platform-admin")
+{
+    string? Arg(string name) { var i = Array.IndexOf(args, "--" + name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var (slug, email, password) = await scope.ServiceProvider.GetRequiredService<PlatformAdminProvisioner>().CreateAsync(
+            Arg("email") ?? throw new ArgumentException("--email is required"), Arg("name") ?? throw new ArgumentException("--name is required"));
+        Console.WriteLine($"""
+
+            Platform administrator created.
+              Sign-in code (organisation): {slug}
+              Email:                       {email}
+              One-time password:           {password}
+
+            At first sign-in they choose their own password and set up an authenticator app. The operator console is under
+            "Operator console" in the menu.
+            """);
+        return 0;
+    }
+    catch (Exception ex) when (ex is ArgumentException or Ecosys.Payroll.Domain.Common.DomainException)
+    {
+        Console.Error.WriteLine($"create-platform-admin: {ex.Message}");
         return 2;
     }
 }

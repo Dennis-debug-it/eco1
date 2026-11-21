@@ -61,6 +61,14 @@ public static class ProductionGuard
         if (!config.GetValue("Auth:RequireMfaForPrivilegedRoles", true))
             yield return "Auth:RequireMfaForPrivilegedRoles is off. Payroll approvers and administrators must use MFA.";
 
+        if (config.GetValue("Saas:Enabled", false))
+        {
+            if (!(config["Payroll:PortalUrl"] ?? "").StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                yield return "Saas:Enabled needs Payroll:PortalUrl set to the public https:// address: sign-up confirmation and billing emails link to it.";
+            if (config.GetValue("Saas:RequireEmailVerification", true) && config.GetValue("Saas:SignupEnabled", true) && config["Auth:Mode"] != "Ecosys" && config["Notifications:Provider"] != "Ecosys")
+                yield return "Self-service sign-up confirms email addresses, but Notifications:Provider is not Ecosys, so the emails would never be sent. Configure email delivery or set Saas:SignupEnabled=false.";
+        }
+
         var cs = config.GetConnectionString("Payroll") ?? "";
         if (cs.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase) || cs.Contains("Password=change-me", StringComparison.OrdinalIgnoreCase))
             yield return "The database password is a default. Set a strong POSTGRES_PASSWORD.";

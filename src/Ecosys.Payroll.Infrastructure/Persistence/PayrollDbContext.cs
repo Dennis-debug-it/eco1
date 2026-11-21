@@ -244,6 +244,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
 
         ConfigureHr(b);
         ConfigureLeaveAndJournals(b);
+        ConfigureBilling(b);
 
         // ---- Identity ---------------------------------------------------------------------
         TenantEntity<User>(b, e =>
@@ -252,6 +253,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
             e.Property(x => x.Roles).HasColumnType("jsonb");
             e.Property(x => x.LegalEntityIds).HasColumnType("jsonb");
             e.Property(x => x.MfaSecret).HasConversion(encryptor.Converter());
+            e.HasIndex(x => x.EmailVerificationTokenHash);
         });
     }
 

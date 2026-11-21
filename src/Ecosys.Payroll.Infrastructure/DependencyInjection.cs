@@ -63,6 +63,12 @@ public static class DependencyInjection
         services.AddScoped<Services.Hr.HrOperationsService>();
         services.AddScoped<DataProtectionService>();
         services.AddScoped<Seed.TenantProvisioner>();
+        services.AddScoped<Seed.PlatformAdminProvisioner>();
+        services.AddScoped<Services.Saas.SubscriptionService>();
+        services.AddScoped<Services.Saas.BillingService>();
+        var saas = Services.Saas.SaasOptions.From(config);
+        services.AddSingleton(saas);
+        if (saas.Enabled && config.GetValue("Saas:BillingJobEnabled", true)) services.AddHostedService<Services.Saas.BillingJob>();
         services.AddSingleton<Services.Hr.HrReminderJob>();
         if (config.GetValue("Notifications:Enabled", true)) services.AddHostedService(sp => sp.GetRequiredService<Services.Hr.HrReminderJob>());
         services.AddSingleton(TimeProvider.System);

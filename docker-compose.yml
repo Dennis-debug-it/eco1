@@ -44,6 +44,17 @@ services:
       Cors__Origins__0: ${PORTAL_URL:-http://localhost:8080}
       Payroll__TimeZone: Africa/Nairobi
       Payroll__Retention__EmployeeRecordYears: ${RETENTION_EMPLOYEE_YEARS:-7}
+      Saas__Enabled: ${SAAS_ENABLED:-false}
+      Saas__SignupEnabled: ${SAAS_SIGNUP_ENABLED:-true}
+      Saas__TrialDays: ${SAAS_TRIAL_DAYS:-14}
+      Saas__GraceDays: ${SAAS_GRACE_DAYS:-7}
+      Saas__InvoiceDueDays: ${SAAS_INVOICE_DUE_DAYS:-14}
+      Saas__VatRate: ${SAAS_VAT_RATE:-0.16}
+      Saas__SellerName: ${SAAS_SELLER_NAME:-}
+      Saas__SellerTaxPin: ${SAAS_SELLER_TAX_PIN:-}
+      Saas__SellerAddress: ${SAAS_SELLER_ADDRESS:-}
+      Saas__SupportEmail: ${SAAS_SUPPORT_EMAIL:-}
+      Saas__PaymentInstructions: ${SAAS_PAYMENT_INSTRUCTIONS:-}
       TZ: Africa/Nairobi
 
   backup:

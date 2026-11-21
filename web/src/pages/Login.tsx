@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { ErrorBox, Field } from '../components/ui'
@@ -6,9 +7,12 @@ import { ErrorBox, Field } from '../components/ui'
 export default function LoginPage() {
   const { login } = useAuth()
   const [demo, setDemo] = useState(false)
+  const [signup, setSignup] = useState(false)
+  const [unverified, setUnverified] = useState(false)
+  const [resent, setResent] = useState(false)
   const [tenant, setTenant] = useState(() => { try { return localStorage.getItem('ecosys.org') ?? '' } catch { return '' } })
   useEffect(() => {
-    api.get<{ demo: boolean }>('/api/payroll/auth/options').then(o => { setDemo(o.demo); if (o.demo) setTenant(t => t || 'demo') }).catch(() => {})
+    api.get<{ demo: boolean; signup?: boolean }>('/api/payroll/auth/options').then(o => { setDemo(o.demo); setSignup(!!o.signup); if (o.demo) setTenant(t => t || 'demo') }).catch(() => {})
   }, [])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,10 +22,11 @@ export default function LoginPage() {
   const [err, setErr] = useState<unknown>(null)
 
   const submit = async (e: FormEvent) => {
-    e.preventDefault(); setBusy(true); setErr(null)
+    e.preventDefault(); setBusy(true); setErr(null); setUnverified(false); setResent(false)
     try { await login(tenant.trim(), email.trim(), password, needCode ? code : undefined); try { localStorage.setItem('ecosys.org', tenant.trim()) } catch { /* private mode */ } }
     catch (ex) {
       if (ex instanceof ApiError && ex.problem.code === 'MFA_CODE_REQUIRED') { setNeedCode(true) }
+      else if (ex instanceof ApiError && ex.problem.code === 'EMAIL_NOT_VERIFIED') { setUnverified(true) }
       else setErr(ex)
     } finally { setBusy(false) }
   }
@@ -31,6 +36,8 @@ export default function LoginPage() {
       <form className="card" onSubmit={submit}>
         <div className="brand" style={{ padding: '0 0 14px' }}><div className="logo" aria-hidden>E</div><div>Ecosys Payroll<small>Sign in to your organisation</small></div></div>
         <ErrorBox error={err} />
+        {unverified && <div className="alert warn">Confirm your email address first: open the link we sent to <b>{email}</b>.{' '}
+          {resent ? 'A new link is on its way.' : <button type="button" className="btn sm" onClick={() => api.post('/api/payroll/signup/resend', { organisation: tenant.trim(), email: email.trim() }).then(() => setResent(true)).catch(setErr)}>Send a new link</button>}</div>}
         {!needCode ? <>
           <Field label="Organisation"><input value={tenant} onChange={e => setTenant(e.target.value)} autoComplete="organization" required /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" required autoFocus /></Field>
@@ -41,6 +48,7 @@ export default function LoginPage() {
         </>}
         <button className="btn primary" type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>{busy ? 'Signing in…' : needCode ? 'Verify' : 'Sign in'}</button>
         {needCode && <button type="button" className="btn" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} onClick={() => { setNeedCode(false); setCode('') }}>Back</button>}
+        {!needCode && signup && <p className="small" style={{ marginTop: 14, textAlign: 'center' }}>New to Ecosys Payroll? <Link to="/signup">Start a free trial</Link></p>}
         {!needCode && demo && <p className="muted small" style={{ marginTop: 14 }}>Demo accounts: admin@, payroll@, reviewer@, approver@, finance@, hr@, auditor@, brian.mwangi@ — all <span className="mono">@demo.ecosys</span>, password <span className="mono">Demo!2345</span>.</p>}
       </form>
     </div>

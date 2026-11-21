@@ -21,6 +21,7 @@ that feed payroll directly.
 - [Testing](#testing)
 - [Statutory rules](#statutory-rules)
 - [HR modules](#hr-modules)
+- [SaaS mode](#saas-mode)
 - [Security model](#security-model)
 - [API overview](#api-overview)
 - [Known limitations](#known-limitations)
@@ -124,6 +125,11 @@ Settings use standard ASP.NET Core configuration (appsettings, environment varia
 | `Notifications:Provider` | `Log` (default) or `Ecosys` |
 | `Notifications:Ecosys:BaseUrl` / `ApiKey` | Ecosys Notifications endpoint and key |
 | `Cors:Origins` | Allowed browser origins when the SPA is hosted separately |
+| `Saas:Enabled` | Run as a multi-customer service: sign-up, plans, billing, operator console (default `false`; `true` in Development) |
+| `Saas:SignupEnabled` / `RequireEmailVerification` | Public sign-up, and email confirmation before first sign-in (both default `true`) |
+| `Saas:TrialDays` / `InvoiceDueDays` / `GraceDays` | Trial length, invoice terms, and days overdue before an account becomes read-only (14 / 14 / 7) |
+| `Saas:VatRate` | VAT on subscription invoices (default `0.16`) |
+| `Saas:SellerName` / `SellerTaxPin` / `SellerAddress` / `SupportEmail` / `PaymentInstructions` | Printed on invoices and the billing page |
 
 Tokens from the Ecosys identity provider must carry `sub`, `tenant_id`, `role` (one claim per role), and optionally
 `employee_id`, `legal_entity_ids` and `amr=mfa`.
@@ -194,6 +200,22 @@ amounts that the next regular run picks up at calculation, marks processed at fi
 - fixed-term contracts
 - probation periods
 
+## SaaS mode
+
+With `Saas:Enabled=true`, one installation serves many employers. It adds:
+- **Sign-up.** "Start a free trial" on the sign-in page creates the organisation, its first administrator and a trial. The email address is confirmed before the first sign-in, and an employer KRA PIN can only have one account.
+- **Plans.** A base fee covering some employees, a price per extra employee, employee and company limits, and the HR suite as a feature. Plans are data, edited in the operator console. The first start seeds placeholder prices.
+- **Billing.** Monthly invoices in arrears with VAT, as PDF and by email. Overdue accounts become past due, then read-only after a grace period. Read-only accounts can still sign in, view and export. Payments are recorded by the operator.
+- **Operator console.** For platform administrators (organisation code `platform`, created with `create-platform-admin`). Shows customers, usage, invoices and plans, and offers plan changes, trial extensions, suspension and sign-in blocking. It never shows employee or payroll records.
+
+Organisations without a subscription (licensed installs, contract customers) are *managed*: never billed or restricted. With SaaS mode off, the product behaves exactly as a single-employer install. Operating it is covered in [docs/operations.md §9](docs/operations.md#9-running-as-a-saas-many-customers).
+
+In Development, the sign-up confirmation link is written to the API log, and you can create an operator account with:
+
+```bash
+dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-platform-admin --email ops@example.com --name "Ops"
+```
+
 ## Security model
 
 - **Roles → permissions.** `salary.read` is separate from `employees.read`, so HR can manage people without seeing remuneration.
@@ -208,11 +230,12 @@ amounts that the next regular run picks up at calculation, marks processed at fi
 - **Self-service bank changes.** Bank accounts added by employees stay unverified, and are never paid, until HR verifies them.
 - **CSV exports** neutralise spreadsheet formula injection.
 - **Uploads** (leave evidence, receipts, documents, certificates) are limited to 5 MB and an allow-list of types; PDFs are checked by magic bytes. Downloads go through `/files/{id}`, which re-checks access to the owning record.
+- **Plan enforcement (SaaS).** Limits are checked on the server: employee and company caps when records are added or re-activated, HR-suite modules answer `402 FEATURE_NOT_IN_PLAN`, and a read-only account answers `402 SUBSCRIPTION_INACTIVE` to every change except sign-in, security and billing. Sign-up confirmation tokens are stored hashed and work once.
 - **HR separation of duties.** The person who initiates an exit cannot approve its dues. Expense finance approval needs someone other than the manager approver. Compensation reviews need an approver other than the preparer.
 
 ## API overview
 
-All endpoints are under `/api/payroll` and require a bearer token, except `/auth/login` and `/health`.
+All endpoints are under `/api/payroll` and require a bearer token, except `/auth/login`, `/signup/*` and `/health`. The operator console is under `/api/platform` (platform administrators only).
 
 | Area | Endpoints |
 |---|---|
@@ -229,6 +252,9 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Performance | `/performance/{cycles,reviews,goals,feedback,plans,compensation-reviews}` with workflow actions (`advance`, `self`, `manager`, `calibrate`, `acknowledge`, `submit`, `approve`) |
 | Learning | `/learning/{courses,requirements,sessions,bonds,compliance,mine}`, `/learning/nita/{claims,position}`, `POST /learning/sessions/{id}/{nominate,complete,cancel}`, `POST /learning/enrolments/{id}/{approve,withdraw,certificate,bond}` |
 | HR | `/recruitment/{requisitions,applications,onboarding}`, `/documents`, `/cases`, `/positions[/org-chart]`, `/benefits/{schemes,enrolments,dependants}`, `/expenses/{categories,claims}`, `/assets`, `GET /hr-analytics`, `GET /files/{id}` |
+| Sign-up (SaaS) | `GET /signup/options`, `GET /signup/slug`, `POST /signup`, `POST /signup/verify`, `POST /signup/resend` |
+| Billing (SaaS) | `GET /billing/status`, `GET /billing`, `POST /billing/{activate,plan,cancel,resume}`, `GET /billing/invoices/{id}/pdf` |
+| Operator (`/api/platform`) | `GET /overview`, `GET/POST /tenants`, `GET /tenants/{id}`, `POST /tenants/{id}/{subscription,plan,extend-trial,suspend,reactivate,access}`, `GET /invoices`, `POST /invoices/{id}/{payments,void}`, `GET /invoices/{id}/pdf`, `GET/POST/PUT /plans`, `POST /billing/run` |
 | Reports | `GET /dashboard`, `/reports/{statutory,payroll-register,variance,annual,audit}?format=csv\|xlsx\|pdf`, `GET /reports/notifications` |
 
 ## Known limitations
@@ -251,3 +277,4 @@ These are the things to resolve before go-live, or to plan for in later phases:
    - **Ad hoc holidays.** Add holidays gazetted ad hoc by hand under Leave → Public holidays.
    - **Integrations.** There are no job-board, e-signature or LMS integrations, and the medical scheme in the demo data is a sample.
    - **File storage.** Uploaded files are stored in PostgreSQL (`stored_files`). Move them to object storage if volumes grow.
+9. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.

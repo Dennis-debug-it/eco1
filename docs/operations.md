@@ -140,3 +140,64 @@ Under Administration → Data protection → Retention:
 - **Unsuccessful applicants.** Their applications are purged after 12 months, or 24 months with consent.
 
 Review the list quarterly. Anonymising can't be undone, and anonymised data still exists in backups until those backups expire.
+
+## 9. Running as a SaaS (many customers)
+
+One server can host many employers. Each one is a tenant, isolated by the same row-level rules as before. Set `SAAS_ENABLED=true` to add:
+- a public sign-up page ("Start a free trial" on the sign-in page) with email confirmation
+- plans with prices, employee and company limits, and the HR suite as a plan feature
+- a free trial, then monthly invoices in arrears with VAT, sent by email
+- reminders, past-due notices and read-only suspension for unpaid invoices
+- the operator console for platform administrators
+
+With `SAAS_ENABLED=false` (the default) none of this appears. That is the licensed install for a single employer.
+
+### Before taking sign-ups
+
+1. Configure email delivery (`NOTIFICATIONS_PROVIDER=Ecosys`): sign-up confirmations and invoices go by email. The app refuses to start with sign-up on and no email delivery. To onboard customers only by hand, set `SAAS_SIGNUP_ENABLED=false` instead.
+2. Fill in `SAAS_SELLER_NAME`, `SAAS_SELLER_TAX_PIN`, `SAAS_SELLER_ADDRESS`, `SAAS_SUPPORT_EMAIL` and `SAAS_PAYMENT_INSTRUCTIONS`. They are printed on every invoice. If you are VAT-registered, have your accountant confirm the invoice layout meets KRA requirements (including eTIMS) before the first invoice goes out.
+3. Create your operator account:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm payroll create-platform-admin --email ops@yourcompany.co.ke --name "Operations"
+```
+
+   Sign in with organisation code `platform` and the one-time password. You choose a password and enrol an authenticator app, then land in the **Operator console**.
+4. Open **Plans & prices**. The first start creates three placeholder plans (Starter, Growth, Enterprise). **Set your real prices before announcing sign-up.** Prices exclude VAT. A price change applies to each subscriber's next invoice; issued invoices keep their prices. Enterprise is private, so only you can assign it.
+
+### How billing works
+
+| Stage | What happens |
+|---|---|
+| Sign-up | Organisation, first administrator and a trial (`SAAS_TRIAL_DAYS`) on the chosen plan. One account per employer KRA PIN. |
+| During the trial | The customer adds billing details under Administration → Billing. A reminder goes out 3 days before the end. |
+| Trial ends | With billing details: the subscription starts. Without them: the account becomes read-only until they are added. |
+| Each month | When a period ends, an invoice is issued: base fee, plus each employee above the plan's allowance, plus VAT. Employees on the books (active, on leave or suspended) are counted on the day of issue. |
+| Unpaid | After the due date (`SAAS_INVOICE_DUE_DAYS`) the account is past due but fully usable. After `SAAS_GRACE_DAYS` more it becomes read-only. |
+| Paid | Record the payment in the console (Invoices → Record payment). The account reopens as soon as nothing is overdue. |
+| Cancelled | Takes effect at the end of the paid period, with a final invoice. The account is then read-only. |
+
+**Read-only** means people can still sign in, view everything, download payslips and reports, and export personal data, but cannot change anything except billing. Nothing is deleted. Employee data stays under the customer's control and the retention rules in §8.
+
+The billing cycle runs every 6 hours. **Run billing now** in the console runs it immediately. It is safe to run repeatedly and catches up after downtime.
+
+Payments are recorded by hand: M-Pesa or bank reconciliation is not automated yet. Check the Invoices tab (Unpaid) against your statements each week.
+
+### Operator actions
+
+From Customers → Manage:
+- **Change plan** (any plan, including private ones). The customer's usage must fit the new limits.
+- **Extend trial.**
+- **Make read-only.** For problems outside the normal cycle. Only you can lift this.
+- **Reactivate.**
+- **Block sign-in.** The hard stop for abuse or a legal hold: nobody in the organisation can sign in.
+- **New customer.** Same as `provision-tenant`, optionally on a plan with or without a trial.
+
+Organisations created before SaaS mode, or without a plan, are **managed**: never billed or restricted. Put one on a plan with Customers → Manage → Start subscription.
+
+Every operator and billing action is written to the customer's own audit log, so they can see what was done to their account. The console shows account and billing data only. It never shows employee or payroll records.
+
+### More than one application server
+
+Each server caches a customer's plan and status for up to 30 seconds, so a change made on one server reaches the others within that time. The billing cycle can run on several servers at once without double-billing (one invoice per subscription per period is enforced by the database). Running it on one server is enough: set `Saas__BillingJobEnabled=false` on the others.
+

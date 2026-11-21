@@ -18,8 +18,9 @@ const statusTone: Record<string, string> = {
   Draft: 'neutral', Prepared: 'neutral', Calculated: 'info', UnderReview: 'warn', Approved: 'ok', PaymentProcessing: 'info', Paid: 'ok', Finalised: 'ok', Reversed: 'danger', Rejected: 'danger',
   Pending: 'warn', PendingApproval: 'warn', Active: 'ok', Open: 'info', Closed: 'neutral', Confirmed: 'ok', Failed: 'danger', FileGenerated: 'info', Sent: 'info', Cancelled: 'neutral',
   Error: 'danger', Warning: 'warn', Posted: 'ok', Settled: 'neutral', Terminated: 'danger', Resigned: 'neutral', OnLeave: 'info', Suspended: 'warn', Probation: 'info',
+  Trialing: 'info', PastDue: 'warn', Void: 'neutral', Managed: 'neutral',
 }
-const statusLabel: Record<string, string> = { UnderReview: 'Under review', PaymentProcessing: 'Payment processing', PendingApproval: 'Pending approval', FileGenerated: 'File generated', OnLeave: 'On leave' }
+const statusLabel: Record<string, string> = { Trialing: 'Free trial', PastDue: 'Past due', UnderReview: 'Under review', PaymentProcessing: 'Payment processing', PendingApproval: 'Pending approval', FileGenerated: 'File generated', OnLeave: 'On leave' }
 
 export function Badge({ status, children }: { status: string; children?: ReactNode }) {
   return <span className={`badge ${statusTone[status] ?? 'neutral'}`}>{children ?? statusLabel[status] ?? status}</span>
