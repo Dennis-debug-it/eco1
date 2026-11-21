@@ -4,6 +4,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Me } from '../lib/types'
 import { ErrorBox, Field } from './ui'
+import { QrCode } from './QrCode'
 
 /** Authenticator-app enrolment. Used as a gate for privileged roles and from Settings. */
 export default function MfaEnrol({ gate }: { gate?: boolean }) {
@@ -20,9 +21,17 @@ export default function MfaEnrol({ gate }: { gate?: boolean }) {
       <ErrorBox error={start.error ?? enable.error} />
       {!setup ? <button className="btn primary" onClick={() => start.mutate()} disabled={start.isPending}>Begin</button> : <>
         <ol className="small" style={{ paddingLeft: 18 }}>
-          <li>Open Google Authenticator, Microsoft Authenticator, Authy or 1Password.</li>
-          <li>Add an account by entering this setup key (time-based):<div className="mono" style={{ fontSize: 15, margin: '6px 0', letterSpacing: '.05em', wordBreak: 'break-all' }}>{grouped}</div>or open <a href={setup.provisioningUri}>this link</a> on the device that has the app.</li>
-          <li>Enter the 6-digit code it shows.</li>
+          <li>Open Google Authenticator, Microsoft Authenticator, Authy or 1Password on your phone.</li>
+          <li>Add an account and scan this QR code:
+            <div style={{ margin: '10px 0' }}><QrCode value={setup.provisioningUri} label={`QR code to add Ecosys Payroll (${user?.email ?? 'your account'}) to an authenticator app`} /></div>
+            <details>
+              <summary style={{ cursor: 'pointer' }}>Can't scan it?</summary>
+              Choose "enter a setup key" in the app and type this key (time-based):
+              <div className="mono" style={{ fontSize: 15, margin: '6px 0', letterSpacing: '.05em', wordBreak: 'break-all' }}>{grouped}</div>
+              On the phone that has the app, you can instead open <a href={setup.provisioningUri}>this link</a>.
+            </details>
+          </li>
+          <li>Enter the 6-digit code the app shows.</li>
         </ol>
         <Field label="Code"><input inputMode="numeric" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} autoFocus /></Field>
         <button className="btn primary" disabled={code.length !== 6 || enable.isPending} onClick={() => enable.mutate()}>Verify and enable</button>
