@@ -32,7 +32,7 @@ public static class SeparationEndpoints
             }));
         });
 
-        g.MapGet("/{id:guid}", async (Guid id, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
+        g.MapGet("/{id:guid}", async (Guid id, ITenantContext ctx, PayrollDbContext db, SeparationService svc, CancellationToken ct) =>
         {
             if (!ctx.Has(Permissions.HrSeparations) && !ctx.Has(Permissions.PayrollPrepare)) ctx.Require(Permissions.PayrollApprove);
             var s = await db.Separations.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Separation), id);
@@ -44,7 +44,7 @@ public static class SeparationEndpoints
             {
                 separation = s, duesHidden = !seePay, employee = new { e.Id, e.EmployeeNumber, name = e.FullName, e.JobTitle, e.HireDate, e.NoticePeriodDays, e.Status, e.TerminationDate },
                 payItems = seePay ? items.Select(i => new { i.Id, i.Description, i.Amount, i.Status, i.DueDate, i.ProcessedInRunId }).ToList<object>() : [],
-                canApprove = ctx.Has(Permissions.PayrollApprove) && s.InitiatedBy != ctx.UserId,
+                canApprove = ctx.Has(Permissions.PayrollApprove) && (s.InitiatedBy != ctx.UserId || ctx.IsPlatformAdministrator || await svc.OnePersonPayrollAsync(s.LegalEntityId, ct)),
             });
         });
 

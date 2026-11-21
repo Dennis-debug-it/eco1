@@ -58,6 +58,8 @@ public static class OrganisationEndpoints
             throw new DomainException("Employer KRA PIN should be 11 characters: P (or A for a sole proprietor), nine digits and a letter, e.g. P051234567A.", "VALIDATION");
         if (!string.IsNullOrWhiteSpace(e.Phone))
             e.Phone = KenyaIdentifiers.NormalisePhone(e.Phone) ?? throw new DomainException($"Phone '{e.Phone}' isn't a valid number.", "VALIDATION");
+        e.Settings ??= new PayrollSettings();
+        if (e.Settings.MinimumApprovals is < 1 or > 5) throw new DomainException("Approvers needed must be between 1 and 5.", "VALIDATION");
     }
 
     public static void MapOrganisation(this RouteGroupBuilder api)

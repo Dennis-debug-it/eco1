@@ -186,7 +186,10 @@ public sealed class SeparationService(PayrollDbContext db, ITenantContext tenant
         tenant.Require(Permissions.PayrollApprove);
         var s = await LoadAsync(id, ct);
         if (s.Status != SeparationStatus.DuesCalculated || s.Dues is null) throw new InvalidStateException("Calculate final dues before approval.");
-        if (s.InitiatedBy == tenant.UserId && !tenant.IsPlatformAdministrator) throw new ForbiddenException("The person who initiated the exit cannot approve the final dues (separation of duties).");
+        var self = s.InitiatedBy == tenant.UserId;
+        if (self && !tenant.IsPlatformAdministrator && !await OnePersonPayrollAsync(s.LegalEntityId, ct))
+            throw new ForbiddenException($"The person who initiated the exit cannot approve the final dues (separation of duties). {Domain.Organisation.PayrollSettings.WhereToChange}");
+        if (self) audit.Record("separation.dues.self_approved", nameof(Separation), s.Id, null, s.LegalEntityId);
         // Recalculate at approval so the frozen figures reflect the latest balances.
         s.Dues = await ComputeAsync(s, ct);
 
@@ -274,4 +277,8 @@ public sealed class SeparationService(PayrollDbContext db, ITenantContext tenant
         tenant.RequireLegalEntity(s.LegalEntityId);
         return s;
     }
+
+    /// <summary>The legal entity lets one person run payroll end to end (PayrollSettings.AllowPreparerToApprove).</summary>
+    public Task<bool> OnePersonPayrollAsync(Guid legalEntityId, CancellationToken ct) =>
+        db.LegalEntities.Where(e => e.Id == legalEntityId).Select(e => e.Settings.AllowPreparerToApprove).FirstAsync(ct);
 }

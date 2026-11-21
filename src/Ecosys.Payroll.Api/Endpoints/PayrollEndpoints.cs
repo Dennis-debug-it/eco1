@@ -20,7 +20,9 @@ public sealed record ConfirmPaymentsRequest(Guid BatchId, string? BankReference,
 public sealed record AdjustmentRequest(Guid EmployeeId, Guid OriginalRunId, Guid SalaryComponentId, AdjustmentType Type, decimal Amount, string Reason);
 
 public sealed record RunListItem(Guid Id, string Reference, PayrollRunStatus Status, PayrollRunType RunType, string Period, string Group, int EmployeeCount, decimal TotalGross, decimal TotalNet, decimal TotalEmployerCost, int ErrorCount, int WarningCount, DateTimeOffset CreatedAt, DateTimeOffset? ApprovedAt);
-public sealed record RunSummary(PayrollRun Run, string PeriodName, DateOnly PeriodStart, DateOnly PeriodEnd, DateOnly PayDate, string GroupName, string? PreparedByName, string? ApprovedByName, IReadOnlyList<PayrollApproval> Approvals, IReadOnlyList<PaymentBatch> Batches, bool HasJournal);
+public sealed record RunSummary(PayrollRun Run, string PeriodName, DateOnly PeriodStart, DateOnly PeriodEnd, DateOnly PayDate, string GroupName, string? PreparedByName, string? ApprovedByName, IReadOnlyList<PayrollApproval> Approvals, IReadOnlyList<PaymentBatch> Batches, bool HasJournal, ApprovalPolicy? Policy = null);
+/// <summary>The legal entity's approval steps, so the screen offers only the actions the server will accept.</summary>
+public sealed record ApprovalPolicy(bool AllowPreparerToApprove, bool RequireReview, int MinimumApprovals);
 public sealed record RunEmployeeRow(Guid Id, Guid EmployeeId, string EmployeeNumber, string EmployeeName, string? Department, decimal BasicPay, decimal GrossPay, decimal TaxablePay, decimal Paye, decimal Nssf, decimal Shif, decimal HousingLevy, decimal TotalOtherDeductions, decimal NetPay, decimal TotalEmployerCost, decimal? PreviousNetPay, bool HasErrors, IReadOnlyList<Ecosys.Payroll.Engine.Model.PayrollValidationIssue> Issues);
 
 public sealed record AttendanceRow(string EmployeeNumber, decimal DaysWorked, decimal AbsentDays, decimal OvertimeHours, decimal RestDayOvertimeHours, string? Note);
@@ -95,8 +97,10 @@ public static class PayrollEndpoints
             var approvals = await db.PayrollApprovals.Where(a => a.PayrollRunId == id).OrderBy(a => a.CreatedAt).ToListAsync(ct);
             var batches = await db.PaymentBatches.Where(b => b.PayrollRunId == id).OrderBy(b => b.CreatedAt).ToListAsync(ct);
             var hasJournal = await db.PayrollJournals.AnyAsync(j => j.PayrollRunId == id, ct);
+            var s = await db.LegalEntities.AsNoTracking().Where(e => e.Id == run.LegalEntityId).Select(e => e.Settings).FirstAsync(ct);
             return Results.Ok(new RunSummary(run, period.Name, period.PeriodStart, period.PeriodEnd, period.PayDate, group.Name,
-                run.PreparedBy is { } pb ? users.GetValueOrDefault(pb) : null, run.ApprovedBy is { } ab ? users.GetValueOrDefault(ab) : null, approvals, batches, hasJournal));
+                run.PreparedBy is { } pb ? users.GetValueOrDefault(pb) : null, run.ApprovedBy is { } ab ? users.GetValueOrDefault(ab) : null, approvals, batches, hasJournal,
+                new ApprovalPolicy(s.AllowPreparerToApprove, s.RequireReviewBeforeApproval, Math.Max(1, s.MinimumApprovals))));
         });
 
         g.MapGet("/{id:guid}/employees", async (Guid id, bool? issuesOnly, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, CancellationToken ct) =>
@@ -277,9 +281,12 @@ public static class PayrollEndpoints
         {
             ctx.Require(Permissions.PayrollApprove);
             var a = await db.PayrollAdjustments.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(PayrollAdjustment), id);
-            if (a.RequestedBy == ctx.UserId && !ctx.IsPlatformAdministrator) throw new ForbiddenException("The requester cannot approve their own adjustment.");
+            var settings = await db.LegalEntities.AsNoTracking().Where(e => e.Id == a.LegalEntityId).Select(e => e.Settings).FirstAsync(ct);
+            var self = a.RequestedBy == ctx.UserId;
+            if (self && !ctx.IsPlatformAdministrator && !settings.AllowPreparerToApprove)
+                throw new ForbiddenException($"The requester cannot approve their own adjustment. {Ecosys.Payroll.Domain.Organisation.PayrollSettings.WhereToChange}");
             a.ApprovedBy = ctx.RequireUser();
-            audit.Record("payroll.adjustment.approved", nameof(PayrollAdjustment), id, null, a.LegalEntityId);
+            audit.Record(self ? "payroll.adjustment.self_approved" : "payroll.adjustment.approved", nameof(PayrollAdjustment), id, null, a.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Ok(a);
         });

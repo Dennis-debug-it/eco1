@@ -24,7 +24,7 @@ export default function ExitsPage() {
   const [start, setStart] = useState(false)
   return (
     <>
-      <PageHead title="Exits & final dues" sub="HR runs the exit and checklist; payroll calculates final dues; a different approver signs off. Dues are paid by the employee's final regular payroll.">
+      <PageHead title="Exits & final dues" sub="HR runs the exit and checklist; payroll calculates final dues; an approver signs off. Dues are paid by the employee's final regular payroll.">
         {can(P.HrSeparations) && <button className="btn primary" onClick={() => setStart(true)}>Start an exit</button>}
       </PageHead>
       <div className="card">

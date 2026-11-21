@@ -31,7 +31,10 @@ export default function PayrollRunDetailPage() {
   const isReviewer = r.reviewedBy === user?.id
   const lastSubmit = s.approvals.filter(a => a.action === 'Submitted').map(a => a.createdAt).sort().at(-1) ?? ''
   const approvedByMe = r.status === 'UnderReview' && s.approvals.some(a => a.action === 'Approved' && a.actorId === user?.id && a.createdAt >= lastSubmit)
-  const approveBlock = isPreparer ? 'Preparers cannot approve their own payroll' : isReviewer ? 'You reviewed this run; someone else must approve it' : approvedByMe ? 'You have approved; waiting for another approver' : ''
+  const policy = s.policy ?? { allowPreparerToApprove: false, requireReview: true, minimumApprovals: 1 }
+  const solo = policy.allowPreparerToApprove
+  const approveBlock = isPreparer && !solo ? 'Preparers cannot approve their own payroll' : isReviewer && !solo ? 'You reviewed this run; someone else must approve it'
+    : approvedByMe ? 'You have approved; waiting for another approver' : policy.requireReview && !r.reviewedBy ? 'A reviewer must mark this run reviewed first' : ''
   const editable = ['Draft', 'Prepared', 'Calculated', 'Rejected'].includes(r.status)
   const cur = r.currencyCode
 
@@ -41,9 +44,9 @@ export default function PayrollRunDetailPage() {
         <Link to="/payroll" className="btn">All runs</Link>
         {editable && can(P.PayrollPrepare) && <button className="btn" onClick={() => act.mutate('prepare')} disabled={act.isPending}>Refresh employees</button>}
         {editable && can(P.PayrollPrepare) && <button className="btn primary" onClick={() => act.mutate('calculate')} disabled={act.isPending}>{act.isPending && act.variables === 'calculate' ? 'Calculating…' : r.status === 'Calculated' ? 'Recalculate' : 'Calculate'}</button>}
-        {r.status === 'Calculated' && can(P.PayrollPrepare) && <button className="btn primary" onClick={() => setDialog('submit')} disabled={r.errorCount > 0} title={r.errorCount > 0 ? 'Resolve errors first' : ''}>Submit for review</button>}
+        {r.status === 'Calculated' && can(P.PayrollPrepare) && <button className="btn primary" onClick={() => setDialog('submit')} disabled={r.errorCount > 0} title={r.errorCount > 0 ? 'Resolve errors first' : ''}>{policy.requireReview ? 'Submit for review' : 'Submit for approval'}</button>}
         {r.status === 'UnderReview' && (can(P.PayrollApprove) || can(P.PayrollReview)) && <button className="btn danger" onClick={() => setDialog('reject')}>Reject</button>}
-        {r.status === 'UnderReview' && !r.reviewedBy && can(P.PayrollReview) && !isPreparer && <button className="btn primary" onClick={() => setDialog('review')}>Mark reviewed</button>}
+        {r.status === 'UnderReview' && !r.reviewedBy && can(P.PayrollReview) && (!isPreparer || solo) && (policy.requireReview || !solo) && <button className="btn primary" onClick={() => setDialog('review')}>Mark reviewed</button>}
         {r.status === 'UnderReview' && can(P.PayrollApprove) && <button className="btn primary" onClick={() => setDialog('approve')} disabled={!!approveBlock} title={approveBlock}>Approve{r.approvalsRequired > 1 ? ` (${r.approvalsReceived}/${r.approvalsRequired})` : ''}</button>}
         {(r.status === 'Approved' || r.status === 'PaymentProcessing') && can(P.PaymentsManage) && <button className="btn primary" onClick={() => setDialog('payfile')}>Generate payment file</button>}
         {r.status === 'PaymentProcessing' && can(P.PaymentsManage) && <button className="btn" onClick={() => setDialog('confirm')}>Confirm bank payment</button>}
@@ -53,8 +56,9 @@ export default function PayrollRunDetailPage() {
 
       <div className="steps" aria-label="Payroll workflow">{flow.map((f, i) => <span key={f} className={r.status === 'Reversed' || r.status === 'Rejected' ? '' : i < idx ? 'done' : i === idx ? 'current' : ''}>{i + 1}. {f.replace(/([A-Z])/g, ' $1').trim()}</span>)}{(r.status === 'Reversed' || r.status === 'Rejected') && <span className="badge danger">{r.status}{r.reversalReason ? `: ${r.reversalReason}` : ''}</span>}</div>
       <ErrorBox error={actionErr} />
-      {r.status === 'UnderReview' && isPreparer && <div className="alert info">You prepared or submitted this run, so a different approver must approve it (separation of duties).</div>}
-      {r.status === 'UnderReview' && <div className="alert info">{r.reviewedBy ? <>Reviewed {fmt.dateTime(r.reviewedAt)}. </> : <>Awaiting review by a payroll reviewer{can(P.PayrollApprove) ? ' (required before approval if your entity requires review)' : ''}. </>}
+      {r.status === 'UnderReview' && isPreparer && !solo && <div className="alert info">You prepared or submitted this run, so a different approver must approve it (separation of duties).</div>}
+      {r.status === 'UnderReview' && solo && <div className="alert warn">This company lets one person run payroll, so you can approve your own run. Check the register and exceptions first: no one else will. The approval is recorded as a self-approval.</div>}
+      {r.status === 'UnderReview' && !solo && <div className="alert info">{r.reviewedBy ? <>Reviewed {fmt.dateTime(r.reviewedAt)}. </> : policy.requireReview ? <>Awaiting review by a payroll reviewer before it can be approved. </> : null}
         Approvals: <b>{r.approvalsReceived} of {r.approvalsRequired}</b> from different people.</div>}
       {r.errorCount > 0 && <div className="alert danger">{r.errorCount} validation error(s) must be resolved before submission. See the Exceptions tab.</div>}
 
@@ -121,7 +125,7 @@ export default function PayrollRunDetailPage() {
       )}
 
       {detail && <EmployeeResultModal runId={id} employeeId={detail} currency={cur} onClose={() => setDetail(null)} />}
-      {dialog === 'submit' && <ReasonDialog title="Submit for review" confirmLabel="Submit" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/submit`, { text: t }).then(refresh)}><p>The run will be locked for review. A reviewer or approver can send it back.</p></ReasonDialog>}
+      {dialog === 'submit' && <ReasonDialog title={policy.requireReview ? 'Submit for review' : 'Submit for approval'} confirmLabel="Submit" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/submit`, { text: t }).then(refresh)}><p>{solo ? 'The run is locked from further changes while you check it. Approve it next, or reject it to make corrections.' : `The run will be locked for ${policy.requireReview ? 'review' : 'approval'}. A ${policy.requireReview ? 'reviewer or ' : ''}approver can send it back.`}</p></ReasonDialog>}
       {dialog === 'review' && <ReasonDialog title="Mark payroll reviewed" label="Review notes (variances checked, exceptions explained)" confirmLabel="Mark reviewed" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/review`, { text: t }).then(refresh)}><p>Confirm you have checked the exceptions, variances and statutory totals. An approver can then approve.</p></ReasonDialog>}
       {dialog === 'approve' && <ReasonDialog title="Approve payroll" confirmLabel="Approve" onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/approve`, { text: t }).then(refresh)}><p>Approving locks all calculations. Net payroll <b>{fmt.money(r.totalNet, cur)}</b> for {r.employeeCount} employees; total employer cost {fmt.money(r.totalEmployerCost, cur)}.</p></ReasonDialog>}
       {dialog === 'reject' && <ReasonDialog title="Reject payroll" label="Reason" required confirmLabel="Reject" danger onClose={() => setDialog(null)} onConfirm={t => api.post(`/api/payroll/runs/${id}/reject`, { text: t }).then(refresh)} />}

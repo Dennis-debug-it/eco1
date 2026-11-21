@@ -226,7 +226,7 @@ public sealed class PayrollRunService(
         var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
         var me = tenant.RequireUser();
         if (!entity.Settings.AllowPreparerToApprove && (run.PreparedBy == me || run.SubmittedBy == me))
-            throw new ForbiddenException("The preparer of a payroll cannot review it (separation of duties).");
+            throw new ForbiddenException($"The preparer of a payroll cannot review it (separation of duties). {PayrollSettings.WhereToChange}");
         run.ReviewedBy = me;
         run.ReviewedAt = DateTimeOffset.UtcNow;
         Approval(run, ApprovalAction.Reviewed, run.Status, comment);
@@ -248,12 +248,15 @@ public sealed class PayrollRunService(
         if (run.Status != PayrollRunStatus.UnderReview) throw new InvalidStateException("Only a run under review can be approved.");
         var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
         var me = tenant.RequireUser();
+        var selfApproval = run.PreparedBy == me || run.SubmittedBy == me || run.ReviewedBy == me;
         if (!entity.Settings.AllowPreparerToApprove && (run.PreparedBy == me || run.SubmittedBy == me))
-            throw new ForbiddenException("The preparer of a payroll cannot approve it (separation of duties).");
+            throw new ForbiddenException($"The preparer of a payroll cannot approve it (separation of duties). {PayrollSettings.WhereToChange}");
         if (entity.Settings.RequireReviewBeforeApproval && run.ReviewedBy is null)
-            throw new InvalidStateException("This run must be reviewed before it can be approved. A payroll reviewer marks it reviewed first.");
-        if (run.ReviewedBy == me)
-            throw new ForbiddenException("You reviewed this run, so a different person must approve it (separation of duties).");
+            throw new InvalidStateException($"This run must be reviewed before it can be approved. A payroll reviewer marks it reviewed first. {PayrollSettings.WhereToChange}");
+        if (run.ReviewedBy == me && !entity.Settings.AllowPreparerToApprove)
+            throw new ForbiddenException($"You reviewed this run, so a different person must approve it (separation of duties). {PayrollSettings.WhereToChange}");
+        // One-person payroll is allowed by setting, but stays visible to auditors.
+        if (selfApproval) audit.Record("payroll.run.self_approved", nameof(PayrollRun), run.Id, new { run.Reference, policy = "AllowPreparerToApprove" }, run.LegalEntityId);
 
         var since = run.SubmittedAt ?? DateTimeOffset.MinValue;
         var earlier = await db.PayrollApprovals.Where(a => a.PayrollRunId == run.Id && a.Action == ApprovalAction.Approved && a.CreatedAt >= since)

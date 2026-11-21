@@ -5,6 +5,7 @@ import { P, useAuth } from '../lib/auth'
 import { useBranches, useCostCentres, useDepartments, useLegalEntities, usePayrollGroups } from '../lib/lookups'
 import type { LegalEntity, Lookup, PayrollPeriod } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
+import { ApprovalWorkflow, approvalMode, approvalSummary } from '../components/ApprovalWorkflow'
 
 type Tab = 'entities' | 'branches' | 'departments' | 'cost-centres' | 'payroll-groups'
 
@@ -39,15 +40,15 @@ function LegalEntities({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="card">
       <div className="page-head" style={{ marginBottom: 8 }}><h2>Legal entities</h2>{canEdit && <button className="btn primary" onClick={() => setEdit({ jurisdiction: 'KE', currencyCode: 'KES', financialYearStartMonth: 1, isActive: true, settings: { allowPreparerToApprove: false, requireReviewBeforeApproval: true, minimumApprovals: 1, salaryVarianceWarningPercent: 20, payslipFooter: 'This is a computer-generated payslip.', standardMonthlyHours: 195, standardMonthlyWorkingDays: 22, overtimeMultiplier: 1.5, restDayOvertimeMultiplier: 2, notifyEmployeesOnPayslip: true } })}>New legal entity</button>}</div>
-      <table><thead><tr><th>Name</th><th>Registration</th><th>KRA PIN</th><th>NSSF employer</th><th>SHIF employer</th><th>Currency</th><th>Preparer may approve</th><th>Variance warning</th><th /></tr></thead>
-        <tbody>{q.data!.map(e => <tr key={e.id}><td>{e.name}</td><td className="mono">{e.registrationNumber}</td><td className="mono">{e.taxPin}</td><td className="mono">{e.nssfEmployerNumber}</td><td className="mono">{e.shifEmployerNumber}</td><td>{e.currencyCode}</td><td>{e.settings.allowPreparerToApprove ? <Badge status="Warning">Yes</Badge> : 'No'}</td><td>{e.settings.salaryVarianceWarningPercent}%</td><td>{canEdit && <button className="btn sm" onClick={() => setEdit(e)}>Edit</button>}</td></tr>)}</tbody></table>
+      <table><thead><tr><th>Name</th><th>Registration</th><th>KRA PIN</th><th>NSSF employer</th><th>SHIF employer</th><th>Currency</th><th>Approval</th><th>Variance warning</th><th /></tr></thead>
+        <tbody>{q.data!.map(e => <tr key={e.id}><td>{e.name}</td><td className="mono">{e.registrationNumber}</td><td className="mono">{e.taxPin}</td><td className="mono">{e.nssfEmployerNumber}</td><td className="mono">{e.shifEmployerNumber}</td><td>{e.currencyCode}</td><td>{approvalMode(e.settings) === 'solo' ? <Badge status="Warning">{approvalSummary(e.settings)}</Badge> : approvalSummary(e.settings)}</td><td>{e.settings.salaryVarianceWarningPercent}%</td><td>{canEdit && <button className="btn sm" onClick={() => setEdit(e)}>Edit</button>}</td></tr>)}</tbody></table>
       {edit && <Modal title={edit.id ? 'Edit legal entity' : 'New legal entity'} onClose={() => setEdit(null)} width={720}>
         <ErrorBox error={m.error} />
         <div className="form-grid">
           {([['name', 'Name *'], ['registrationNumber', 'Registration number *'], ['taxPin', 'KRA PIN *'], ['nssfEmployerNumber', 'NSSF employer number'], ['shifEmployerNumber', 'SHIF employer number'], ['nitaRegistrationNumber', 'NITA registration'], ['address', 'Address'], ['email', 'Email'], ['phone', 'Phone'], ['currencyCode', 'Currency']] as [keyof LegalEntity, string][]).map(([k, l]) => <Field key={k} label={l}><input value={(edit[k] as string) ?? ''} onChange={ev => setEdit({ ...edit, [k]: ev.target.value })} /></Field>)}
         </div>
+        {edit.settings && <ApprovalWorkflow settings={edit.settings} onChange={settings => setEdit({ ...edit, settings })} />}
         <h3>Payroll controls</h3>
-        <label className="field inline"><input type="checkbox" checked={!!edit.settings?.allowPreparerToApprove} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, allowPreparerToApprove: ev.target.checked } })} /> Allow the preparer to approve their own payroll (not recommended)</label>
         <div className="form-grid">
           <Field label="Net pay variance warning (%)"><input type="number" value={edit.settings?.salaryVarianceWarningPercent ?? 20} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, salaryVarianceWarningPercent: Number(ev.target.value) } })} /></Field>
           <Field label="Payslip footer"><input value={edit.settings?.payslipFooter ?? ''} onChange={ev => setEdit({ ...edit, settings: { ...edit.settings!, payslipFooter: ev.target.value } })} /></Field>

@@ -246,6 +246,56 @@ public class PayrollApiTests(PayrollApiFixture app)
         finally { await SetMinimumApprovals(le, 1); }
     }
 
+    [Fact]
+    public async Task One_person_company_can_prepare_and_approve_its_own_payroll_when_configured()
+    {
+        // The tenant administrator stands in for a sole payroll officer: they hold prepare and approve permissions.
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var run = await CalculatedRunAsync(admin, "February 2026");
+        await admin.PostJson($"{B}/runs/{run}/submit", new { text = "Feb" });
+        var le = await app.WithDbAsync(null, db => db.PayrollRuns.Where(r => r.Id == run).Select(r => r.LegalEntityId).FirstAsync());
+        try
+        {
+            // Default workflow: blocked, and the message says where to change it.
+            var blocked = await admin.PostAsJsonAsync($"{B}/runs/{run}/approve", new { });
+            Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+            Assert.Contains("Approval workflow", await blocked.Content.ReadAsStringAsync());
+
+            // Switch the company to "one person runs payroll" through the API.
+            var entity = (await admin.GetJson($"{B}/organisation/legal-entities")).AsArray().First(e => e!["id"].Id() == le)!.AsObject();
+            entity["settings"]!["minimumApprovals"] = 6;
+            Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/organisation/legal-entities/{le}", entity, PayrollApiFixture.Json)).StatusCode);
+            entity["settings"]!["allowPreparerToApprove"] = true;
+            entity["settings"]!["requireReviewBeforeApproval"] = false;
+            entity["settings"]!["minimumApprovals"] = 1;
+            await admin.PutJson($"{B}/organisation/legal-entities/{le}", entity);
+
+            var policy = (await admin.GetJson($"{B}/runs/{run}"))["policy"]!;
+            Assert.True(policy["allowPreparerToApprove"]!.GetValue<bool>());
+            Assert.False(policy["requireReview"]!.GetValue<bool>());
+            Assert.Equal("Approved", (await admin.PostJson($"{B}/runs/{run}/approve", new { text = "checked it myself" }))["status"].Str());
+
+            // Corrections after approval: they can also approve their own adjustment.
+            var line = (await admin.GetJson($"{B}/runs/{run}/employees")).AsArray()[0]!;
+            var component = (await admin.GetJson($"{B}/compensation/components")).AsArray().First(c => c!["code"].Str() == "BONUS")!["id"].Id();
+            var adj = await admin.PostJson($"{B}/adjustments", new { employeeId = line["employeeId"].Id(), originalRunId = run, salaryComponentId = component, type = "Arrears", amount = 1500m, reason = "Missed allowance" }, HttpStatusCode.Created);
+            await admin.PostJson($"{B}/adjustments/{adj["id"].Id()}/approve");
+
+            var actions = await app.WithDbAsync(null, db => db.PayrollAuditLogs.Where(a => a.EntityId == run || a.EntityId == adj["id"].Id()).Select(a => a.Action).ToListAsync());
+            Assert.Contains("payroll.run.self_approved", actions);
+            Assert.Contains("payroll.adjustment.self_approved", actions);
+        }
+        finally
+        {
+            await app.WithDbAsync(null, async db =>
+            {
+                var e = await db.LegalEntities.FirstAsync(x => x.Id == le);
+                e.Settings.AllowPreparerToApprove = false; e.Settings.RequireReviewBeforeApproval = true; e.Settings.MinimumApprovals = 1;
+                return await db.SaveChangesAsync();
+            });
+        }
+    }
+
     private Task<int> SetMinimumApprovals(Guid legalEntityId, int n) => app.WithDbAsync(null, async db =>
     {
         var e = await db.LegalEntities.FirstAsync(x => x.Id == legalEntityId);

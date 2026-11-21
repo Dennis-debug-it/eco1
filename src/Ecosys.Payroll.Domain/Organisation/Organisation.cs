@@ -33,9 +33,17 @@ public class LegalEntity : TenantEntity
 /// <summary>Per-legal-entity payroll behaviour. Stored as jsonb.</summary>
 public sealed class PayrollSettings
 {
+    /// <summary>
+    /// One person may prepare, review and approve (small employers with a single payroll officer). Also lets them approve
+    /// their own post-approval adjustments and exit final dues. Self-approvals are flagged in the audit log.
+    /// </summary>
     public bool AllowPreparerToApprove { get; set; }
+    /// <summary>A payroll reviewer signs off a submitted run before anyone can approve it.</summary>
     public bool RequireReviewBeforeApproval { get; set; } = true;
+    /// <summary>Different approvers needed for each submission (1–5).</summary>
     public int MinimumApprovals { get; set; } = 1;
+
+    public const string WhereToChange = "An administrator can change the approval steps under Organisation → Legal entities → Edit → Approval workflow.";
     public decimal SalaryVarianceWarningPercent { get; set; } = 20m;
     public string PayslipFooter { get; set; } = "This is a computer-generated payslip.";
 
