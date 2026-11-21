@@ -62,6 +62,7 @@ public static class HrEndpoints
                 nameof(TrainingEnrolment) => Permissions.HrLearning,
                 nameof(Dependant) => Permissions.HrBenefits,
                 nameof(OfferLetter) => Permissions.HrRecruitment,
+                nameof(Domain.Organisation.Letterhead) => Permissions.OrganisationManage,
                 _ => Permissions.HrDocuments,
             };
             var allowed = ctx.Has(permission) || (f.EmployeeId is { } e && (access.IsSelf(e) && f.OwnerType != nameof(HrCase) || await access.IsLineManagerOfAsync(e, ct) && f.OwnerType is nameof(LeaveRequest) or nameof(ExpenseClaim)));

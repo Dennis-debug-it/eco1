@@ -53,6 +53,8 @@ public static class DependencyInjection
         services.AddScoped<NotificationService>();
         services.AddScoped<LeaveBalanceService>();
         services.AddScoped<PayslipFacts>();
+        services.AddMemoryCache();
+        services.AddScoped<LetterheadService>();
         services.AddScoped<Services.Hr.HrAccess>();
         services.AddScoped<Services.Hr.FileStore>();
         services.AddScoped<Services.Hr.WorkCalendar>();

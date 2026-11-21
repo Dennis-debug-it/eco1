@@ -6,6 +6,7 @@ import { useBranches, useCostCentres, useDepartments, useLegalEntities, usePayro
 import type { LegalEntity, Lookup, PayrollPeriod } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
 import { ApprovalWorkflow, approvalMode, approvalSummary } from '../components/ApprovalWorkflow'
+import LetterheadDialog from '../components/LetterheadDialog'
 
 type Tab = 'entities' | 'branches' | 'departments' | 'cost-centres' | 'payroll-groups'
 
@@ -32,6 +33,7 @@ export default function OrganisationPage() {
 function LegalEntities({ canEdit }: { canEdit: boolean }) {
   const q = useLegalEntities(); const qc = useQueryClient()
   const [edit, setEdit] = useState<Partial<LegalEntity> | null>(null)
+  const [letterhead, setLetterhead] = useState<LegalEntity | null>(null)
   const m = useMutation({
     mutationFn: (e: Partial<LegalEntity>) => e.id ? api.put(`/api/payroll/organisation/legal-entities/${e.id}`, e) : api.post('/api/payroll/organisation/legal-entities', e),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['legal-entities'] }); setEdit(null) },
@@ -41,7 +43,8 @@ function LegalEntities({ canEdit }: { canEdit: boolean }) {
     <div className="card">
       <div className="page-head" style={{ marginBottom: 8 }}><h2>Legal entities</h2>{canEdit && <button className="btn primary" onClick={() => setEdit({ jurisdiction: 'KE', currencyCode: 'KES', financialYearStartMonth: 1, isActive: true, settings: { allowPreparerToApprove: false, requireReviewBeforeApproval: true, minimumApprovals: 1, salaryVarianceWarningPercent: 20, payslipFooter: 'This is a computer-generated payslip.', standardMonthlyHours: 195, standardMonthlyWorkingDays: 22, overtimeMultiplier: 1.5, restDayOvertimeMultiplier: 2, notifyEmployeesOnPayslip: true } })}>New legal entity</button>}</div>
       <table><thead><tr><th>Name</th><th>Registration</th><th>KRA PIN</th><th>NSSF employer</th><th>SHIF employer</th><th>Currency</th><th>Approval</th><th>Variance warning</th><th /></tr></thead>
-        <tbody>{q.data!.map(e => <tr key={e.id}><td>{e.name}</td><td className="mono">{e.registrationNumber}</td><td className="mono">{e.taxPin}</td><td className="mono">{e.nssfEmployerNumber}</td><td className="mono">{e.shifEmployerNumber}</td><td>{e.currencyCode}</td><td>{approvalMode(e.settings) === 'solo' ? <Badge status="Warning">{approvalSummary(e.settings)}</Badge> : approvalSummary(e.settings)}</td><td>{e.settings.salaryVarianceWarningPercent}%</td><td>{canEdit && <button className="btn sm" onClick={() => setEdit(e)}>Edit</button>}</td></tr>)}</tbody></table>
+        <tbody>{q.data!.map(e => <tr key={e.id}><td>{e.name}</td><td className="mono">{e.registrationNumber}</td><td className="mono">{e.taxPin}</td><td className="mono">{e.nssfEmployerNumber}</td><td className="mono">{e.shifEmployerNumber}</td><td>{e.currencyCode}</td><td>{approvalMode(e.settings) === 'solo' ? <Badge status="Warning">{approvalSummary(e.settings)}</Badge> : approvalSummary(e.settings)}</td><td>{e.settings.salaryVarianceWarningPercent}%</td><td style={{ whiteSpace: 'nowrap' }}>{canEdit && <><button className="btn sm" onClick={() => setEdit(e)}>Edit</button> <button className="btn sm" onClick={() => setLetterhead(e)}>Letterhead</button></>}</td></tr>)}</tbody></table>
+      {letterhead && <LetterheadDialog entity={letterhead} onClose={() => setLetterhead(null)} />}
       {edit && <Modal title={edit.id ? 'Edit legal entity' : 'New legal entity'} onClose={() => setEdit(null)} width={720}>
         <ErrorBox error={m.error} />
         <div className="form-grid">

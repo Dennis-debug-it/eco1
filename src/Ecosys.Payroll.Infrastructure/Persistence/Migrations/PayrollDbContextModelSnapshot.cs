@@ -5996,6 +5996,94 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.ToTable("legal_entities", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Letterhead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BrandColour")
+                        .HasColumnType("text")
+                        .HasColumnName("brand_colour");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("FooterText")
+                        .HasColumnType("text")
+                        .HasColumnName("footer_text");
+
+                    b.Property<Guid?>("HeaderImageFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("header_image_file_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Layout")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("layout");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid?>("LogoFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("logo_file_id");
+
+                    b.Property<string>("PostalAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("postal_address");
+
+                    b.Property<bool>("ShowRegistrationDetails")
+                        .HasColumnType("boolean")
+                        .HasColumnName("show_registration_details");
+
+                    b.Property<string>("Tagline")
+                        .HasColumnType("text")
+                        .HasColumnName("tagline");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Website")
+                        .HasColumnType("text")
+                        .HasColumnName("website");
+
+                    b.HasKey("Id")
+                        .HasName("pk_letterheads");
+
+                    b.HasIndex("LegalEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_letterheads_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_letterheads_tenant_id");
+
+                    b.ToTable("letterheads", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.PayrollGroup", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8316,6 +8404,16 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.Navigation("Settings")
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Letterhead", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_letterheads_legal_entities_legal_entity_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.PayrollGroup", b =>

@@ -30,6 +30,35 @@ public class LegalEntity : TenantEntity
     public PayrollSettings Settings { get; set; } = new();
 }
 
+public enum LetterheadLayout
+{
+    /// <summary>Logo (optional) on the left, company name and details on the right, a rule in the brand colour.</summary>
+    Standard,
+    /// <summary>The company's own designed header artwork across the top of the page.</summary>
+    HeaderImage,
+}
+
+/// <summary>
+/// How a company's documents are headed: letters (offer, certificate of service, final dues) and payslips. One per legal
+/// entity; without one, documents use a plain text letterhead from the legal entity's details.
+/// </summary>
+public class Letterhead : LegalEntityScopedEntity
+{
+    public LetterheadLayout Layout { get; set; } = LetterheadLayout.Standard;
+    /// <summary>Stored files (owner type Letterhead). PNG or JPG.</summary>
+    public Guid? LogoFileId { get; set; }
+    public Guid? HeaderImageFileId { get; set; }
+    /// <summary>#RRGGBB, used for the company name and rules.</summary>
+    public string? BrandColour { get; set; }
+    public string? Tagline { get; set; }
+    public string? Website { get; set; }
+    /// <summary>e.g. "P.O. Box 12345-00100, Nairobi".</summary>
+    public string? PostalAddress { get; set; }
+    /// <summary>Small print at the foot of every letter, e.g. registered office or directors.</summary>
+    public string? FooterText { get; set; }
+    public bool ShowRegistrationDetails { get; set; } = true;
+}
+
 /// <summary>Per-legal-entity payroll behaviour. Stored as jsonb.</summary>
 public sealed class PayrollSettings
 {

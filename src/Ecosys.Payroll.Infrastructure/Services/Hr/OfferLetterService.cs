@@ -23,7 +23,7 @@ public sealed record OfferDraftEdit(string Subject, string Body, DateOnly Accept
 /// employee's documents at hire. The letter states the salary, so drafting and sending need salary.write and reading
 /// needs salary.read, as for the offer itself. Emails to the candidate never contain the salary.
 /// </summary>
-public sealed partial class OfferLetterService(PayrollDbContext db, TenantContext tenant, FileStore files, AuditService audit, NotificationService notify, IConfiguration config)
+public sealed partial class OfferLetterService(PayrollDbContext db, TenantContext tenant, FileStore files, AuditService audit, NotificationService notify, IConfiguration config, LetterheadService letterheads)
 {
     public static readonly (string Key, string Meaning)[] Placeholders =
     [
@@ -184,7 +184,7 @@ public sealed partial class OfferLetterService(PayrollDbContext db, TenantContex
             Status = l.Status, RespondedAt = l.RespondedAt, ResponseName = l.ResponseName, ResponseIp = l.ResponseIp, RecordedByHr = l.RecordedByHr,
         };
         var issued = l.SentAt is { } s ? DateOnly.FromDateTime(BusinessClock.ToLocal(s).DateTime) : BusinessClock.Today();
-        return HrDocumentRenderer.OfferLetter(entity, shown, $"{app.FirstName} {app.LastName}", app.Email, issued, draft: l.Status == OfferLetterStatus.Draft);
+        return HrDocumentRenderer.OfferLetter(entity, shown, $"{app.FirstName} {app.LastName}", app.Email, issued, draft: l.Status == OfferLetterStatus.Draft, await letterheads.BrandAsync(l.LegalEntityId, ct));
     }
 
     // ------------------------------------------------------------------ Sending and responses

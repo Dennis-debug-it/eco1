@@ -28,6 +28,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<LegalEntity> LegalEntities => Set<LegalEntity>();
+    public DbSet<Letterhead> Letterheads => Set<Letterhead>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<CostCentre> CostCentres => Set<CostCentre>();
@@ -103,6 +104,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
             e.HasIndex(x => new { x.TenantId, x.TaxPin }).IsUnique();
             e.OwnsOne(x => x.Settings, s => s.ToJson());
         });
+        Scoped<Letterhead>(b, e => e.HasIndex(x => x.LegalEntityId).IsUnique());
         Scoped<Branch>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());
         Scoped<Department>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());
         Scoped<CostCentre>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());

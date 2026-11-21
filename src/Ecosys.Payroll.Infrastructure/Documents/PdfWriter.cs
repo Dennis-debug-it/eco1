@@ -14,6 +14,7 @@ public sealed class PdfWriter
     private readonly List<StringBuilder> _pages = [];
     private StringBuilder _current = new();
     private readonly float _width, _height;
+    private readonly List<PdfImage> _images = [];
 
     public PdfWriter(float width = A4Width, float height = A4Height)
     {
@@ -26,7 +27,7 @@ public sealed class PdfWriter
 
     public void NewPage() { _current = new StringBuilder(); _pages.Add(_current); }
 
-    public void Text(float x, float y, string text, float size = 10, bool bold = false, TextAlign align = TextAlign.Left, float? maxWidth = null)
+    public void Text(float x, float y, string text, float size = 10, bool bold = false, TextAlign align = TextAlign.Left, float? maxWidth = null, PdfColor? color = null)
     {
         if (string.IsNullOrEmpty(text)) return;
         var w = Measure(text, size, bold);
@@ -36,7 +37,23 @@ public sealed class PdfWriter
             text += "…"; w = Measure(text, size, bold);
         }
         var tx = align switch { TextAlign.Right => x - w, TextAlign.Center => x - w / 2, _ => x };
-        _current.Append(CultureInfo.InvariantCulture, $"BT /{(bold ? "F2" : "F1")} {size:0.##} Tf {tx:0.##} {_height - y:0.##} Td ({Escape(text)}) Tj ET\n");
+        var fill = color is { } c ? string.Create(CultureInfo.InvariantCulture, $"{c.R:0.###} {c.G:0.###} {c.B:0.###} rg ") : "";
+        _current.Append(CultureInfo.InvariantCulture, $"{fill}BT /{(bold ? "F2" : "F1")} {size:0.##} Tf {tx:0.##} {_height - y:0.##} Td ({Escape(text)}) Tj ET{(fill.Length > 0 ? " 0 g" : "")}\n");
+    }
+
+    /// <summary>A coloured line or filled rectangle, e.g. the brand rule on a letterhead.</summary>
+    public void Line(float x1, float y1, float x2, float y2, float width, PdfColor color) =>
+        _current.Append(CultureInfo.InvariantCulture, $"{color.R:0.###} {color.G:0.###} {color.B:0.###} RG {width:0.##} w {x1:0.##} {_height - y1:0.##} m {x2:0.##} {_height - y2:0.##} l S 0 G\n");
+
+    public void Rect(float x, float y, float w, float h, PdfColor fill) =>
+        _current.Append(CultureInfo.InvariantCulture, $"{fill.R:0.###} {fill.G:0.###} {fill.B:0.###} rg {x:0.##} {_height - y - h:0.##} {w:0.##} {h:0.##} re f 0 g\n");
+
+    /// <summary>Draws an image with its top-left corner at (x, y), scaled to w × h points.</summary>
+    public void Image(PdfImage image, float x, float y, float w, float h)
+    {
+        var index = _images.IndexOf(image);
+        if (index < 0) { _images.Add(image); index = _images.Count - 1; }
+        _current.Append(CultureInfo.InvariantCulture, $"q {w:0.##} 0 0 {h:0.##} {x:0.##} {_height - y - h:0.##} cm /Im{index} Do Q\n");
     }
 
     public void Line(float x1, float y1, float x2, float y2, float width = 0.5f, float gray = 0f) =>
@@ -62,37 +79,60 @@ public sealed class PdfWriter
 
     public byte[] ToBytes()
     {
-        var objects = new List<string>();
-        // 1: catalog, 2: pages, 3: F1, 4: F2, then page/content pairs
+        // Objects: 1 catalog, 2 pages, 3 F1, 4 F2, then images (each followed by its soft mask, if any), then page/content pairs.
+        var objects = new List<(string Dict, byte[]? Stream)>
+        {
+            ("<< /Type /Catalog /Pages 2 0 R >>", null),
+            ("", null), // pages: filled in once page ids are known
+            ("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>", null),
+            ("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>", null),
+        };
+        var imageIds = new List<int>();
+        foreach (var img in _images)
+        {
+            var id = objects.Count + 1;
+            imageIds.Add(id);
+            var smask = img.SoftMask is null ? "" : $" /SMask {id + 1} 0 R";
+            objects.Add((ImageDict(img, smask), img.Data));
+            if (img.SoftMask is { } m) objects.Add((ImageDict(m, ""), m.Data));
+        }
+        var xobjects = _images.Count == 0 ? "" : $" /XObject << {string.Join(' ', imageIds.Select((id, i) => $"/Im{i} {id} 0 R"))} >>";
         var pageIds = new List<int>();
-        var next = 5;
-        foreach (var _ in _pages) { pageIds.Add(next); next += 2; }
-
-        objects.Add("<< /Type /Catalog /Pages 2 0 R >>");
-        objects.Add($"<< /Type /Pages /Kids [{string.Join(' ', pageIds.Select(id => $"{id} 0 R"))}] /Count {_pages.Count} >>");
-        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-        objects.Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
-        for (var i = 0; i < _pages.Count; i++)
+        foreach (var page in _pages)
         {
-            var contentId = pageIds[i] + 1;
-            objects.Add(string.Create(CultureInfo.InvariantCulture, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {_width:0.##} {_height:0.##}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {contentId} 0 R >>"));
-            var content = _pages[i].ToString();
-            objects.Add($"<< /Length {Latin1.GetByteCount(content)} >>\nstream\n{content}endstream");
+            var pageId = objects.Count + 1;
+            pageIds.Add(pageId);
+            objects.Add((string.Create(CultureInfo.InvariantCulture, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {_width:0.##} {_height:0.##}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>{xobjects} >> /Contents {pageId + 1} 0 R >>"), null));
+            objects.Add(("", Latin1.GetBytes(page.ToString())));
         }
+        objects[1] = ($"<< /Type /Pages /Kids [{string.Join(' ', pageIds.Select(id => $"{id} 0 R"))}] /Count {_pages.Count} >>", null);
 
-        var sb = new StringBuilder("%PDF-1.4\n%âãÏÓ\n");
-        var offsets = new List<int>();
-        foreach (var (obj, i) in objects.Select((o, i) => (o, i + 1)))
+        using var ms = new MemoryStream();
+        void Write(string text) { var bytes = Latin1.GetBytes(text); ms.Write(bytes); }
+        Write("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+        var offsets = new List<long>();
+        for (var i = 0; i < objects.Count; i++)
         {
-            offsets.Add(Latin1.GetByteCount(sb.ToString()));
-            sb.Append(CultureInfo.InvariantCulture, $"{i} 0 obj\n{obj}\nendobj\n");
+            offsets.Add(ms.Position);
+            var (dict, stream) = objects[i];
+            if (stream is null) Write($"{i + 1} 0 obj\n{dict}\nendobj\n");
+            else
+            {
+                var header = dict.Length == 0 ? $"<< /Length {stream.Length} >>" : dict.Insert(dict.LastIndexOf(">>", StringComparison.Ordinal), $" /Length {stream.Length} ");
+                Write($"{i + 1} 0 obj\n{header}\nstream\n");
+                ms.Write(stream);
+                Write("\nendstream\nendobj\n");
+            }
         }
-        var xref = Latin1.GetByteCount(sb.ToString());
-        sb.Append(CultureInfo.InvariantCulture, $"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
-        foreach (var o in offsets) sb.Append(CultureInfo.InvariantCulture, $"{o:D10} 00000 n \n");
-        sb.Append(CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
-        return Latin1.GetBytes(sb.ToString());
+        var xref = ms.Position;
+        Write($"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
+        foreach (var o in offsets) Write(string.Create(CultureInfo.InvariantCulture, $"{o:D10} 00000 n \n"));
+        Write($"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        return ms.ToArray();
     }
+
+    private static string ImageDict(PdfImage img, string smask) => string.Create(CultureInfo.InvariantCulture,
+        $"<< /Type /XObject /Subtype /Image /Width {img.Width} /Height {img.Height} /ColorSpace /{img.ColorSpace} /BitsPerComponent 8 /Filter /{img.Filter}{smask} >>");
 
     private static readonly Encoding Latin1 = Encoding.Latin1;
 

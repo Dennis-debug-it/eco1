@@ -14,21 +14,37 @@ namespace Ecosys.Payroll.Infrastructure.Documents;
 public static class PayslipRenderer
 {
     public static byte[] Render(LegalEntity entity, Employee employee, PayrollRunEmployee result, PayrollRun run, PayrollPeriod period,
-        Payslip payslip, EmployeeBankAccount? bank, string? department, string? kraPinMasked, decimal? nssfToDate = null, IReadOnlyList<PayslipLeaveBalance>? leave = null)
+        Payslip payslip, EmployeeBankAccount? bank, string? department, string? kraPinMasked, decimal? nssfToDate = null, IReadOnlyList<PayslipLeaveBalance>? leave = null, Brand? brand = null)
     {
+        brand ??= Brand.Plain;
         var pdf = new PdfWriter();
         const float left = 40, right = PdfWriter.A4Width - 40;
         var y = 48f;
 
-        pdf.Text(left, y, entity.Name, 16, bold: true);
+        // Compact letterhead: the company's header artwork, or its logo beside the name.
+        var nameX = left;
+        if (brand.Layout == LetterheadLayout.HeaderImage && brand.Header is { } art)
+        {
+            var h = Math.Min((right - left) / art.Aspect, 70f);
+            pdf.Image(art, left, 26, h * art.Aspect, h);
+            y = 26 + h + 20;
+        }
+        else if (brand.Logo is { } logo)
+        {
+            var h = Math.Min(34f, 110f / logo.Aspect);
+            pdf.Image(logo, left, 28, h * logo.Aspect, h);
+            nameX = left + h * logo.Aspect + 10;
+            y = Math.Max(48f, 28 + h / 2 + 5);
+        }
+        pdf.Text(nameX, y, entity.Name, 16, bold: true, maxWidth: right - nameX - 110, color: brand.TextColour);
         pdf.Text(right, y, "PAYSLIP", 16, bold: true, TextAlign.Right);
         y += 16;
-        pdf.Text(left, y, $"PIN {entity.TaxPin}   {entity.Address ?? ""}", 8.5f);
+        pdf.Text(nameX, y, $"PIN {entity.TaxPin}   {entity.Address ?? ""}", 8.5f, maxWidth: right - nameX - 150);
         pdf.Text(right, y, payslip.PayslipNumber, 9, align: TextAlign.Right);
         y += 12;
         pdf.Text(right, y, $"Period {period.PeriodStart:dd MMM yyyy} – {period.PeriodEnd:dd MMM yyyy}", 9, align: TextAlign.Right);
         y += 10;
-        pdf.Line(left, y, right, y, 1);
+        if (brand.Colour is { } rule) pdf.Line(left, y, right, y, 1.2f, rule); else pdf.Line(left, y, right, y, 1);
         y += 14;
 
         // Employee block

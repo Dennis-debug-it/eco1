@@ -192,6 +192,8 @@ amounts that the next regular run picks up at calculation, marks processed at fi
 | **Expenses** | Claims with receipts are approved first by the line manager, then by finance (a different person). Per diem above the KES 10,000/day tax-free amount is taxed. | Reimbursements are paid in the next payroll (REIMB, REIMB_TAXABLE) or marked paid directly. |
 | **HR analytics** | Headcount trend, turnover, absenteeism, tenure, department, gender, training hours, rating distribution and open items. | Shows employer cost per head to users with `salary.read`. |
 
+**Letterheads.** Each company can set a letterhead under Organisation → Legal entities → Letterhead. Either a logo (PNG or JPG, under 1 MB) with a brand colour, tagline, website, P.O. Box and footer, or its own wide header artwork. Letters (offer, certificate of service, final dues) and payslips print it. Images are embedded by the built-in PDF writer, with transparency supported. Documents already sent keep the letterhead they were sent with.
+
 **Organogram.** People → Organogram draws the organisation top-down from employees' line managers, one row per level of seniority. Each card shows the person's title, department (colour-coded) and grade. With the HR suite there is also a positions view with vacant seats. It supports search, collapsing teams, zoom and print. It flags people whose manager has left and reporting loops. It is part of every plan and needs `employees.read`.
 
 **Access.** `HrAccess` decides access in this order: the employee themselves, their line manager (`Employee.ReportingManagerId`), then an HR permission (`hr.performance`, `hr.learning`, `hr.recruitment`, `hr.cases`, `hr.documents`, `hr.assets`, `hr.benefits`, `hr.separations`, `expenses.finance`). HR roles do not get `salary.read`. They see an exit's checklist but not its final dues.
@@ -242,7 +244,7 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Area | Endpoints |
 |---|---|
 | Auth & users | `POST /auth/login`, `GET /auth/me`, `POST /auth/mfa/{setup,enable,disable}`, `GET/POST /auth/users`, `POST /auth/users/{id}/mfa/reset` |
-| Organisation | `/organisation/{legal-entities,branches,departments,cost-centres,payroll-groups}`, `GET /organisation/chart` (organogram), `POST /organisation/payroll-groups/{id}/periods/generate` |
+| Organisation | `/organisation/{legal-entities,branches,departments,cost-centres,payroll-groups}`, `/organisation/legal-entities/{id}/letterhead[/logo,/header,/preview]`, `GET /organisation/chart` (organogram), `POST /organisation/payroll-groups/{id}/periods/generate` |
 | Employees | `GET/POST /employees`, `GET/PUT /employees/{id}`, `PUT /employees/{id}/statutory`, `POST /employees/{id}/{bank-accounts,salary,loans}` |
 | Compensation | `/compensation/components`, `/compensation/salary-structures` |
 | Statutory | `GET /statutory-rules`, `GET /statutory-rules/effective`, `POST /statutory-rules`, `POST /statutory-rules/{id}/{submit,approve,reject}`, `POST /statutory-rules/simulate` |

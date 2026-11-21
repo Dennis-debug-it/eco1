@@ -68,7 +68,7 @@ public static class SeparationEndpoints
         g.MapPost("/{id:guid}/complete", async (Guid id, SeparationService svc, CancellationToken ct) => Results.Ok(await svc.CompleteAsync(id, ct)));
         g.MapPost("/{id:guid}/cancel", async (Guid id, Reason body, SeparationService svc, CancellationToken ct) => Results.Ok(await svc.CancelAsync(id, body.Text, ct)));
 
-        g.MapGet("/{id:guid}/statement.pdf", async (Guid id, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        g.MapGet("/{id:guid}/statement.pdf", async (Guid id, ITenantContext ctx, PayrollDbContext db, AuditService audit, LetterheadService letterheads, CancellationToken ct) =>
         {
             if (!ctx.Has(Permissions.HrSeparations) && !ctx.Has(Permissions.PayrollPrepare)) ctx.Require(Permissions.PayrollApprove);
             ctx.Require(Permissions.SalaryRead);
@@ -77,11 +77,11 @@ public static class SeparationEndpoints
             var le = await db.LegalEntities.FirstAsync(x => x.Id == s.LegalEntityId, ct);
             audit.Record("separation.statement.downloaded", nameof(Separation), id, null, s.LegalEntityId);
             await db.SaveChangesAsync(ct);
-            return Results.File(HrDocumentRenderer.FinalDuesStatement(le, e, s, le.CurrencyCode), "application/pdf", $"final-dues-{e.EmployeeNumber}.pdf");
+            return Results.File(HrDocumentRenderer.FinalDuesStatement(le, e, s, le.CurrencyCode, await letterheads.BrandAsync(le.Id, ct)), "application/pdf", $"final-dues-{e.EmployeeNumber}.pdf");
         });
 
         // Certificate of service: HR, or the former employee themselves once the exit is approved.
-        api.MapGet("/employees/{employeeId:guid}/certificate-of-service.pdf", async (Guid employeeId, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        api.MapGet("/employees/{employeeId:guid}/certificate-of-service.pdf", async (Guid employeeId, ITenantContext ctx, PayrollDbContext db, AuditService audit, LetterheadService letterheads, CancellationToken ct) =>
         {
             if (ctx.EmployeeId != employeeId) ctx.Require(Permissions.HrSeparations);
             var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == employeeId, ct) ?? throw new NotFoundException("Employee", employeeId);
@@ -100,7 +100,7 @@ public static class SeparationEndpoints
             var signatory = ctx.EmployeeId == employeeId ? null : ctx.UserName;
             audit.Record("certificate_of_service.issued", "Employee", employeeId, new { self = ctx.EmployeeId == employeeId }, e.LegalEntityId);
             await db.SaveChangesAsync(ct);
-            return Results.File(HrDocumentRenderer.CertificateOfService(le, e, collapsed, BusinessClock.Today(), signatory), "application/pdf", $"certificate-of-service-{e.EmployeeNumber}.pdf");
+            return Results.File(HrDocumentRenderer.CertificateOfService(le, e, collapsed, BusinessClock.Today(), signatory, await letterheads.BrandAsync(le.Id, ct)), "application/pdf", $"certificate-of-service-{e.EmployeeNumber}.pdf");
         }).RequireAuthorization();
     }
 }

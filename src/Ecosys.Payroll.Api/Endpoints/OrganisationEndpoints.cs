@@ -69,6 +69,40 @@ public static class OrganisationEndpoints
     {
         var g = api.MapGroup("/organisation").RequireAuthorization();
 
+        // ---- Letterhead: logo or header artwork, brand colour and details, used on letters and payslips ----
+        g.MapGet("/legal-entities/{id:guid}/letterhead", async (Guid id, LetterheadService svc, CancellationToken ct) =>
+        {
+            var l = await svc.GetAsync(id, ct);
+            return Results.Ok(new { l.Layout, l.BrandColour, l.Tagline, l.Website, l.PostalAddress, l.FooterText, l.ShowRegistrationDetails, hasLogo = l.LogoFileId != null, hasHeader = l.HeaderImageFileId != null });
+        });
+        g.MapPut("/legal-entities/{id:guid}/letterhead", async (Guid id, LetterheadRequest body, LetterheadService svc, CancellationToken ct) =>
+        {
+            await svc.SaveAsync(id, body, ct);
+            return Results.NoContent();
+        });
+        g.MapPost("/legal-entities/{id:guid}/letterhead/{kind:regex(^(logo|header)$)}", async (Guid id, string kind, HttpRequest http, LetterheadService svc, CancellationToken ct) =>
+        {
+            var form = await http.ReadFormAsync(ct);
+            var file = form.Files.GetFile("file") ?? throw new DomainException("Choose an image.", "VALIDATION");
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, ct);
+            var l = await svc.UploadAsync(id, kind, file.FileName, ms.ToArray(), ct);
+            return Results.Ok(new { l.Layout, hasLogo = l.LogoFileId != null, hasHeader = l.HeaderImageFileId != null });
+        }).DisableAntiforgery();
+        g.MapDelete("/legal-entities/{id:guid}/letterhead/{kind:regex(^(logo|header)$)}", async (Guid id, string kind, LetterheadService svc, CancellationToken ct) =>
+        {
+            await svc.RemoveAsync(id, kind, ct);
+            return Results.NoContent();
+        });
+        g.MapGet("/legal-entities/{id:guid}/letterhead/{kind:regex(^(logo|header)$)}", async (Guid id, string kind, LetterheadService svc, CancellationToken ct) =>
+            await svc.ImageAsync(id, kind, ct) is { } img ? Results.File(img.Content, img.ContentType, img.FileName) : Results.NotFound());
+        g.MapGet("/legal-entities/{id:guid}/letterhead/preview", async (Guid id, LetterheadService svc, PayrollDbContext db, CancellationToken ct) =>
+        {
+            await svc.GetAsync(id, ct); // permission and scope
+            var le = await db.LegalEntities.FirstAsync(e => e.Id == id, ct);
+            return Results.File(Ecosys.Payroll.Infrastructure.Documents.HrDocumentRenderer.SampleLetter(le, await svc.BrandAsync(id, ct)), "application/pdf", "letterhead-preview.pdf");
+        });
+
         // Organogram data: people by reporting line and, with the HR suite, positions by "reports to" (including vacant
         // seats). Names, titles, departments and grades only: no pay. Part of every plan.
         g.MapGet("/chart", async (ITenantContext ctx, PayrollDbContext db, Ecosys.Payroll.Infrastructure.Services.Saas.SubscriptionService subs, CancellationToken ct) =>

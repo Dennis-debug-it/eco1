@@ -38,7 +38,7 @@ public static class SelfServiceEndpoints
             return Results.Ok(new { slip, result = node });
         }).RequireAuthorization();
 
-        api.MapGet("/payslips/{payslipId:guid}/pdf", async (Guid payslipId, ITenantContext ctx, PayrollDbContext db, AuditService audit, PayslipFacts facts, CancellationToken ct) =>
+        api.MapGet("/payslips/{payslipId:guid}/pdf", async (Guid payslipId, ITenantContext ctx, PayrollDbContext db, AuditService audit, PayslipFacts facts, LetterheadService letterheads, CancellationToken ct) =>
         {
             var slip = await db.Payslips.FirstOrDefaultAsync(p => p.Id == payslipId, ct) ?? throw new NotFoundException(nameof(Payslip), payslipId);
             RequireSelfOrSalaryRead(ctx, slip.EmployeeId);
@@ -55,7 +55,7 @@ public static class SelfServiceEndpoints
             if (slip.NssfContributionsToDate is null && run.Status != PayrollRunStatus.Reversed)
                 slip.NssfContributionsToDate = await facts.NssfToDateAsync(slip.EmployeeId, slip.PeriodEnd, null, ct);
             slip.LeaveBalances ??= await facts.LeaveRemainingAsync(slip.EmployeeId, slip.PeriodEnd, ct);
-            var pdf = PayslipRenderer.Render(entity, employee, result, run, period, slip, bank, dept, FieldEncryptor.Mask(stat?.KraPin), slip.NssfContributionsToDate, slip.LeaveBalances);
+            var pdf = PayslipRenderer.Render(entity, employee, result, run, period, slip, bank, dept, FieldEncryptor.Mask(stat?.KraPin), slip.NssfContributionsToDate, slip.LeaveBalances, await letterheads.BrandAsync(entity.Id, ct));
             var hash = Convert.ToHexStringLower(SHA256.HashData(pdf));
             slip.ContentHash ??= hash;
             if (ctx.EmployeeId == slip.EmployeeId) slip.FirstViewedAt ??= DateTimeOffset.UtcNow;

@@ -516,4 +516,53 @@ public class HrModulesTests(PayrollApiFixture app)
     }
 
     private static DateOnly BusinessClockToday() => Ecosys.Payroll.Domain.Common.BusinessClock.Today();
+
+    [Fact]
+    public async Task Letterhead_with_logo_appears_on_letters_and_payslips()
+    {
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var le = (await admin.GetJson($"{B}/organisation/legal-entities"))[0]!["id"].Id();
+        Assert.False((await admin.GetJson($"{B}/organisation/legal-entities/{le}/letterhead"))["hasLogo"]!.GetValue<bool>());
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await app.LoginAsync("brian.mwangi@demo.ecosys")).GetAsync($"{B}/organisation/legal-entities/{le}/letterhead")).StatusCode);
+
+        MultipartFormDataContent Image(byte[] bytes, string name) => new() { { new ByteArrayContent(bytes), "file", name } };
+        var logo = Ecosys.Payroll.Tests.Engine.PdfImageTests.Png(120, 60, 6, (x, y) => [11, 93, 79, (byte)(x < 10 ? 0 : 255)]);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync($"{B}/organisation/legal-entities/{le}/letterhead/logo", Image("GIF89a"u8.ToArray(), "logo.gif"))).StatusCode);
+        // A header must be a wide banner.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync($"{B}/organisation/legal-entities/{le}/letterhead/header", Image(logo, "header.png"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"{B}/organisation/legal-entities/{le}/letterhead/logo", Image(logo, "logo.png"))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/organisation/legal-entities/{le}/letterhead", new { layout = "Standard", brandColour = "green" }, PayrollApiFixture.Json)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/organisation/legal-entities/{le}/letterhead", new { layout = "HeaderImage", brandColour = "#0B5D4F" }, PayrollApiFixture.Json)).StatusCode); // no header uploaded
+        try
+        {
+            await (await admin.PutAsJsonAsync($"{B}/organisation/legal-entities/{le}/letterhead", new { layout = "Standard", brandColour = "#0B5D4F", tagline = "Moving Kenya forward", postalAddress = "P.O. Box 12345-00100, Nairobi", footerText = "Registered office: Mombasa Road, Nairobi", showRegistrationDetails = true }, PayrollApiFixture.Json)).Json(HttpStatusCode.NoContent);
+            var lh = await admin.GetJson($"{B}/organisation/legal-entities/{le}/letterhead");
+            Assert.True(lh["hasLogo"]!.GetValue<bool>());
+            Assert.Equal("#0b5d4f", lh["brandColour"].Str());
+            Assert.Equal("image/png", (await admin.GetAsync($"{B}/organisation/legal-entities/{le}/letterhead/logo")).Content.Headers.ContentType!.MediaType);
+
+            var preview = System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/organisation/legal-entities/{le}/letterhead/preview")).Content.ReadAsByteArrayAsync());
+            Assert.Contains("/Subtype /Image /Width 120 /Height 60", preview);
+            Assert.Contains("/SMask", preview);
+            Assert.Contains("Moving Kenya forward", preview);
+            Assert.Contains("Registered office: Mombasa Road", preview);
+
+            // Letters and payslips carry it too. (A certificate of service needs a leaver: use any former employee, if there is one yet.)
+            var leaver = await app.WithDbAsync(null, db => db.Employees.Where(e => e.TerminationDate != null && e.LegalEntityId == le).Select(e => (Guid?)e.Id).FirstOrDefaultAsync());
+            if (leaver is { } gone)
+                Assert.Contains("/Im0 Do", System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/employees/{gone}/certificate-of-service.pdf")).Content.ReadAsByteArrayAsync()));
+            var slip = await app.WithDbAsync(null, db => db.Payslips.Select(p => (Guid?)p.Id).FirstOrDefaultAsync());
+            if (slip is { } slipId)
+                Assert.Contains("/Im0 Do", System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/payslips/{slipId}/pdf")).Content.ReadAsByteArrayAsync()));
+
+            await admin.DeleteAsync($"{B}/organisation/legal-entities/{le}/letterhead/logo");
+            Assert.False((await admin.GetJson($"{B}/organisation/legal-entities/{le}/letterhead"))["hasLogo"]!.GetValue<bool>());
+        }
+        finally
+        {
+            // Leave the shared demo company with a plain letterhead for other tests.
+            await app.WithDbAsync(null, async db => { db.Letterheads.RemoveRange(db.Letterheads); return await db.SaveChangesAsync(); });
+        }
+    }
 }
