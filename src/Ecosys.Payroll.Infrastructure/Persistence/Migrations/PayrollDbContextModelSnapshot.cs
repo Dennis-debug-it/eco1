@@ -1555,6 +1555,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("nssf_number");
 
+                    b.Property<decimal>("NssfOpeningBalance")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("nssf_opening_balance");
+
                     b.Property<string>("ShifNumber")
                         .HasColumnType("text")
                         .HasColumnName("shif_number");
@@ -2394,6 +2398,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
                     b.Property<decimal>("BeneficiaryPercent")
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("beneficiary_percent");
@@ -2413,6 +2425,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
+
+                    b.PrimitiveCollection<string>("DocumentFileIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("document_file_ids");
 
                     b.Property<Guid>("EmployeeId")
                         .HasColumnType("uuid")
@@ -2439,10 +2456,31 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("legal_entity_id");
 
+                    b.Property<string>("Phone")
+                        .HasColumnType("text")
+                        .HasColumnName("phone");
+
+                    b.Property<DateTimeOffset?>("RejectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rejected_by");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
                     b.Property<string>("Relationship")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("relationship");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -2456,6 +2494,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at");
+
+                    b.Property<Guid?>("VerifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verified_by");
+
                     b.HasKey("Id")
                         .HasName("pk_dependants");
 
@@ -2467,6 +2513,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_dependants_tenant_id");
+
+                    b.HasIndex("TenantId", "Status")
+                        .HasDatabaseName("ix_dependants_tenant_id_status");
 
                     b.ToTable("dependants", (string)null);
                 });
@@ -7202,6 +7251,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("issued_at");
 
+                    b.Property<string>("LeaveBalances")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("leave_balances");
+
                     b.Property<Guid>("LegalEntityId")
                         .HasColumnType("uuid")
                         .HasColumnName("legal_entity_id");
@@ -7209,6 +7262,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("NetPay")
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("net_pay");
+
+                    b.Property<decimal?>("NssfContributionsToDate")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("nssf_contributions_to_date");
 
                     b.Property<Guid>("PayrollRunEmployeeId")
                         .HasColumnType("uuid")

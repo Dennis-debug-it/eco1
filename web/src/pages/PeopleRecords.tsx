@@ -4,9 +4,10 @@ import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useDepartments, useEmployeeOptions, useLegalEntities } from '../lib/lookups'
 import { Feature, usePlanFeature } from '../lib/billing'
+import { DependantQueue } from '../components/Dependants'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, Tabs } from '../components/ui'
 
-type Tab = 'documents' | 'positions' | 'benefits' | 'assets'
+type Tab = 'documents' | 'positions' | 'benefits' | 'assets' | 'dependants'
 
 export default function PeopleRecordsPage() {
   const { can } = useAuth()
@@ -16,6 +17,7 @@ export default function PeopleRecordsPage() {
     ...(hrSuite ? [{ id: 'positions' as Tab, label: 'Positions & headcount' }] : []),
     ...(can(P.HrBenefits) && hrSuite ? [{ id: 'benefits' as Tab, label: 'Medical cover' }] : []),
     ...(can(P.HrAssets) && hrSuite ? [{ id: 'assets' as Tab, label: 'Assets' }] : []),
+    ...(can(P.HrBenefits) ? [{ id: 'dependants' as Tab, label: 'Dependants & beneficiaries' }] : []),
   ]
   const [tab, setTab] = useState<Tab>(tabs[0]?.id ?? 'documents')
   return (
@@ -26,6 +28,7 @@ export default function PeopleRecordsPage() {
       {tab === 'positions' && <Positions />}
       {tab === 'benefits' && <Benefits />}
       {tab === 'assets' && <Assets />}
+      {tab === 'dependants' && <DependantQueue />}
     </>
   )
 }

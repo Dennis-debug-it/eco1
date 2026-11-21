@@ -105,4 +105,9 @@ public class EmployeeStatutoryDetails : LegalEntityScopedEntity
     public DateOnly? DisabilityExemptionExpiry { get; set; }
     /// <summary>Statutory rule codes this employee is exempt from, e.g. KE.NSSF for expatriates on home-country schemes.</summary>
     public List<string> StatutoryExemptions { get; set; } = [];
+    /// <summary>
+    /// NSSF contributions (employee + employer) made before this employer's payroll moved to Ecosys, so the
+    /// "NSSF contributions to date" on payslips starts from the right figure.
+    /// </summary>
+    public decimal NssfOpeningBalance { get; set; }
 }

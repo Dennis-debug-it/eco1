@@ -34,6 +34,9 @@ public sealed class SubscriptionGateMiddleware(RequestDelegate next, SaasOptions
     public static readonly string[] HrSuitePaths =
         ["/api/payroll/recruitment", "/api/payroll/performance", "/api/payroll/learning", "/api/payroll/cases", "/api/payroll/positions", "/api/payroll/benefits", "/api/payroll/assets"];
 
+    /// <summary>Inside HR-suite areas but part of every plan: beneficiaries matter for final dues on death in service.</summary>
+    private static readonly string[] CorePaths = ["/api/payroll/benefits/dependants"];
+
     /// <summary>Still writable while read-only: signing in and security, and billing (so the customer can pay or reactivate).</summary>
     private static readonly string[] AlwaysWritable = ["/api/payroll/auth", "/api/payroll/billing"];
 
@@ -48,7 +51,7 @@ public sealed class SubscriptionGateMiddleware(RequestDelegate next, SaasOptions
         if (ent.Managed) { await next(http); return; }
 
         var path = http.Request.Path;
-        if (!ent.Has(PlanFeatures.HrSuite) && HrSuitePaths.Any(p => path.StartsWithSegments(p)))
+        if (!ent.Has(PlanFeatures.HrSuite) && HrSuitePaths.Any(p => path.StartsWithSegments(p)) && !CorePaths.Any(p => path.StartsWithSegments(p)))
         {
             await Refuse(http, "Not in your plan", "FEATURE_NOT_IN_PLAN", $"This module is not part of the {ent.PlanName} plan. An administrator can upgrade under Billing.");
             return;

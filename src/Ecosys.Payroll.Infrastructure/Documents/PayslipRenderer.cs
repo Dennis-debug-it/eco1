@@ -7,11 +7,14 @@ using Ecosys.Payroll.Infrastructure.Security;
 
 namespace Ecosys.Payroll.Infrastructure.Documents;
 
-/// <summary>Renders the PRD §6 payslip layout to PDF. Bank account numbers are masked on the payslip.</summary>
+/// <summary>
+/// Renders the PRD §6 payslip layout to PDF. Bank account numbers are masked. Shows the employer's statutory
+/// contributions but not the employer's total cost of employment, which is for payroll and finance only.
+/// </summary>
 public static class PayslipRenderer
 {
     public static byte[] Render(LegalEntity entity, Employee employee, PayrollRunEmployee result, PayrollRun run, PayrollPeriod period,
-        Payslip payslip, EmployeeBankAccount? bank, string? department, string? kraPinMasked)
+        Payslip payslip, EmployeeBankAccount? bank, string? department, string? kraPinMasked, decimal? nssfToDate = null, IReadOnlyList<PayslipLeaveBalance>? leave = null)
     {
         var pdf = new PdfWriter();
         const float left = 40, right = PdfWriter.A4Width - 40;
@@ -71,8 +74,27 @@ public static class PayslipRenderer
             pdf.Text(ex, start, "EMPLOYER CONTRIBUTIONS", 9, bold: true);
             var yy = start + 12;
             foreach (var l in employer) { pdf.Text(ex, yy, l.Name, 8.5f, maxWidth: 170); pdf.Text(right, yy, l.Amount.ToString("N2"), 8.5f, align: TextAlign.Right); yy += 11; }
-            pdf.Text(ex, yy, "Total employer cost", 8.5f, bold: true); pdf.Text(right, yy, result.TotalEmployerCost.ToString("N2"), 8.5f, bold: true, TextAlign.Right);
-            y = Math.Max(y, yy + 11);
+            y = Math.Max(y, yy);
+        }
+
+        // Running balances.
+        if (nssfToDate is not null || leave is { Count: > 0 })
+        {
+            y += 10;
+            pdf.Text(left, y, "BALANCES", 9, bold: true); y += 12;
+            if (nssfToDate is { } nssf)
+            {
+                pdf.Text(left, y, "NSSF contributions to date (employee + employer)", 8.5f); pdf.Text(left + 250, y, nssf.ToString("N2"), 8.5f, bold: true, TextAlign.Right); y += 11;
+            }
+            foreach (var l in leave ?? [])
+            {
+                pdf.Text(left, y, $"{l.LeaveType} remaining", 8.5f, maxWidth: 180); pdf.Text(left + 250, y, $"{l.DaysRemaining:0.##} days", 8.5f, bold: true, TextAlign.Right); y += 11;
+            }
+            if (nssfToDate is not null)
+            {
+                pdf.Text(left, y + 2, "NSSF: contributions recorded by your employer. Your NSSF member statement is the official balance.", 7f);
+                y += 11;
+            }
         }
 
         y += 14;

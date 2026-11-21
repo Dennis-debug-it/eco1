@@ -19,6 +19,7 @@ public sealed record CreateRunRequest(Guid LegalEntityId, Guid PayrollGroupId, G
 
 /// <summary>Drives the payroll lifecycle (PRD §5). Every transition is authorised, audited and state-checked.</summary>
 public sealed class PayrollRunService(
+    PayslipFacts payslipFacts,
     PayrollDbContext db,
     ITenantContext tenant,
     AuditService audit,
@@ -409,6 +410,8 @@ public sealed class PayrollRunService(
                 TenantId = run.TenantId, LegalEntityId = run.LegalEntityId, PayrollRunId = run.Id, PayrollRunEmployeeId = e.Id, EmployeeId = e.EmployeeId,
                 PayslipNumber = $"{run.Reference}-{e.EmployeeNumber}", PeriodStart = period.PeriodStart, PeriodEnd = period.PeriodEnd,
                 GrossPay = e.GrossPay, NetPay = e.NetPay,
+                NssfContributionsToDate = await payslipFacts.NssfToDateAsync(e.EmployeeId, period.PeriodEnd, run.Id, ct),
+                LeaveBalances = await payslipFacts.LeaveRemainingAsync(e.EmployeeId, period.PeriodEnd, ct),
             });
         }
 

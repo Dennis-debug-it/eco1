@@ -240,6 +240,20 @@ public class Payslip : LegalEntityScopedEntity
     /// <summary>Content hash of the rendered PDF so a stored document can be verified.</summary>
     public string? ContentHash { get; set; }
     public DateTimeOffset? FirstViewedAt { get; set; }
+    /// <summary>
+    /// NSSF contributions (employee + employer) up to and including this payslip: the opening balance plus every
+    /// approved, unreversed run. Captured when the payslip is issued so it reprints the same. Null on payslips issued
+    /// before this was recorded; those are worked out when printed.
+    /// </summary>
+    public decimal? NssfContributionsToDate { get; set; }
+    /// <summary>Leave days remaining at the end of the pay period, captured when the payslip is issued.</summary>
+    public List<PayslipLeaveBalance>? LeaveBalances { get; set; }
+}
+
+public sealed class PayslipLeaveBalance
+{
+    public required string LeaveType { get; set; }
+    public decimal DaysRemaining { get; set; }
 }
 
 public enum AdjustmentType { Arrears, Overpayment, Correction, Backpay }

@@ -17,7 +17,7 @@ export function approvalSummary(s: Settings) {
 const options: { id: Mode; title: string; detail: string }[] = [
   { id: 'reviewer', title: 'Preparer, reviewer, then approver', detail: 'A reviewer checks the run, then a different person approves it. Three people at least. Recommended once you have the staff.' },
   { id: 'approver', title: 'Preparer, then approver', detail: 'Someone other than the preparer approves the run. Two people at least.' },
-  { id: 'solo', title: 'One person runs payroll', detail: 'The same person can prepare, approve and pay. For small employers with a single payroll officer. Also lets them approve their own adjustments and exit final dues. Every self-approval is marked in the audit trail.' },
+  { id: 'solo', title: 'One person runs payroll', detail: 'The same person can prepare, approve and pay. For small employers with a single payroll officer. Also lets them approve their own adjustments, exit final dues and dependant or beneficiary records. Every self-approval is marked in the audit trail.' },
 ]
 
 /** The approval steps a payroll run goes through for this legal entity. */

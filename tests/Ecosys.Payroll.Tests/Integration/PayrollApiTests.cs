@@ -296,6 +296,34 @@ public class PayrollApiTests(PayrollApiFixture app)
         }
     }
 
+    [Fact]
+    public async Task Payslip_shows_nssf_to_date_and_leave_remaining_but_not_employer_cost()
+    {
+        var run = await ApprovedRunAsync("January 2025");
+        await (await app.LoginAsync("approver@demo.ecosys")).PostJson($"{B}/runs/{run}/finalise");
+
+        var brian = await app.LoginAsync("brian.mwangi@demo.ecosys");
+        var me = (await brian.GetJson($"{B}/auth/me"))["employeeId"].Id();
+        var slipId = (await brian.GetJson($"{B}/employees/{me}/payslips")).AsArray().First(p => p!["periodEnd"].Str() == "2025-01-31")!["id"].Id();
+
+        // NSSF to date: employee + employer contributions; January 2025 is the first period, so just this run.
+        var expected = await app.WithDbAsync(null, db => db.PayrollRunEmployees.Where(e => e.PayrollRunId == run && e.EmployeeId == me)
+            .SelectMany(e => e.Lines).Where(l => l.StatutoryRuleCode == "KE.NSSF").SumAsync(l => l.Amount));
+        Assert.True(expected > 0);
+        var own = await brian.GetJson($"{B}/payslips/{slipId}");
+        Assert.Equal(expected, own["slip"]!["nssfContributionsToDate"].Dec());
+        // (Demo data records days taken without dates, so the January figure can be negative; only its presence is checked.)
+        Assert.Contains(own["slip"]!["leaveBalances"]!.AsArray(), l => l!["leaveType"].Str() == "Annual leave" && l["daysRemaining"] is not null);
+        // The employee's own view leaves out what they cost the employer; payroll still sees it.
+        Assert.Null(own["result"]!["totalEmployerCost"]);
+        Assert.NotNull((await (await app.LoginAsync("payroll@demo.ecosys")).GetJson($"{B}/payslips/{slipId}"))["result"]!["totalEmployerCost"]);
+
+        var pdf = System.Text.Encoding.Latin1.GetString(await (await brian.GetAsync($"{B}/payslips/{slipId}/pdf")).Content.ReadAsByteArrayAsync());
+        Assert.Contains("NSSF contributions to date", pdf);
+        Assert.Contains("Annual leave remaining", pdf);
+        Assert.DoesNotContain("Total employer cost", pdf);
+    }
+
     private Task<int> SetMinimumApprovals(Guid legalEntityId, int n) => app.WithDbAsync(null, async db =>
     {
         var e = await db.LegalEntities.FirstAsync(x => x.Id == legalEntityId);

@@ -8,6 +8,7 @@ import { Badge, Empty, ErrorBox, Field, FileLink, Loading, PageHead, Stat, Stars
 import { PayslipList } from './EmployeeDetail'
 import { ReviewDialog } from './Performance'
 import { MyClaims } from './Expenses'
+import { MyDependants } from '../components/Dependants'
 
 type Tab = 'overview' | 'payslips' | 'leave' | 'performance' | 'learning' | 'expenses' | 'records' | 'profile'
 
@@ -170,23 +171,14 @@ function MyLearning() {
 }
 
 function MyRecords({ employeeId }: { employeeId: string }) {
-  const qc = useQueryClient()
   const docs = useQuery({ queryKey: ['my-docs'], queryFn: () => api.get<{ id: string; category: string; title: string; storedFileId: string; expiresOn?: string; version: number }[]>(`/api/payroll/documents?employeeId=${employeeId}`) })
-  const deps = useQuery({ queryKey: ['dependants', employeeId], queryFn: () => api.get<{ id: string; fullName: string; relationship: string; dateOfBirth?: string; isBeneficiary: boolean; beneficiaryPercent: number }[]>(`/api/payroll/benefits/dependants/${employeeId}`) })
-  const cover = useQuery({ queryKey: ['my-cover'], queryFn: () => api.get<{ id: string; scheme: string; provider: string; cover: string; startDate: string; membershipNumber?: string; premiumByCover: Record<string, number>; employeeSharePercent: number }[]>(`/api/payroll/benefits/enrolments?employeeId=${employeeId}`) })
+  const cover = useQuery({ queryKey: ['my-cover'], queryFn: () => api.get<{ id: string; scheme: string; provider: string; cover: string; startDate: string; membershipNumber?: string }[]>(`/api/payroll/benefits/enrolments?employeeId=${employeeId}`) })
   const assets = useQuery({ queryKey: ['my-assets'], queryFn: () => api.get<{ assignmentId: string; tag: string; name: string; serialNumber?: string; issuedOn: string; returnedOn?: string }[]>(`/api/payroll/assets?employeeId=${employeeId}`) })
-  const [d, setD] = useState({ fullName: '', relationship: 'Spouse', dateOfBirth: '', isBeneficiary: false, beneficiaryPercent: 0 })
-  const add = useMutation({ mutationFn: () => api.post('/api/payroll/benefits/dependants', { ...d, employeeId, dateOfBirth: d.dateOfBirth || null }), onSuccess: () => { setD({ fullName: '', relationship: 'Spouse', dateOfBirth: '', isBeneficiary: false, beneficiaryPercent: 0 }); qc.invalidateQueries({ queryKey: ['dependants'] }) } })
   return (
     <div className="grid c2">
       <div className="card"><h2>My documents</h2>{!docs.data?.length ? <Empty>No documents shared with you.</Empty> : <table><tbody>{docs.data.map(x => <tr key={x.id}><td>{x.title}<div className="muted small">{x.category} · v{x.version}{x.expiresOn && ` · expires ${fmt.date(x.expiresOn)}`}</div></td><td><FileLink id={x.storedFileId} label="Download" /></td></tr>)}</tbody></table>}</div>
-      <div className="card"><h2>Medical cover</h2>{!cover.data?.length ? <Empty>Not enrolled.</Empty> : cover.data.map(c => <dl key={c.id} className="kv"><dt>Scheme</dt><dd>{c.scheme} ({c.provider})</dd><dt>Cover</dt><dd>{c.cover} since {fmt.date(c.startDate)}</dd><dt>Member no.</dt><dd className="mono">{c.membershipNumber ?? '—'}</dd><dt>Your share</dt><dd>{fmt.money((c.premiumByCover[c.cover] ?? 0) * c.employeeSharePercent / 100)} / month via payroll</dd></dl>)}</div>
-      <div className="card"><h2>Dependants & beneficiaries</h2><ErrorBox error={add.error} />
-        {!deps.data?.length ? <Empty>None recorded.</Empty> : <table><tbody>{deps.data.map(x => <tr key={x.id}><td>{x.fullName}</td><td>{x.relationship}</td><td>{fmt.date(x.dateOfBirth)}</td><td>{x.isBeneficiary ? `Beneficiary ${x.beneficiaryPercent}%` : ''}</td></tr>)}</tbody></table>}
-        <div className="form-grid" style={{ marginTop: 8 }}><Field label="Full name"><input value={d.fullName} onChange={e => setD({ ...d, fullName: e.target.value })} /></Field><Field label="Relationship"><select value={d.relationship} onChange={e => setD({ ...d, relationship: e.target.value })}>{['Spouse', 'Child', 'Parent', 'Sibling', 'Other'].map(r => <option key={r}>{r}</option>)}</select></Field><Field label="Date of birth"><input type="date" value={d.dateOfBirth} onChange={e => setD({ ...d, dateOfBirth: e.target.value })} /></Field></div>
-        <label className="field inline"><input type="checkbox" checked={d.isBeneficiary} onChange={e => setD({ ...d, isBeneficiary: e.target.checked })} /> Nominate as beneficiary</label>
-        {d.isBeneficiary && <Field label="Share %"><input type="number" value={d.beneficiaryPercent} onChange={e => setD({ ...d, beneficiaryPercent: Number(e.target.value) })} /></Field>}
-        <button className="btn" disabled={!d.fullName || add.isPending} onClick={() => add.mutate()}>Add</button></div>
+      <div className="card"><h2>Medical cover</h2>{!cover.data?.length ? <Empty>Not enrolled.</Empty> : cover.data.map(c => <dl key={c.id} className="kv"><dt>Scheme</dt><dd>{c.scheme} ({c.provider})</dd><dt>Cover</dt><dd>{c.cover} since {fmt.date(c.startDate)}</dd><dt>Member no.</dt><dd className="mono">{c.membershipNumber ?? '—'}</dd></dl>)}</div>
+      <MyDependants employeeId={employeeId} />
       <div className="card"><h2>Company property with me</h2>{!assets.data?.filter(a => !a.returnedOn).length ? <Empty>None.</Empty> : <table><tbody>{assets.data.filter(a => !a.returnedOn).map(a => <tr key={a.assignmentId}><td className="mono">{a.tag}</td><td>{a.name}</td><td className="mono small">{a.serialNumber}</td><td>since {fmt.date(a.issuedOn)}</td></tr>)}</tbody></table>}</div>
     </div>
   )

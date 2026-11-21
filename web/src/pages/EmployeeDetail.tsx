@@ -78,6 +78,7 @@ export default function EmployeeDetailPage() {
           <div className="page-head" style={{ marginBottom: 8 }}><h2>Statutory identifiers</h2>{can(P.EmployeesWrite) && <button className="btn primary" onClick={() => setStatModal(true)}>Edit</button>}</div>
           <dl className="kv"><dt>KRA PIN</dt><dd className="mono">{d.statutory?.kraPin ?? <span className="badge danger">Missing</span>}</dd><dt>NSSF number</dt><dd className="mono">{d.statutory?.nssfNumber ?? <span className="badge warn">Missing</span>}</dd><dt>SHIF number</dt><dd className="mono">{d.statutory?.shifNumber ?? <span className="badge warn">Missing</span>}</dd>
             <dt>Disability exemption</dt><dd>{d.statutory?.hasDisabilityExemption ? `Yes — ${fmt.money(d.statutory.disabilityExemptAmount)} / month, expires ${fmt.date(d.statutory.disabilityExemptionExpiry)}` : 'No'}</dd>
+            <dt>NSSF before Ecosys</dt><dd>{fmt.money(d.statutory?.nssfOpeningBalance ?? 0)}</dd>
             <dt>Exempt from</dt><dd>{d.statutory?.statutoryExemptions?.length ? d.statutory.statutoryExemptions.join(', ') : 'None'}</dd></dl>
         </div>
       )}
@@ -192,7 +193,9 @@ function StatutoryModal({ employeeId, initial, onClose }: { employeeId: string; 
         <Field label="KRA PIN"><input value={f.kraPin ?? ''} onChange={e => set('kraPin', e.target.value)} placeholder="A000000000X" /></Field>
         <Field label="NSSF number"><input value={f.nssfNumber ?? ''} onChange={e => set('nssfNumber', e.target.value)} /></Field>
         <Field label="SHIF number"><input value={f.shifNumber ?? ''} onChange={e => set('shifNumber', e.target.value)} /></Field>
+        <Field label="NSSF contributions before Ecosys (KES)"><input type="number" min={0} step="0.01" value={f.nssfOpeningBalance ?? 0} onChange={e => set('nssfOpeningBalance', Number(e.target.value))} /></Field>
       </div>
+      <p className="small muted" style={{ marginTop: 0 }}>Employee plus employer NSSF contributions made before this employer's payroll moved here, from the NSSF statement. Payslips add this to the contributions recorded since, to show NSSF contributions to date.</p>
       <label className="field inline"><input type="checkbox" checked={f.hasDisabilityExemption} onChange={e => set('hasDisabilityExemption', e.target.checked)} /> Holds a KRA disability tax exemption certificate</label>
       {f.hasDisabilityExemption && <div className="form-grid">
         <Field label="Certificate number"><input value={f.disabilityExemptionCertificate ?? ''} onChange={e => set('disabilityExemptionCertificate', e.target.value)} /></Field>

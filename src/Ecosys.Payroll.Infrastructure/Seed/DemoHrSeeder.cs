@@ -108,7 +108,7 @@ public sealed partial class DemoDataSeeder
             };
             db.MedicalSchemes.Add(scheme);
             var brian = E("SL006");
-            var child = new Dependant { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = brian.Id, FullName = "Imani Mwangi", Relationship = "Child", DateOfBirth = new DateOnly(2019, 4, 2), IsBeneficiary = true, BeneficiaryPercent = 100 };
+            var child = new Dependant { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = brian.Id, FullName = "Imani Mwangi", Relationship = "Child", DateOfBirth = new DateOnly(2019, 4, 2), IsBeneficiary = true, BeneficiaryPercent = 100, Status = DependantStatus.Approved, ApprovedAt = DateTimeOffset.UtcNow };
             db.Dependants.Add(child);
             db.BenefitEnrolments.Add(new BenefitEnrolment { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = brian.Id, MedicalSchemeId = scheme.Id, Cover = "M+1", CoveredDependantIds = [child.Id], StartDate = new DateOnly(today.Year, 1, 1), MembershipNumber = "ABH-0042-118" });
         }

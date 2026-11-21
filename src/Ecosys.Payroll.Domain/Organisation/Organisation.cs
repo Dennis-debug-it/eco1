@@ -35,7 +35,7 @@ public sealed class PayrollSettings
 {
     /// <summary>
     /// One person may prepare, review and approve (small employers with a single payroll officer). Also lets them approve
-    /// their own post-approval adjustments and exit final dues. Self-approvals are flagged in the audit log.
+    /// their own post-approval adjustments, exit final dues and dependant/beneficiary records. Self-approvals are flagged in the audit log.
     /// </summary>
     public bool AllowPreparerToApprove { get; set; }
     /// <summary>A payroll reviewer signs off a submitted run before anyone can approve it.</summary>

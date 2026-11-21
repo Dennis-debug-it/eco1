@@ -52,6 +52,7 @@ public static class DependencyInjection
         services.AddScoped<DemoDataSeeder>();
         services.AddScoped<NotificationService>();
         services.AddScoped<LeaveBalanceService>();
+        services.AddScoped<PayslipFacts>();
         services.AddScoped<Services.Hr.HrAccess>();
         services.AddScoped<Services.Hr.FileStore>();
         services.AddScoped<Services.Hr.WorkCalendar>();
@@ -60,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Hr.SeparationService>();
         services.AddScoped<Services.Hr.PerformanceService>();
         services.AddScoped<Services.Hr.LearningService>();
+        services.AddScoped<Services.Hr.DependantService>();
         services.AddScoped<Services.Hr.HrOperationsService>();
         services.AddScoped<DataProtectionService>();
         services.AddScoped<Seed.TenantProvisioner>();

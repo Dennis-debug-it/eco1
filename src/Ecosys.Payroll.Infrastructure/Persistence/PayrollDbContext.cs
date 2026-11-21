@@ -212,6 +212,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
             e.HasIndex(x => new { x.EmployeeId, x.PeriodEnd });
             e.HasIndex(x => x.PayrollRunEmployeeId).IsUnique();
             e.HasOne<PayrollRun>().WithMany().HasForeignKey(x => x.PayrollRunId);
+            e.Property(x => x.LeaveBalances!).HasColumnType("jsonb").HasConversion(JsonConverter(() => new List<PayslipLeaveBalance>()), JsonComparer<List<PayslipLeaveBalance>>());
         });
         Scoped<PayrollAdjustment>(b, e => e.HasIndex(x => new { x.EmployeeId, x.Status }));
         TenantEntity<PayrollAuditLog>(b, e => { e.HasIndex(x => new { x.TenantId, x.OccurredAt }); e.HasIndex(x => new { x.EntityType, x.EntityId }); });

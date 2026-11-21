@@ -328,4 +328,80 @@ public class HrModulesTests(PayrollApiFixture app)
         Assert.Equal(12, a["trend"]!.AsArray().Count);
         Assert.NotNull(a["open"]!["cases"]); // HR administrators hold hr.cases
     }
+
+    private static MultipartFormDataContent Dependant(object meta, bool withDocument = true)
+    {
+        var content = new MultipartFormDataContent { { new StringContent(System.Text.Json.JsonSerializer.Serialize(meta, PayrollApiFixture.Json)), "meta" } };
+        if (withDocument) content.Add(new ByteArrayContent("%PDF-1.4\n%birth certificate\n"u8.ToArray()), "files", "birth-certificate.pdf");
+        return content;
+    }
+
+    [Fact]
+    public async Task Dependants_need_documents_then_verification_and_a_second_approver()
+    {
+        var brian = await app.LoginAsync("brian.mwangi@demo.ecosys");
+        var hr = await app.LoginAsync("hr@demo.ecosys");
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var me = (await brian.GetJson($"{B}/auth/me"))["employeeId"].Id();
+
+        // A supporting document is required.
+        Assert.Equal(HttpStatusCode.BadRequest, (await brian.PostAsync($"{B}/benefits/dependants", Dependant(new { employeeId = me, fullName = "Wanjiku Mwangi", relationship = "Spouse" }, withDocument: false))).StatusCode);
+        // Imani already holds an approved 100% share, so another beneficiary is refused up front.
+        Assert.Equal(HttpStatusCode.BadRequest, (await brian.PostAsync($"{B}/benefits/dependants", Dependant(new { employeeId = me, fullName = "Wanjiku Mwangi", relationship = "Spouse", isBeneficiary = true, beneficiaryPercent = 10 }))).StatusCode);
+
+        var created = await (await brian.PostAsync($"{B}/benefits/dependants", Dependant(new { employeeId = me, fullName = "Wanjiku Mwangi", relationship = "Spouse", dateOfBirth = "1993-06-14", idNumber = "29876543" }))).Json(HttpStatusCode.Created);
+        var id = created["id"].Id();
+        Assert.Equal("Submitted", created["status"].Str());
+        var fileId = created["documents"]![0]!["id"].Id();
+        Assert.True(await app.WithDbAsync(null, db => db.NotificationMessages.AnyAsync(m => m.Template == "benefits.dependant.submitted" && m.EntityId == id)));
+
+        // Sequence: the employee can't act on it; approval before verification is refused; the verifier can't also approve.
+        Assert.Equal(HttpStatusCode.Forbidden, (await brian.PostAsync($"{B}/benefits/dependants/{id}/verify", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsync($"{B}/benefits/dependants/{id}/approve", null)).StatusCode);
+        Assert.Equal("Verified", (await hr.PostJson($"{B}/benefits/dependants/{id}/verify"))["status"].Str());
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.PostAsync($"{B}/benefits/dependants/{id}/approve", null)).StatusCode);
+        Assert.Equal("Approved", (await admin.PostJson($"{B}/benefits/dependants/{id}/approve"))["status"].Str());
+
+        var mine = (await brian.GetJson($"{B}/benefits/dependants/{me}")).AsArray().First(d => d!["id"].Id() == id)!;
+        Assert.Equal("Approved", mine["status"].Str());
+        Assert.Equal("Amina Hassan", mine["verifiedBy"].Str());
+        Assert.DoesNotContain("29876543", mine.ToJsonString()); // ID number masked
+        // Documents: the employee and HR can open them; others cannot.
+        Assert.Equal(HttpStatusCode.OK, (await brian.GetAsync($"{B}/files/{fileId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await hr.GetAsync($"{B}/files/{fileId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await app.LoginAsync("approver@demo.ecosys")).GetAsync($"{B}/files/{fileId}")).StatusCode);
+        // Only HR changes an approved record.
+        Assert.Equal(HttpStatusCode.Forbidden, (await brian.DeleteAsync($"{B}/benefits/dependants/{id}")).StatusCode);
+
+        // Rejection goes back to the employee with the reason.
+        var second = (await (await brian.PostAsync($"{B}/benefits/dependants", Dependant(new { employeeId = me, fullName = "Baraka Mwangi", relationship = "Child" }))).Json(HttpStatusCode.Created))["id"].Id();
+        Assert.Equal(HttpStatusCode.BadRequest, (await hr.PostAsJsonAsync($"{B}/benefits/dependants/{second}/reject", new { reason = "" })).StatusCode);
+        Assert.Equal("Rejected", (await hr.PostJson($"{B}/benefits/dependants/{second}/reject", new { reason = "The certificate is for a different child" }))["status"].Str());
+        Assert.True(await app.WithDbAsync(null, db => db.NotificationMessages.AnyAsync(m => m.Template == "benefits.dependant.rejected" && m.EntityId == second)));
+        Assert.Equal(HttpStatusCode.NoContent, (await brian.DeleteAsync($"{B}/benefits/dependants/{second}")).StatusCode);
+
+        // HR can't approve their own family.
+        var amina = await app.WithDbAsync(null, db => db.Users.Where(u => u.Email == "hr@demo.ecosys").Select(u => u.EmployeeId!.Value).FirstAsync());
+        var own = (await (await hr.PostAsync($"{B}/benefits/dependants", Dependant(new { employeeId = amina, fullName = "Juma Hassan", relationship = "Spouse" }))).Json(HttpStatusCode.Created))["id"].Id();
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.PostAsync($"{B}/benefits/dependants/{own}/verify", null)).StatusCode);
+        await admin.PostJson($"{B}/benefits/dependants/{own}/verify");
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.PostAsync($"{B}/benefits/dependants/{own}/approve", null)).StatusCode);
+
+        var queue = (await hr.GetJson($"{B}/benefits/dependants")).AsArray();
+        Assert.Contains(queue, q => q!["dependant"]!["id"].Id() == own);
+        Assert.DoesNotContain(queue, q => q!["dependant"]!["id"].Id() == id); // approved ones leave the queue
+    }
+
+    [Fact]
+    public async Task Employees_do_not_see_what_medical_cover_costs()
+    {
+        var brian = await app.LoginAsync("brian.mwangi@demo.ecosys");
+        var me = (await brian.GetJson($"{B}/auth/me"))["employeeId"].Id();
+        var cover = (await brian.GetJson($"{B}/benefits/enrolments?employeeId={me}")).AsArray();
+        Assert.NotEmpty(cover);
+        Assert.All(cover, c => { Assert.Null(c!["premiumByCover"]); Assert.Null(c["employeeSharePercent"]); });
+        Assert.Equal(HttpStatusCode.Forbidden, (await brian.GetAsync($"{B}/benefits/schemes")).StatusCode);
+        var hr = await app.LoginAsync("hr@demo.ecosys");
+        Assert.NotNull((await hr.GetJson($"{B}/benefits/enrolments?employeeId={me}"))[0]!["premiumByCover"]);
+    }
 }

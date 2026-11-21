@@ -129,7 +129,10 @@ public partial class PayrollDbContext
         Scoped<Dependant>(b, e =>
         {
             e.HasIndex(x => x.EmployeeId);
+            e.HasIndex(x => new { x.TenantId, x.Status });
             e.Property(x => x.IdNumber).HasConversion(encryptor.Converter());
+            e.Property(x => x.Phone).HasConversion(encryptor.Converter());
+            e.Property(x => x.DocumentFileIds).HasColumnType("jsonb");
         });
         Scoped<MedicalScheme>(b, e => JsonColumn(e.Property(x => x.PremiumByCover), () => new Dictionary<string, decimal>()));
         Scoped<BenefitEnrolment>(b, e => { e.HasIndex(x => x.EmployeeId); e.Property(x => x.CoveredDependantIds).HasColumnType("jsonb"); e.HasOne<MedicalScheme>().WithMany().HasForeignKey(x => x.MedicalSchemeId); });

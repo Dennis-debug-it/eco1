@@ -60,6 +60,7 @@ public static class HrEndpoints
                 nameof(ExpenseClaim) => Permissions.ExpensesFinance,
                 nameof(LeaveRequest) => Permissions.LeaveApprove,
                 nameof(TrainingEnrolment) => Permissions.HrLearning,
+                nameof(Dependant) => Permissions.HrBenefits,
                 _ => Permissions.HrDocuments,
             };
             var allowed = ctx.Has(permission) || (f.EmployeeId is { } e && (access.IsSelf(e) && f.OwnerType != nameof(HrCase) || await access.IsLineManagerOfAsync(e, ct) && f.OwnerType is nameof(LeaveRequest) or nameof(ExpenseClaim)));
@@ -351,34 +352,12 @@ public static class HrEndpoints
     private static void MapBenefits(RouteGroupBuilder api)
     {
         var g = api.MapGroup("/benefits").RequireAuthorization();
-        g.MapGet("/dependants/{employeeId:guid}", async (Guid employeeId, HrAccess access, PayrollDbContext db, CancellationToken ct) =>
+        MapDependants(g);
+        g.MapGet("/schemes", async (ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
-            await access.RequireSelfManagerOrAsync(employeeId, Permissions.HrBenefits, ct);
-            return Results.Ok(await db.Dependants.Where(d => d.EmployeeId == employeeId).OrderBy(d => d.CreatedAt).ToListAsync(ct));
+            ctx.Require(Permissions.HrBenefits); // premiums are the employer's cost
+            return Results.Ok(await db.MedicalSchemes.OrderBy(s => s.Name).ToListAsync(ct));
         });
-        g.MapPost("/dependants", async (Dependant body, ITenantContext ctx, HrAccess access, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
-        {
-            if (!access.IsSelf(body.EmployeeId)) ctx.Require(Permissions.HrBenefits);
-            var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == body.EmployeeId, ct) ?? throw new NotFoundException("Employee", body.EmployeeId);
-            if (string.IsNullOrWhiteSpace(body.FullName) || string.IsNullOrWhiteSpace(body.Relationship)) throw new DomainException("Name and relationship are required.", "VALIDATION");
-            if (body.BeneficiaryPercent is < 0 or > 100) throw new DomainException("Beneficiary share must be 0–100%.", "VALIDATION");
-            var existingShare = await db.Dependants.Where(d => d.EmployeeId == emp.Id && d.IsBeneficiary).SumAsync(d => d.BeneficiaryPercent, ct);
-            if (body.IsBeneficiary && existingShare + body.BeneficiaryPercent > 100) throw new DomainException($"Beneficiary shares would exceed 100% (currently {existingShare:0.##}%).", "VALIDATION");
-            body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.LegalEntityId = emp.LegalEntityId;
-            db.Dependants.Add(body);
-            audit.Record("benefits.dependant.added", nameof(Dependant), body.Id, new { body.Relationship, body.IsBeneficiary }, emp.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Created($"/api/payroll/benefits/dependants/{body.Id}", body);
-        });
-        g.MapDelete("/dependants/{id:guid}", async (Guid id, ITenantContext ctx, HrAccess access, PayrollDbContext db, CancellationToken ct) =>
-        {
-            var d = await db.Dependants.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Dependant), id);
-            if (!access.IsSelf(d.EmployeeId)) ctx.Require(Permissions.HrBenefits);
-            db.Dependants.Remove(d);
-            await db.SaveChangesAsync(ct);
-            return Results.NoContent();
-        });
-        g.MapGet("/schemes", async (PayrollDbContext db, CancellationToken ct) => Results.Ok(await db.MedicalSchemes.OrderBy(s => s.Name).ToListAsync(ct)));
         g.MapPost("/schemes", async (MedicalScheme body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
         {
             ctx.Require(Permissions.HrBenefits); ctx.RequireLegalEntity(body.LegalEntityId);
@@ -394,9 +373,12 @@ public static class HrEndpoints
             var q = db.BenefitEnrolments.AsQueryable();
             if (employeeId is { } e) { await access.RequireSelfManagerOrAsync(e, Permissions.HrBenefits, ct); q = q.Where(x => x.EmployeeId == e); }
             else ctx.Require(Permissions.HrBenefits);
-            return Results.Ok(await q.Join(db.MedicalSchemes, b => b.MedicalSchemeId, s => s.Id, (b, s) => new { b, s })
+            var rows = await q.Join(db.MedicalSchemes, b => b.MedicalSchemeId, s => s.Id, (b, s) => new { b, s })
                 .Join(db.Employees, x => x.b.EmployeeId, e => e.Id, (x, e) => new { x.b.Id, x.b.EmployeeId, employee = e.FirstName + " " + e.LastName, e.EmployeeNumber, scheme = x.s.Name, x.s.Provider, x.b.Cover, x.b.StartDate, x.b.EndDate, x.b.MembershipNumber, x.b.CoveredDependantIds, premiumByCover = x.s.PremiumByCover, x.s.EmployeeSharePercent })
-                .ToListAsync(ct));
+                .ToListAsync(ct);
+            // Premiums are what the cover costs the employer: for HR only. Employees and managers see the cover itself.
+            if (ctx.Has(Permissions.HrBenefits)) return Results.Ok(rows);
+            return Results.Ok(rows.Select(r => new { r.Id, r.EmployeeId, r.employee, r.EmployeeNumber, r.scheme, r.Provider, r.Cover, r.StartDate, r.EndDate, r.MembershipNumber, r.CoveredDependantIds }));
         });
         g.MapPost("/enrolments", async (BenefitEnrolment body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
         {
@@ -404,8 +386,8 @@ public static class HrEndpoints
             var scheme = await db.MedicalSchemes.FirstOrDefaultAsync(s => s.Id == body.MedicalSchemeId, ct) ?? throw new NotFoundException(nameof(MedicalScheme), body.MedicalSchemeId);
             var emp = await db.Employees.FirstOrDefaultAsync(e => e.Id == body.EmployeeId && e.LegalEntityId == scheme.LegalEntityId, ct) ?? throw new NotFoundException("Employee", body.EmployeeId);
             if (!scheme.PremiumByCover.ContainsKey(body.Cover)) throw new DomainException($"Cover must be one of: {string.Join(", ", scheme.PremiumByCover.Keys)}.", "VALIDATION");
-            var deps = await db.Dependants.Where(d => d.EmployeeId == emp.Id).Select(d => d.Id).ToListAsync(ct);
-            if (body.CoveredDependantIds.Except(deps).Any()) throw new DomainException("Covered dependants must be registered to the employee.", "VALIDATION");
+            var deps = await db.Dependants.Where(d => d.EmployeeId == emp.Id && d.Status == DependantStatus.Approved).Select(d => d.Id).ToListAsync(ct);
+            if (body.CoveredDependantIds.Except(deps).Any()) throw new DomainException("Covered dependants must be registered to the employee and approved.", "VALIDATION");
             if (await db.BenefitEnrolments.AnyAsync(b => b.EmployeeId == emp.Id && b.MedicalSchemeId == scheme.Id && (b.EndDate == null || b.EndDate >= body.StartDate), ct)) throw new DomainException("Already enrolled; end the current enrolment first.", "DUPLICATE");
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.LegalEntityId = emp.LegalEntityId;
             db.BenefitEnrolments.Add(body);
@@ -422,6 +404,90 @@ public static class HrEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(b);
         });
+    }
+
+    public sealed record DependantDecision(string? Reason);
+
+    /// <summary>Dependants and beneficiaries: submit with documents → HR verifies → a second person approves.</summary>
+    private static void MapDependants(RouteGroupBuilder g)
+    {
+        static object View(Dependant d, IReadOnlyDictionary<Guid, string> fileNames, IReadOnlyDictionary<Guid, string> users) => new
+        {
+            d.Id, d.EmployeeId, d.FullName, d.Relationship, d.DateOfBirth, idNumber = FieldEncryptor.Mask(d.IdNumber), phone = FieldEncryptor.Mask(d.Phone), d.IsBeneficiary, d.BeneficiaryPercent,
+            status = d.Status.ToString(), submittedAt = d.CreatedAt, d.VerifiedAt, verifiedBy = d.VerifiedBy is { } v ? users.GetValueOrDefault(v) : null,
+            d.ApprovedAt, approvedBy = d.ApprovedBy is { } a ? users.GetValueOrDefault(a) : null, d.RejectedAt, d.RejectionReason,
+            submittedBy = d.CreatedBy is { } c ? users.GetValueOrDefault(c) : null,
+            documents = d.DocumentFileIds.Select(id => new { id, fileName = fileNames.GetValueOrDefault(id) ?? "Document" }),
+        };
+        static async Task<(Dictionary<Guid, string> Files, Dictionary<Guid, string> Users)> NamesAsync(PayrollDbContext db, IReadOnlyCollection<Dependant> ds, CancellationToken ct)
+        {
+            var fileIds = ds.SelectMany(d => d.DocumentFileIds).Distinct().ToList();
+            var userIds = ds.SelectMany(d => new[] { d.CreatedBy, d.VerifiedBy, d.ApprovedBy }).Where(x => x != null).Select(x => x!.Value).Distinct().ToList();
+            return (await db.StoredFiles.Where(f => fileIds.Contains(f.Id)).ToDictionaryAsync(f => f.Id, f => f.FileName, ct),
+                    await db.Users.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct));
+        }
+        static async Task<(DependantRequest Meta, List<UploadedFile> Files)> ReadFormAsync(HttpRequest http, CancellationToken ct)
+        {
+            if (!http.HasFormContentType) throw new DomainException("Send the details as a form with the supporting documents attached.", "VALIDATION");
+            var form = await http.ReadFormAsync(ct);
+            var meta = form.ContainsKey("meta")
+                ? System.Text.Json.JsonSerializer.Deserialize<DependantRequest>(form["meta"].ToString(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
+                : null;
+            var files = new List<UploadedFile>();
+            foreach (var f in form.Files) files.Add(new UploadedFile(f.FileName, await ReadAsync(f, ct)));
+            return (meta!, files);
+        }
+
+        // One employee's records: the employee themself or HR (not line managers: family details are private).
+        g.MapGet("/dependants/{employeeId:guid}", async (Guid employeeId, ITenantContext ctx, HrAccess access, PayrollDbContext db, CancellationToken ct) =>
+        {
+            if (!access.IsSelf(employeeId)) ctx.Require(Permissions.HrBenefits);
+            var ds = await db.Dependants.Where(d => d.EmployeeId == employeeId).OrderBy(d => d.CreatedAt).ToListAsync(ct);
+            var (files, users) = await NamesAsync(db, ds, ct);
+            return Results.Ok(ds.Select(d => View(d, files, users)));
+        });
+
+        // HR queue. status: pending (default: awaiting verification or approval), approved, rejected or all.
+        g.MapGet("/dependants", async (string? status, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
+        {
+            ctx.Require(Permissions.HrBenefits);
+            var q = db.Dependants.AsQueryable();
+            if (ctx.LegalEntityIds.Count > 0) q = q.Where(d => ctx.LegalEntityIds.Contains(d.LegalEntityId));
+            q = (status ?? "pending").ToLowerInvariant() switch
+            {
+                "approved" => q.Where(d => d.Status == DependantStatus.Approved),
+                "rejected" => q.Where(d => d.Status == DependantStatus.Rejected),
+                "all" => q,
+                _ => q.Where(d => d.Status == DependantStatus.Submitted || d.Status == DependantStatus.Verified),
+            };
+            var ds = await q.OrderBy(d => d.CreatedAt).Take(500).ToListAsync(ct);
+            var (files, users) = await NamesAsync(db, ds, ct);
+            var empIds = ds.Select(d => d.EmployeeId).Distinct().ToList();
+            var emps = await db.Employees.Where(e => empIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id, e => new { name = e.FirstName + " " + e.LastName, e.EmployeeNumber }, ct);
+            return Results.Ok(ds.Select(d => new { dependant = View(d, files, users), employee = emps.GetValueOrDefault(d.EmployeeId)?.name, employeeNumber = emps.GetValueOrDefault(d.EmployeeId)?.EmployeeNumber }));
+        });
+
+        g.MapPost("/dependants", async (HttpRequest http, DependantService svc, PayrollDbContext db, CancellationToken ct) =>
+        {
+            var (meta, files) = await ReadFormAsync(http, ct);
+            if (meta is null) throw new DomainException("Missing the dependant's details.", "VALIDATION");
+            var d = await svc.SubmitAsync(meta, files, ct);
+            var (f, u) = await NamesAsync(db, [d], ct);
+            return Results.Created($"/api/payroll/benefits/dependants/{d.Id}", View(d, f, u));
+        }).DisableAntiforgery();
+
+        g.MapPost("/dependants/{id:guid}/documents", async (Guid id, HttpRequest http, DependantService svc, PayrollDbContext db, CancellationToken ct) =>
+        {
+            var (_, files) = await ReadFormAsync(http, ct);
+            var d = await svc.AddDocumentsAsync(id, files, ct);
+            var (f, u) = await NamesAsync(db, [d], ct);
+            return Results.Ok(View(d, f, u));
+        }).DisableAntiforgery();
+
+        g.MapPost("/dependants/{id:guid}/verify", async (Guid id, DependantService svc, CancellationToken ct) => Results.Ok(new { (await svc.VerifyAsync(id, ct)).Status }));
+        g.MapPost("/dependants/{id:guid}/approve", async (Guid id, DependantService svc, CancellationToken ct) => Results.Ok(new { (await svc.ApproveAsync(id, ct)).Status }));
+        g.MapPost("/dependants/{id:guid}/reject", async (Guid id, DependantDecision body, DependantService svc, CancellationToken ct) => Results.Ok(new { (await svc.RejectAsync(id, body.Reason ?? "", ct)).Status }));
+        g.MapDelete("/dependants/{id:guid}", async (Guid id, DependantService svc, CancellationToken ct) => { await svc.RemoveAsync(id, ct); return Results.NoContent(); });
     }
 
     // =====================================================================================

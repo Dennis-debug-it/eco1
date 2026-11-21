@@ -53,6 +53,8 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - Cross-tenant billing work belongs in `BillingService` (tenant filter off). Write its audit rows to the customer's tenant.
   - Call `EntitlementCache.Invalidate` after changing a subscription in a request.
   - The operator console (`/api/platform`) never returns employee or payroll data.
+- **Payslips** carry balances captured at issue (`Payslip.NssfContributionsToDate`, `LeaveBalances`, from `PayslipFacts`) so reprints match. Never show the employer's total cost or medical premiums to employees.
+- **Dependants and beneficiaries** change only through `DependantService`: documents, then verify, then approve by a different person. Only approved records count (medical cover, death-in-service dues).
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout

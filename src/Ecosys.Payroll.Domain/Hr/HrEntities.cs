@@ -515,6 +515,13 @@ public class Position : LegalEntityScopedEntity
 // Benefits
 // =====================================================================================
 
+/// <summary>Submitted → Verified (HR checks the documents) → Approved, by two different people. Rejected can be resubmitted as a new record.</summary>
+public enum DependantStatus { Submitted, Verified, Approved, Rejected }
+
+/// <summary>
+/// A dependant (medical cover) and/or nominated beneficiary (death-in-service dues, insurance). Takes effect only once
+/// approved: HR verifies the supporting documents (ID, birth or marriage certificate), then a second person approves.
+/// </summary>
 public class Dependant : LegalEntityScopedEntity
 {
     public Guid EmployeeId { get; set; }
@@ -522,8 +529,20 @@ public class Dependant : LegalEntityScopedEntity
     public required string Relationship { get; set; }
     public DateOnly? DateOfBirth { get; set; }
     public string? IdNumber { get; set; }
+    public string? Phone { get; set; }
     public bool IsBeneficiary { get; set; }
     public decimal BeneficiaryPercent { get; set; }
+
+    public DependantStatus Status { get; set; } = DependantStatus.Submitted;
+    /// <summary>Supporting documents in <c>stored_files</c> (owner type Dependant), served through /files/{id}.</summary>
+    public List<Guid> DocumentFileIds { get; set; } = [];
+    public Guid? VerifiedBy { get; set; }
+    public DateTimeOffset? VerifiedAt { get; set; }
+    public Guid? ApprovedBy { get; set; }
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public Guid? RejectedBy { get; set; }
+    public DateTimeOffset? RejectedAt { get; set; }
+    public string? RejectionReason { get; set; }
 }
 
 public class MedicalScheme : LegalEntityScopedEntity

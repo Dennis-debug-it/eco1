@@ -187,7 +187,10 @@ public static class EmployeeEndpoints
             s.KraPin = body.KraPin; s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
             s.HasDisabilityExemption = body.HasDisabilityExemption; s.DisabilityExemptionCertificate = body.DisabilityExemptionCertificate; s.DisabilityExemptAmount = body.DisabilityExemptAmount;
             s.DisabilityExemptionExpiry = body.DisabilityExemptionExpiry; s.StatutoryExemptions = body.StatutoryExemptions;
-            audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions }, e.LegalEntityId);
+            if (body.NssfOpeningBalance < 0) throw new DomainException("NSSF contributions before Ecosys cannot be negative.", "VALIDATION");
+            var openingChanged = s.NssfOpeningBalance != body.NssfOpeningBalance;
+            s.NssfOpeningBalance = body.NssfOpeningBalance;
+            audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions, nssfOpeningBalanceChanged = openingChanged }, e.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Ok(s);
         });
