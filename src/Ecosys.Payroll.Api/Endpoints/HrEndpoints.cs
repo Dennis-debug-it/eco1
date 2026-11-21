@@ -61,11 +61,13 @@ public static class HrEndpoints
                 nameof(LeaveRequest) => Permissions.LeaveApprove,
                 nameof(TrainingEnrolment) => Permissions.HrLearning,
                 nameof(Dependant) => Permissions.HrBenefits,
+                nameof(OfferLetter) => Permissions.HrRecruitment,
                 _ => Permissions.HrDocuments,
             };
             var allowed = ctx.Has(permission) || (f.EmployeeId is { } e && (access.IsSelf(e) && f.OwnerType != nameof(HrCase) || await access.IsLineManagerOfAsync(e, ct) && f.OwnerType is nameof(LeaveRequest) or nameof(ExpenseClaim)));
             if (f.OwnerType == nameof(EmployeeDocument) && access.IsSelf(f.EmployeeId ?? Guid.Empty) && !ctx.Has(permission))
                 allowed = await db.EmployeeDocuments.AnyAsync(d => d.StoredFileId == f.Id && d.VisibleToEmployee, ct);
+            if (f.OwnerType == nameof(OfferLetter) && !ctx.Has(Permissions.SalaryRead)) allowed = false; // the letter states the salary
             if (!allowed) throw new ForbiddenException("You do not have access to this file.");
             audit.Record("file.downloaded", "StoredFile", f.Id, new { f.OwnerType, f.FileName });
             await db.SaveChangesAsync(ct);
@@ -174,18 +176,24 @@ public static class HrEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(a);
         });
-        g.MapPost("/applications/{id:guid}/offer", async (Guid id, OfferBody body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        g.MapPost("/applications/{id:guid}/offer", async (Guid id, OfferBody body, ITenantContext ctx, PayrollDbContext db, AuditService audit, OfferLetterService letters, CancellationToken ct) =>
         {
             ctx.Require(Permissions.HrRecruitment); ctx.Require(Permissions.SalaryWrite);
             var a = await db.JobApplications.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(JobApplication), id);
             var r = await db.JobRequisitions.FirstAsync(x => x.Id == a.JobRequisitionId, ct);
             if (body.Status is not ("Draft" or "Sent" or "Accepted" or "Declined")) throw new DomainException("Offer status must be Draft, Sent, Accepted or Declined.", "VALIDATION");
             if (r.SalaryMax is { } max && body.Basic > max) throw new DomainException($"Offer exceeds the approved range (max {max:N0}).", "VALIDATION");
+            // A letter already with the candidate fixes the terms: changing them needs the letter withdrawn first.
+            var outLetter = await db.OfferLetters.Where(l => l.JobApplicationId == id && (l.Status == OfferLetterStatus.Sent || l.Status == OfferLetterStatus.Accepted)).OrderByDescending(l => l.Version).FirstOrDefaultAsync(ct);
+            if (outLetter is not null && (outLetter.Basic != body.Basic || outLetter.StartDate != body.StartDate || outLetter.JobTitle != (body.JobTitle ?? r.Title)))
+                throw new InvalidStateException($"Offer letter {outLetter.Reference} with different terms has been {outLetter.Status.ToString().ToLowerInvariant()}. Withdraw it before changing the offer.");
+            if (outLetter is { Status: OfferLetterStatus.Sent } && body.Status is "Accepted" or "Declined") await letters.RecordHrResponseAsync(a, body.Status == "Accepted", ct);
             a.OfferBasic = body.Basic; a.OfferStartDate = body.StartDate; a.OfferJobTitle = body.JobTitle; a.OfferStatus = body.Status; a.Stage = ApplicationStage.Offer;
             audit.Record("recruitment.offer", nameof(JobApplication), id, new { body.Status, body.StartDate }, a.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Ok(a);
         });
+        MapOfferLetters(g);
         g.MapPost("/applications/{id:guid}/hire", async (Guid id, HireRequest body, HrOperationsService svc, CancellationToken ct) =>
         {
             var e = await svc.HireAsync(id, body, ct);
@@ -418,6 +426,60 @@ public static class HrEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(b);
         });
+    }
+
+    public sealed record DraftOfferBody(bool Restart = false);
+    public sealed record SendOfferBody(bool EmailLink = true);
+    public sealed record WithdrawOfferBody(string? Reason);
+
+    private static async Task<object> LetterView(OfferLetter l, OfferLetterService svc, CancellationToken ct)
+    {
+        var (subject, body, unfilled) = await svc.PreviewAsync(l, ct);
+        return new
+        {
+            l.Id, l.JobApplicationId, l.Version, l.Reference, status = l.Status.ToString(), l.Subject, l.Body, l.SignatoryName, l.SignatoryTitle, l.Basic, l.StartDate, l.JobTitle, l.AcceptBy,
+            l.SentAt, l.SentBy, l.SentFileId, l.AcceptedFileId, linkSent = l.ResponseTokenHash != null, l.RespondedAt, l.ResponseName, l.RecordedByHr, l.DeclineReason,
+            preview = new { subject, body, unfilled },
+        };
+    }
+
+    /// <summary>Offer letters: template, draft, edit, preview PDF, send (with an optional accept/decline link) and withdraw.</summary>
+    private static void MapOfferLetters(RouteGroupBuilder g)
+    {
+        g.MapGet("/offer-template/{legalEntityId:guid}", async (Guid legalEntityId, OfferLetterService svc, CancellationToken ct) =>
+        {
+            var t = await svc.TemplateAsync(legalEntityId, ct);
+            return Results.Ok(new { template = t, placeholders = OfferLetterService.Placeholders.Select(p => new { key = p.Key, meaning = p.Meaning }), standardSubject = OfferLetterService.DefaultSubject, standardBody = OfferLetterService.StandardBody });
+        });
+        g.MapPut("/offer-template/{legalEntityId:guid}", async (Guid legalEntityId, OfferTemplateRequest body, OfferLetterService svc, CancellationToken ct) =>
+            Results.Ok(await svc.SaveTemplateAsync(legalEntityId, body, ct)));
+        g.MapGet("/applications/{id:guid}/offer-letters", async (Guid id, OfferLetterService svc, CancellationToken ct) =>
+        {
+            var list = new List<object>();
+            foreach (var l in await svc.ForApplicationAsync(id, ct)) list.Add(await LetterView(l, svc, ct));
+            return Results.Ok(list);
+        });
+        g.MapPost("/applications/{id:guid}/offer-letter", async (Guid id, DraftOfferBody body, OfferLetterService svc, CancellationToken ct) =>
+            Results.Ok(await LetterView(await svc.DraftAsync(id, body.Restart, ct), svc, ct)));
+        g.MapPut("/offer-letters/{id:guid}", async (Guid id, OfferDraftEdit body, OfferLetterService svc, CancellationToken ct) =>
+            Results.Ok(await LetterView(await svc.UpdateDraftAsync(id, body, ct), svc, ct)));
+        g.MapGet("/offer-letters/{id:guid}/pdf", async (Guid id, ITenantContext ctx, PayrollDbContext db, OfferLetterService svc, CancellationToken ct) =>
+        {
+            ctx.Require(Permissions.HrRecruitment); ctx.Require(Permissions.SalaryRead);
+            var l = await db.OfferLetters.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(OfferLetter), id);
+            ctx.RequireLegalEntity(l.LegalEntityId);
+            // Sent letters are served exactly as sent (or as accepted); drafts are rendered fresh.
+            var stored = l.AcceptedFileId ?? l.SentFileId;
+            if (stored is { } fid && await db.StoredFiles.FirstOrDefaultAsync(f => f.Id == fid, ct) is { } f) return Results.File(f.Content, "application/pdf", f.FileName);
+            return Results.File(await svc.PdfAsync(l, ct), "application/pdf", $"{l.Reference}-draft.pdf");
+        });
+        g.MapPost("/offer-letters/{id:guid}/send", async (Guid id, SendOfferBody body, OfferLetterService svc, CancellationToken ct) =>
+        {
+            var (l, link) = await svc.SendAsync(id, body.EmailLink, ct);
+            return Results.Ok(new { letter = await LetterView(l, svc, ct), link });
+        });
+        g.MapPost("/offer-letters/{id:guid}/withdraw", async (Guid id, WithdrawOfferBody body, OfferLetterService svc, CancellationToken ct) =>
+            Results.Ok(await LetterView(await svc.WithdrawAsync(id, body.Reason ?? "", ct), svc, ct)));
     }
 
     public sealed record DependantDecision(string? Reason);

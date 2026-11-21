@@ -415,6 +415,57 @@ public class JobApplication : LegalEntityScopedEntity
     public bool ConsentToRetain { get; set; }
 }
 
+/// <summary>
+/// The company's offer letter wording, with {placeholders} filled from the offer. One per legal entity, created from
+/// a Kenyan default on first use. Plain text: a blank line starts a paragraph, "## " a heading, "- " a bullet.
+/// </summary>
+public class OfferLetterTemplate : LegalEntityScopedEntity
+{
+    public required string Subject { get; set; }
+    public required string Body { get; set; }
+    public string? SignatoryName { get; set; }
+    public string? SignatoryTitle { get; set; }
+    public int ProbationMonths { get; set; } = 3;
+    /// <summary>Days the candidate has to respond, from the day the letter is sent.</summary>
+    public int AcceptWithinDays { get; set; } = 7;
+}
+
+public enum OfferLetterStatus { Draft, Sent, Accepted, Declined, Withdrawn, Expired }
+
+/// <summary>
+/// One version of an offer letter to a candidate. Drafted from the template, edited by HR, then sent: the PDF as sent is
+/// kept, and the candidate can accept or decline through a private link. The key terms are copied in so a later change to
+/// the offer cannot silently disagree with the letter.
+/// </summary>
+public class OfferLetter : LegalEntityScopedEntity
+{
+    public Guid JobApplicationId { get; set; }
+    public int Version { get; set; } = 1;
+    public required string Reference { get; set; }
+    public required string Subject { get; set; }
+    public required string Body { get; set; }
+    public string? SignatoryName { get; set; }
+    public string? SignatoryTitle { get; set; }
+    public decimal Basic { get; set; }
+    public DateOnly StartDate { get; set; }
+    public required string JobTitle { get; set; }
+    public DateOnly AcceptBy { get; set; }
+    public OfferLetterStatus Status { get; set; } = OfferLetterStatus.Draft;
+    public DateTimeOffset? SentAt { get; set; }
+    public string? SentBy { get; set; }
+    /// <summary>The PDF as sent, and the PDF with the acceptance recorded on it.</summary>
+    public Guid? SentFileId { get; set; }
+    public Guid? AcceptedFileId { get; set; }
+    /// <summary>SHA-256 of the candidate's response link token. Null when the letter was not sent with a link.</summary>
+    public string? ResponseTokenHash { get; set; }
+    public DateTimeOffset? RespondedAt { get; set; }
+    /// <summary>Name the candidate typed to accept (their electronic signature), or the HR user who recorded a paper response.</summary>
+    public string? ResponseName { get; set; }
+    public string? ResponseIp { get; set; }
+    public bool RecordedByHr { get; set; }
+    public string? DeclineReason { get; set; }
+}
+
 public sealed class InterviewRecord
 {
     public DateTimeOffset ScheduledAt { get; set; }

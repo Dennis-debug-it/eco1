@@ -17,7 +17,7 @@ public sealed record HireRequest(string EmployeeNumber, Guid PayrollGroupId, Gui
 public sealed record CaseStep(CaseStatus To, string Note, DateOnly? ShowCauseIssuedOn = null, DateOnly? ResponseDueOn = null, DateTimeOffset? HearingAt = null, bool? HearingHeld = null, string? Companion = null, CaseOutcome? Outcome = null);
 
 /// <summary>Recruitment hire, disciplinary/grievance case rules and expense claims.</summary>
-public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tenant, HrAccess access, AuditService audit, SystemComponents components, Saas.SubscriptionService plan)
+public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tenant, HrAccess access, AuditService audit, SystemComponents components, Saas.SubscriptionService plan, OfferLetterService offers)
 {
     // ------------------------------------------------------------------ Recruitment
 
@@ -51,6 +51,7 @@ public sealed class HrOperationsService(PayrollDbContext db, ITenantContext tena
         app.Stage = ApplicationStage.Hired; app.HiredEmployeeId = emp.Id;
         var hired = await db.JobApplications.CountAsync(a => a.JobRequisitionId == reqn.Id && a.Stage == ApplicationStage.Hired, ct) + 1;
         if (hired >= reqn.Openings) reqn.Status = RequisitionStatus.Filled;
+        await offers.FileWithEmployeeAsync(app.Id, emp.Id, ct); // the accepted offer letter joins the employee's documents
         audit.Record("recruitment.hired", nameof(JobApplication), app.Id, new { emp.EmployeeNumber, reqn.Reference, start }, reqn.LegalEntityId);
         await db.SaveChangesAsync(ct);
         return emp;

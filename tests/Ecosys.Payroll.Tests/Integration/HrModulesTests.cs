@@ -437,4 +437,83 @@ public class HrModulesTests(PayrollApiFixture app)
         body["reportsToPositionId"] = under["id"]!.DeepClone();
         Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/positions/{md["id"].Id()}", body, PayrollApiFixture.Json)).StatusCode);
     }
+
+    [Fact]
+    public async Task Offer_letter_is_drafted_sent_accepted_online_and_filed_at_hire()
+    {
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var hr = await app.LoginAsync("hr@demo.ecosys");
+        var le = (await admin.GetJson($"{B}/organisation/legal-entities"))[0]!["id"].Id();
+        var req = await admin.PostJson($"{B}/recruitment/requisitions", new { legalEntityId = le, title = "Accounts Assistant", openings = 1, salaryMin = 50_000, salaryMax = 70_000, employmentType = "Permanent" }, HttpStatusCode.Created);
+        await (await app.LoginAsync("approver@demo.ecosys")).PostJson($"{B}/recruitment/requisitions/{req["id"].Id()}/approve");
+        var form = new MultipartFormDataContent { { new StringContent("Njeri"), "firstName" }, { new StringContent("Wambui"), "lastName" }, { new StringContent("njeri.wambui@candidate.example"), "email" } };
+        var appId = (await (await admin.PostAsync($"{B}/recruitment/requisitions/{req["id"].Id()}/applications", form)).Json(HttpStatusCode.Created))["id"].Id();
+
+        // Terms first; HR without salary access can't draft a letter that states the salary.
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"{B}/recruitment/applications/{appId}/offer-letter", new { })).StatusCode);
+        await admin.PostJson($"{B}/recruitment/applications/{appId}/offer", new { basic = 60_000, startDate = "2027-01-04", jobTitle = "Accounts Assistant", status = "Draft" });
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.PostAsJsonAsync($"{B}/recruitment/applications/{appId}/offer-letter", new { })).StatusCode);
+
+        // The template only takes known fields.
+        var tpl = (await admin.GetJson($"{B}/recruitment/offer-template/{le}"))["template"]!;
+        Assert.Contains("{basic_salary}", tpl["body"].Str());
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/recruitment/offer-template/{le}", new { subject = "Offer", body = "Your pay is {salary}.", probationMonths = 3, acceptWithinDays = 7 })).StatusCode);
+
+        var draft = await admin.PostJson($"{B}/recruitment/applications/{appId}/offer-letter", new { });
+        var letterId = draft["id"].Id();
+        Assert.Equal("Draft", draft["status"].Str());
+        Assert.Contains("KES 60,000.00 per month", draft["preview"]!["body"].Str());
+        Assert.Contains("Dear Njeri,", draft["preview"]!["body"].Str());
+        Assert.Empty(draft["preview"]!["unfilled"]!.AsArray());
+
+        // A field the system can't fill blocks sending.
+        var acceptBy = BusinessClockToday().AddDays(10).ToString("yyyy-MM-dd");
+        await admin.PutJson($"{B}/recruitment/offer-letters/{letterId}", new { subject = draft["subject"].Str(), body = draft["body"].Str() + "\n\nBonus: {bonus}", acceptBy, signatoryName = "Wanjiru Kamau", signatoryTitle = "Managing Director" });
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync($"{B}/recruitment/offer-letters/{letterId}/send", new { emailLink = true })).StatusCode);
+        await admin.PutJson($"{B}/recruitment/offer-letters/{letterId}", new { subject = draft["subject"].Str(), body = draft["body"].Str(), acceptBy, signatoryName = "Wanjiru Kamau", signatoryTitle = "Managing Director" });
+
+        var draftPdf = System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/recruitment/offer-letters/{letterId}/pdf")).Content.ReadAsByteArrayAsync());
+        Assert.StartsWith("%PDF", draftPdf);
+        Assert.Contains("DRAFT", draftPdf);
+
+        var sent = await admin.PostJson($"{B}/recruitment/offer-letters/{letterId}/send", new { emailLink = true });
+        Assert.Equal("Sent", sent["letter"]!["status"].Str());
+        var link = sent["link"].Str();
+        var token = link[(link.LastIndexOf('/') + 1)..];
+        var email = await app.WithDbAsync(null, db => db.NotificationMessages.Where(m => m.Template == "recruitment.offer.sent" && m.EntityId == letterId).Select(m => m.Body).FirstAsync());
+        Assert.Contains(link, email);
+        Assert.DoesNotContain("60,000", email); // no salary in emails
+        // Terms are fixed while the letter is out.
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"{B}/recruitment/applications/{appId}/offer", new { basic = 65_000, startDate = "2027-01-04", jobTitle = "Accounts Assistant", status = "Sent" })).StatusCode);
+
+        // The candidate's side: no sign-in, the link is the key.
+        var anon = app.CreateClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await anon.GetAsync($"{B}/offers/not-a-real-token")).StatusCode);
+        var view = await anon.GetJson($"{B}/offers/{token}");
+        Assert.Equal("Sent", view["status"].Str());
+        Assert.Equal("Njeri Wambui", view["candidate"].Str());
+        Assert.Contains(view["blocks"]!.AsArray(), b => b!["text"].Str().Contains("60,000.00"));
+        Assert.StartsWith("%PDF", System.Text.Encoding.Latin1.GetString(await (await anon.GetAsync($"{B}/offers/{token}/pdf")).Content.ReadAsByteArrayAsync())[..4]);
+        Assert.Equal(HttpStatusCode.BadRequest, (await anon.PostAsJsonAsync($"{B}/offers/{token}/respond", new { accept = true, fullName = "" })).StatusCode);
+        Assert.Equal("Accepted", (await anon.PostJson($"{B}/offers/{token}/respond", new { accept = true, fullName = "Njeri Wambui" }))["status"].Str());
+        Assert.Equal(HttpStatusCode.Conflict, (await anon.PostAsJsonAsync($"{B}/offers/{token}/respond", new { accept = false })).StatusCode);
+
+        var letters = (await admin.GetJson($"{B}/recruitment/applications/{appId}/offer-letters")).AsArray();
+        Assert.Equal("Accepted", letters[0]!["status"].Str());
+        Assert.Equal("Njeri Wambui", letters[0]!["responseName"].Str());
+        var acceptedFile = letters[0]!["acceptedFileId"].Id();
+        Assert.Contains("Accepted electronically by Njeri Wambui", System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/files/{acceptedFile}")).Content.ReadAsByteArrayAsync()));
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.GetAsync($"{B}/files/{acceptedFile}")).StatusCode); // states the salary
+        Assert.True(await app.WithDbAsync(null, db => db.NotificationMessages.AnyAsync(m => m.Template == "recruitment.offer.accepted" && m.EntityId == letterId)));
+        var application = (await admin.GetJson($"{B}/recruitment/requisitions/{req["id"].Id()}/applications")).AsArray().First(a => a!["id"].Id() == appId)!;
+        Assert.Equal("Accepted", application["offerStatus"].Str());
+
+        // At hire the accepted letter joins the employee's documents.
+        var group = (await admin.GetJson($"{B}/organisation/payroll-groups?legalEntityId={le}"))[0]!["id"].Id();
+        var hired = await admin.PostJson($"{B}/recruitment/applications/{appId}/hire", new { employeeNumber = "SL090", payrollGroupId = group, probationMonths = 3 });
+        var docs = (await admin.GetJson($"{B}/documents?employeeId={hired["employeeId"].Id()}")).AsArray();
+        Assert.Contains(docs, d => d!["title"].Str() == "Offer letter (accepted)" && d["category"].Str() == "Contract");
+    }
+
+    private static DateOnly BusinessClockToday() => Ecosys.Payroll.Domain.Common.BusinessClock.Today();
 }

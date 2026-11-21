@@ -1,3 +1,4 @@
+using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Domain.Employees;
 using Ecosys.Payroll.Domain.Hr;
 using Ecosys.Payroll.Domain.Organisation;
@@ -111,5 +112,107 @@ public static class HrDocumentRenderer
         foreach (var n in d.Notes) y = Paragraph(pdf, y, "• " + n, 8.5f);
         pdf.Text(Left, PdfWriter.A4Height - 40, $"Statutory deductions are applied in the final payroll for the period ending {d.PayableInPeriodEnding:dd MMM yyyy}. Generated {DateTime.UtcNow:dd MMM yyyy HH:mm} UTC.", 7.5f);
         return pdf.ToBytes();
+    }
+
+    /// <summary>
+    /// Offer letter on the company letterhead. <paramref name="body"/> is the filled-in text: a blank line starts a
+    /// paragraph, "## " a heading and "- " a bullet. A draft carries a DRAFT mark; an accepted letter carries the
+    /// candidate's electronic acceptance.
+    /// </summary>
+    public static byte[] OfferLetter(LegalEntity entity, OfferLetter letter, string candidateName, string candidateEmail, DateOnly issuedOn, bool draft)
+    {
+        var pdf = new PdfWriter();
+        const float size = 10.5f, lineGap = size * 1.45f, bottom = PdfWriter.A4Height - 70;
+        var page = 1;
+        void Footer()
+        {
+            pdf.Text(Left, PdfWriter.A4Height - 40, $"{letter.Reference} · Private and confidential", 7.5f);
+            pdf.Text(Right, PdfWriter.A4Height - 40, $"Page {page}", 7.5f, align: TextAlign.Right);
+            if (draft) pdf.Text(Right, 40, "DRAFT: NOT SENT", 9, bold: true, TextAlign.Right);
+        }
+        var y = Letterhead(pdf, entity, "");
+        y -= 34;
+        pdf.Text(Right, y, $"Date: {issuedOn:d MMMM yyyy}", 10, align: TextAlign.Right);
+        pdf.Text(Right, y + 13, $"Ref: {letter.Reference}", 9, align: TextAlign.Right);
+        pdf.Text(Left, y, "PRIVATE AND CONFIDENTIAL", 9, bold: true);
+        y += 18;
+        pdf.Text(Left, y, candidateName, 10.5f, bold: true); y += 13;
+        pdf.Text(Left, y, candidateEmail, 9.5f); y += 26;
+        Footer();
+
+        void Ensure(float needed)
+        {
+            if (y + needed <= bottom) return;
+            pdf.NewPage(); page++; y = 60; Footer();
+        }
+        void Wrapped(string text, float x, float width, bool bold = false, float fontSize = size)
+        {
+            var line = "";
+            foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var candidate = line.Length == 0 ? word : line + " " + word;
+                if (PdfWriter.Measure(candidate, fontSize, bold) > width && line.Length > 0) { Ensure(lineGap); pdf.Text(x, y, line, fontSize, bold); y += lineGap; line = word; }
+                else line = candidate;
+            }
+            if (line.Length > 0) { Ensure(lineGap); pdf.Text(x, y, line, fontSize, bold); y += lineGap; }
+        }
+
+        Wrapped(letter.Subject, Left, Right - Left, bold: true, fontSize: 11.5f);
+        y += 6;
+        foreach (var block in Blocks(letter.Body))
+        {
+            switch (block.Kind)
+            {
+                case 'h': y += 4; Ensure(lineGap * 2); Wrapped(block.Text, Left, Right - Left, bold: true, fontSize: 11); break;
+                case '-': Ensure(lineGap); pdf.Text(Left + 8, y, "•", size); Wrapped(block.Text, Left + 22, Right - Left - 22); y += 1; break;
+                default: Wrapped(block.Text, Left, Right - Left); y += 7; break;
+            }
+        }
+
+        // Signature.
+        y += 14; Ensure(90);
+        pdf.Text(Left, y, "Yours sincerely,", size); y += 44;
+        pdf.Line(Left, y, Left + 200, y, 0.6f); y += 14;
+        pdf.Text(Left, y, letter.SignatoryName ?? "Authorised signatory", size, bold: true); y += 13;
+        if (!string.IsNullOrWhiteSpace(letter.SignatoryTitle)) { pdf.Text(Left, y, letter.SignatoryTitle, 9.5f); y += 13; }
+        pdf.Text(Left, y, "For and on behalf of " + entity.Name, 9.5f); y += 30;
+
+        // Acceptance.
+        Ensure(110);
+        pdf.Line(Left, y, Right, y, 0.5f, 0.6f); y += 18;
+        pdf.Text(Left, y, "ACCEPTANCE", 10, bold: true); y += 16;
+        if (letter.Status == OfferLetterStatus.Accepted && letter.RespondedAt is { } at)
+        {
+            Wrapped($"I, {letter.ResponseName}, accept this offer of employment on the terms set out above.", Left, Right - Left);
+            var how = letter.RecordedByHr ? $"Acceptance recorded by {letter.ResponseName} on behalf of the candidate" : $"Accepted electronically by {letter.ResponseName}";
+            Wrapped($"{how} on {BusinessClock.ToLocal(at):d MMMM yyyy 'at' HH:mm} {BusinessClock.Abbreviation}{(string.IsNullOrWhiteSpace(letter.ResponseIp) ? "" : $" from {letter.ResponseIp}")}.", Left, Right - Left, fontSize: 9);
+        }
+        else
+        {
+            Wrapped($"I, {candidateName}, accept this offer of employment on the terms set out above.", Left, Right - Left);
+            y += 30;
+            pdf.Line(Left, y, Left + 200, y, 0.6f); pdf.Line(Left + 260, y, Left + 400, y, 0.6f); y += 13;
+            pdf.Text(Left, y, "Signature", 9); pdf.Text(Left + 260, y, "Date", 9);
+        }
+        return pdf.ToBytes();
+    }
+
+    /// <summary>Splits letter text into headings ("## "), bullets ("- ") and paragraphs (separated by blank lines).</summary>
+    public static IEnumerable<(char Kind, string Text)> Blocks(string body)
+    {
+        var para = new List<string>();
+        IEnumerable<(char, string)> Flush()
+        {
+            if (para.Count > 0) { yield return ('p', string.Join(' ', para)); para.Clear(); }
+        }
+        foreach (var raw in body.Replace("\r", "").Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0) { foreach (var b in Flush()) yield return b; continue; }
+            if (line.StartsWith("## ")) { foreach (var b in Flush()) yield return b; yield return ('h', line[3..].Trim()); continue; }
+            if (line.StartsWith("- ") || line.StartsWith("* ")) { foreach (var b in Flush()) yield return b; yield return ('-', line[2..].Trim()); continue; }
+            para.Add(line);
+        }
+        foreach (var b in Flush()) yield return b;
     }
 }

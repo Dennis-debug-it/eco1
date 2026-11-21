@@ -4,18 +4,21 @@ import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useDepartments, useEmployeeOptions, useLegalEntities, usePayrollGroups } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
+import { OfferLetterPanel, OfferTemplateEditor } from '../components/OfferLetter'
 
 type Req = { id: string; reference: string; title: string; positionId?: string; departmentId?: string; openings: number; salaryMin?: number; salaryMax?: number; employmentType: string; justification?: string; status: string; closingDate?: string; requestedBy: string }
 type App = { id: string; firstName: string; lastName: string; email: string; phone?: string; source?: string; stage: string; cvFileId?: string; interviews: { scheduledAt: string; panel: string[]; score?: number; recommendation?: string; notes?: string }[]; offerBasic?: number; offerStartDate?: string; offerJobTitle?: string; offerStatus?: string; rejectionReason?: string; hiredEmployeeId?: string }
 const stages = ['Applied', 'Screening', 'Interview', 'Offer', 'Hired', 'Rejected']
 
 export default function RecruitmentPage() {
-  const [tab, setTab] = useState<'pipeline' | 'onboarding'>('pipeline')
+  const [tab, setTab] = useState<'pipeline' | 'onboarding' | 'template'>('pipeline')
   return (
     <>
       <PageHead title="Recruitment & onboarding" sub="Approved requisitions, applicant pipeline, offers and hire into the employee record with an onboarding checklist." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pipeline', label: 'Requisitions & pipeline' }, { id: 'onboarding', label: 'Onboarding' }]} />
-      {tab === 'pipeline' ? <Pipeline /> : <Onboarding />}
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pipeline', label: 'Requisitions & pipeline' }, { id: 'onboarding', label: 'Onboarding' }, { id: 'template', label: 'Offer letter template' }]} />
+      {tab === 'pipeline' && <Pipeline />}
+      {tab === 'onboarding' && <Onboarding />}
+      {tab === 'template' && <OfferTemplateEditor />}
     </>
   )
 }
@@ -128,6 +131,7 @@ function ApplicantDialog({ a, req, onClose }: { a: App; req: Req; onClose: () =>
       {!closed && <><h3 style={{ marginTop: 12 }}>Offer</h3>
         <div className="toolbar"><input type="number" value={offer.basic} onChange={e => setOffer({ ...offer, basic: Number(e.target.value) })} aria-label="Basic salary" style={{ width: 120 }} /><input type="date" value={offer.startDate} onChange={e => setOffer({ ...offer, startDate: e.target.value })} aria-label="Start date" /><input value={offer.jobTitle} onChange={e => setOffer({ ...offer, jobTitle: e.target.value })} aria-label="Job title" /><select value={offer.status} onChange={e => setOffer({ ...offer, status: e.target.value })} aria-label="Offer status">{['Draft', 'Sent', 'Accepted', 'Declined'].map(s => <option key={s}>{s}</option>)}</select><button className="btn sm" disabled={!offer.startDate} onClick={() => saveOffer.mutate()}>Save offer</button></div>
         {req.salaryMax && <p className="small muted">Approved range {fmt.int(req.salaryMin)} – {fmt.int(req.salaryMax)}.</p>}</>}
+      {(a.stage === 'Offer' || a.offerBasic) && a.stage !== 'Rejected' && <OfferLetterPanel applicationId={a.id} offerReady={!!a.offerBasic && !!a.offerStartDate} candidate={`${a.firstName} ${a.lastName}`} />}
       {a.stage === 'Offer' && a.offerStatus === 'Accepted' && <div className="card" style={{ marginTop: 12 }}><h3>Hire</h3>
         <div className="form-grid"><Field label="Employee number *"><input value={hire.employeeNumber} onChange={e => setHire({ ...hire, employeeNumber: e.target.value })} /></Field>
           <Field label="Payroll group"><select value={hire.payrollGroupId || groups.data?.[0]?.id} onChange={e => setHire({ ...hire, payrollGroupId: e.target.value })}>{groups.data?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></Field>

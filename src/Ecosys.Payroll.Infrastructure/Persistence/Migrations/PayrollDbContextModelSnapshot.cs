@@ -3705,6 +3705,233 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.ToTable("nita_claim_lines", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OfferLetter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("AcceptBy")
+                        .HasColumnType("date")
+                        .HasColumnName("accept_by");
+
+                    b.Property<Guid?>("AcceptedFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_file_id");
+
+                    b.Property<decimal>("Basic")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("basic");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DeclineReason")
+                        .HasColumnType("text")
+                        .HasColumnName("decline_reason");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("JobApplicationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("job_application_id");
+
+                    b.Property<string>("JobTitle")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("job_title");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<bool>("RecordedByHr")
+                        .HasColumnType("boolean")
+                        .HasColumnName("recorded_by_hr");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTimeOffset?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("responded_at");
+
+                    b.Property<string>("ResponseIp")
+                        .HasColumnType("text")
+                        .HasColumnName("response_ip");
+
+                    b.Property<string>("ResponseName")
+                        .HasColumnType("text")
+                        .HasColumnName("response_name");
+
+                    b.Property<string>("ResponseTokenHash")
+                        .HasColumnType("text")
+                        .HasColumnName("response_token_hash");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("SentBy")
+                        .HasColumnType("text")
+                        .HasColumnName("sent_by");
+
+                    b.Property<Guid?>("SentFileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sent_file_id");
+
+                    b.Property<string>("SignatoryName")
+                        .HasColumnType("text")
+                        .HasColumnName("signatory_name");
+
+                    b.Property<string>("SignatoryTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("signatory_title");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_offer_letters");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_offer_letters_legal_entity_id");
+
+                    b.HasIndex("ResponseTokenHash")
+                        .HasDatabaseName("ix_offer_letters_response_token_hash");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_offer_letters_tenant_id");
+
+                    b.HasIndex("JobApplicationId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ix_offer_letters_job_application_id_version");
+
+                    b.ToTable("offer_letters", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OfferLetterTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AcceptWithinDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("accept_within_days");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("body");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<int>("ProbationMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("probation_months");
+
+                    b.Property<string>("SignatoryName")
+                        .HasColumnType("text")
+                        .HasColumnName("signatory_name");
+
+                    b.Property<string>("SignatoryTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("signatory_title");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_offer_letter_templates");
+
+                    b.HasIndex("LegalEntityId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_offer_letter_templates_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_offer_letter_templates_tenant_id");
+
+                    b.ToTable("offer_letter_templates", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OnboardingTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7791,6 +8018,33 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_nita_claim_lines_nita_claims_nita_claim_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OfferLetter", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Hr.JobApplication", null)
+                        .WithMany()
+                        .HasForeignKey("JobApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_offer_letters_job_applications_job_application_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_offer_letters_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OfferLetterTemplate", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_offer_letter_templates_legal_entities_legal_entity_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Hr.OnboardingTask", b =>

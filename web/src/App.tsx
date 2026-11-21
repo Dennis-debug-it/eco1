@@ -1,4 +1,4 @@
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { P, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
@@ -27,6 +27,7 @@ import HrAnalyticsPage from './pages/HrAnalytics'
 import DataProtectionPage from './pages/DataProtection'
 import BillingPage from './pages/Billing'
 import OrganogramPage from './pages/Organogram'
+import OfferResponsePage from './pages/OfferResponse'
 import PlatformPage from './pages/Platform'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
 import { useHrMe } from './lib/lookups'
@@ -34,9 +35,12 @@ import { Feature, useBillingStatus, type BillingStatus } from './lib/billing'
 
 export default function App() {
   const { user, loading, logout, can } = useAuth()
+  const location = useLocation()
   const ready = !!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied)
   const hrMe = useHrMe(ready)
   const billing = useBillingStatus(ready)
+  // A candidate's offer link works whether or not anyone is signed in on this browser.
+  if (location.pathname.startsWith('/offer/')) return <Routes><Route path="/offer/:token" element={<OfferResponsePage />} /></Routes>
   if (loading) return <Loading what="Signing in" />
   if (!user) return (
     <Routes>

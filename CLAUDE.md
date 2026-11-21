@@ -55,6 +55,7 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - The operator console (`/api/platform`) never returns employee or payroll data.
 - **Payslips** carry balances captured at issue (`Payslip.NssfContributionsToDate`, `LeaveBalances`, from `PayslipFacts`) so reprints match. Never show the employer's total cost or medical premiums to employees.
 - **Dependants and beneficiaries** change only through `DependantService`: documents, then verify, then approve by a different person. Only approved records count (medical cover, death-in-service dues).
+- **Offer letters** go through `OfferLetterService`. They state the salary: drafting and sending need `salary.write`, reading needs `salary.read`, and emails to the candidate carry the link but never the figures. A sent letter is frozen; changing the offer needs the letter withdrawn.
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout

@@ -109,7 +109,11 @@ public sealed class PdfWriter
                 case '…': sb.Append("\\205"); break; // WinAnsi ellipsis
                 case '–': sb.Append("\\226"); break; // en dash
                 case '—': sb.Append("\\227"); break; // em dash
+                case '\u2018': sb.Append("\\221"); break; // left single quote
                 case '\u2019': sb.Append("\\222"); break; // right single quote
+                case '\u201C': sb.Append("\\223"); break; // left double quote (text pasted from Word)
+                case '\u201D': sb.Append("\\224"); break; // right double quote
+                case '\u2022': sb.Append("\\225"); break; // bullet
                 case '\r' or '\n': sb.Append(' '); break;
                 default: sb.Append(c < 256 ? c : '?'); break;
             }

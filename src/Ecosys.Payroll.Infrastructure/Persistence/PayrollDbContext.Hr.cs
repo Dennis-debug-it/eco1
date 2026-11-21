@@ -30,6 +30,8 @@ public partial class PayrollDbContext
     public DbSet<NitaClaimLine> NitaClaimLines => Set<NitaClaimLine>();
     public DbSet<JobRequisition> JobRequisitions => Set<JobRequisition>();
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
+    public DbSet<OfferLetterTemplate> OfferLetterTemplates => Set<OfferLetterTemplate>();
+    public DbSet<OfferLetter> OfferLetters => Set<OfferLetter>();
     public DbSet<OnboardingTask> OnboardingTasks => Set<OnboardingTask>();
     public DbSet<EmployeeDocument> EmployeeDocuments => Set<EmployeeDocument>();
     public DbSet<HrCase> HrCases => Set<HrCase>();
@@ -109,6 +111,13 @@ public partial class PayrollDbContext
         TenantEntity<NitaClaimLine>(b, e => e.HasIndex(x => x.TrainingEnrolmentId).IsUnique());
 
         Scoped<JobRequisition>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Reference }).IsUnique());
+        Scoped<OfferLetterTemplate>(b, e => e.HasIndex(x => x.LegalEntityId).IsUnique());
+        Scoped<OfferLetter>(b, e =>
+        {
+            e.HasIndex(x => new { x.JobApplicationId, x.Version }).IsUnique();
+            e.HasIndex(x => x.ResponseTokenHash);
+            e.HasOne<JobApplication>().WithMany().HasForeignKey(x => x.JobApplicationId);
+        });
         Scoped<JobApplication>(b, e =>
         {
             e.HasIndex(x => new { x.JobRequisitionId, x.Stage });
