@@ -317,6 +317,7 @@ public static class HrEndpoints
             ctx.Require(Permissions.OrganisationManage); ctx.RequireLegalEntity(body.LegalEntityId);
             if (string.IsNullOrWhiteSpace(body.Code) || string.IsNullOrWhiteSpace(body.Title) || body.BudgetedHeadcount < 0) throw new DomainException("Code, title and a non-negative headcount are required.", "VALIDATION");
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.Code = body.Code.Trim().ToUpperInvariant();
+            await ValidateReportsToAsync(db, body.Id, body.ReportsToPositionId, ct);
             db.Positions.Add(body);
             audit.Record("position.created", nameof(Position), body.Id, new { body.Code, body.BudgetedHeadcount }, body.LegalEntityId);
             await db.SaveChangesAsync(ct);
@@ -326,8 +327,9 @@ public static class HrEndpoints
         {
             ctx.Require(Permissions.OrganisationManage);
             var p = await db.Positions.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Position), id);
+            await ValidateReportsToAsync(db, id, body.ReportsToPositionId, ct);
             p.Title = body.Title; p.Grade = body.Grade; p.DepartmentId = body.DepartmentId; p.BudgetedHeadcount = body.BudgetedHeadcount; p.SalaryMin = body.SalaryMin; p.SalaryMax = body.SalaryMax; p.ReportsToPositionId = body.ReportsToPositionId; p.IsActive = body.IsActive;
-            audit.Record("position.updated", nameof(Position), id, new { p.BudgetedHeadcount }, p.LegalEntityId);
+            audit.Record("position.updated", nameof(Position), id, new { p.BudgetedHeadcount, p.Grade, p.ReportsToPositionId }, p.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Ok(p);
         });
@@ -346,6 +348,18 @@ public static class HrEndpoints
             ctx.Require(Permissions.EmployeesRead);
             return Results.Ok(await db.Employees.Where(e => e.TerminationDate == null).Select(e => new { e.Id, name = e.FirstName + " " + e.LastName, e.JobTitle, e.ReportingManagerId, e.DepartmentId }).ToListAsync(ct));
         });
+    }
+
+    /// <summary>"Reports to" must be another position in this organisation, and must not loop back to this one.</summary>
+    private static async Task ValidateReportsToAsync(PayrollDbContext db, Guid positionId, Guid? reportsTo, CancellationToken ct)
+    {
+        if (reportsTo is null) return;
+        if (reportsTo == positionId) throw new DomainException("A position cannot report to itself.", "VALIDATION");
+        var parents = await db.Positions.Select(p => new { p.Id, p.ReportsToPositionId }).ToDictionaryAsync(p => p.Id, p => p.ReportsToPositionId, ct);
+        if (!parents.ContainsKey(reportsTo.Value)) throw new DomainException("The position it reports to was not found.", "VALIDATION");
+        var seen = new HashSet<Guid>();
+        for (Guid? at = reportsTo; at is { } cur && seen.Add(cur); at = parents.GetValueOrDefault(cur))
+            if (cur == positionId) throw new DomainException("That would make a loop: the chosen position already reports, directly or indirectly, to this one.", "VALIDATION");
     }
 
     // =====================================================================================

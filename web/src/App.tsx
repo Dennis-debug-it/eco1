@@ -26,6 +26,7 @@ import ExpensesPage from './pages/Expenses'
 import HrAnalyticsPage from './pages/HrAnalytics'
 import DataProtectionPage from './pages/DataProtection'
 import BillingPage from './pages/Billing'
+import OrganogramPage from './pages/Organogram'
 import PlatformPage from './pages/Platform'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
 import { useHrMe } from './lib/lookups'
@@ -63,6 +64,7 @@ export default function App() {
     { to: '/self-service', label: 'My workspace', show: staff, section: 'Me' },
     { to: '/employees', label: 'Employees', show: can(P.EmployeesRead), section: 'People' },
     { to: '/organisation', label: 'Organisation', show: can(P.OrganisationManage) || can(P.EmployeesRead) },
+    { to: '/organogram', label: 'Organogram', show: can(P.EmployeesRead) },
     { to: '/people-records', label: 'People records', show: can(P.HrDocuments) || (hrSuite && (can(P.HrBenefits) || can(P.HrAssets) || can(P.EmployeesRead))) },
     { to: '/recruitment', label: 'Recruitment', show: can(P.HrRecruitment) && hrSuite },
     { to: '/exits', label: 'Exits & final dues', show: can(P.HrSeparations) || can(P.PayrollPrepare) || can(P.PayrollApprove) },
@@ -105,6 +107,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={employeeOnly ? <Navigate to="/self-service" replace /> : operatorOnly ? <Navigate to="/operator" replace /> : <DashboardPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/organogram" element={<OrganogramPage />} />
           <Route path="/operator" element={<PlatformPage />} />
           <Route path="/self-service" element={<SelfServicePage />} />
           <Route path="/employees" element={<EmployeesPage />} />

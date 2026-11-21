@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
@@ -68,23 +69,16 @@ function Documents() {
   )
 }
 
-type Position = { id: string; code: string; title: string; grade?: string; department?: string; departmentId?: string; budgetedHeadcount: number; filled: number; openRequisitions: number; vacancies: number; overBudget: boolean; salaryMin?: number; salaryMax?: number; isActive: boolean }
+type Position = { id: string; code: string; title: string; grade?: string; department?: string; departmentId?: string; budgetedHeadcount: number; filled: number; openRequisitions: number; vacancies: number; overBudget: boolean; salaryMin?: number; salaryMax?: number; reportsToPositionId?: string; isActive: boolean }
 
 function Positions() {
   const { can } = useAuth()
   const qc = useQueryClient()
   const les = useLegalEntities(); const depts = useDepartments()
   const q = useQuery({ queryKey: ['positions'], queryFn: () => api.get<Position[]>('/api/payroll/positions') })
-  const chart = useQuery({ queryKey: ['org-chart'], queryFn: () => api.get<{ id: string; name: string; jobTitle?: string; reportingManagerId?: string }[]>('/api/payroll/positions/org-chart') })
   const [edit, setEdit] = useState<Partial<Position> | null>(null)
   const save = useMutation({ mutationFn: (p: Partial<Position>) => p.id ? api.put(`/api/payroll/positions/${p.id}`, p) : api.post('/api/payroll/positions', { ...p, legalEntityId: les.data?.[0]?.id }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['positions'] }); setEdit(null) } })
   const totals = (q.data ?? []).reduce((a, p) => ({ budget: a.budget + p.budgetedHeadcount, filled: a.filled + p.filled, vacant: a.vacant + p.vacancies }), { budget: 0, filled: 0, vacant: 0 })
-  const roots = (chart.data ?? []).filter(e => !e.reportingManagerId || !chart.data!.some(x => x.id === e.reportingManagerId))
-  const Node = ({ id, depth }: { id: string; depth: number }): React.ReactElement => {
-    const e = chart.data!.find(x => x.id === id)!
-    const kids = chart.data!.filter(x => x.reportingManagerId === id)
-    return <div style={{ marginLeft: depth ? 18 : 0, borderLeft: depth ? '1px solid var(--border)' : undefined, paddingLeft: depth ? 10 : 0 }}><div style={{ padding: '3px 0' }}><b>{e.name}</b> <span className="muted small">{e.jobTitle}</span>{kids.length > 0 && <span className="muted small"> · {kids.length} report{kids.length > 1 ? 's' : ''}</span>}</div>{kids.map(k => <Node key={k.id} id={k.id} depth={depth + 1} />)}</div>
-  }
   return (
     <div className="grid c2">
       <div className="card" style={{ gridColumn: '1 / -1' }}>
@@ -92,14 +86,15 @@ function Positions() {
         {q.isLoading ? <Loading /> : <div className="table-wrap"><table><thead><tr><th>Code</th><th>Title</th><th>Department</th><th>Grade</th><th className="num">Budget</th><th className="num">Filled</th><th className="num">Vacant</th><th className="num">Open reqs</th>{can(P.SalaryRead) && <th>Salary band</th>}<th /></tr></thead>
           <tbody>{q.data?.map(p => <tr key={p.id}><td className="mono">{p.code}</td><td>{p.title}</td><td>{p.department}</td><td>{p.grade}</td><td className="num">{p.budgetedHeadcount}</td><td className="num">{p.overBudget ? <Badge status="Error">{p.filled}</Badge> : p.filled}</td><td className="num">{p.vacancies}</td><td className="num">{p.openRequisitions || ''}</td>{can(P.SalaryRead) && <td>{p.salaryMin || p.salaryMax ? `${fmt.int(p.salaryMin)} – ${fmt.int(p.salaryMax)}` : '—'}</td>}<td>{can(P.OrganisationManage) && <button className="btn sm" onClick={() => setEdit(p)}>Edit</button>}</td></tr>)}</tbody></table></div>}
       </div>
-      <div className="card" style={{ gridColumn: '1 / -1' }}><h2>Organisation chart</h2>{chart.isLoading ? <Loading /> : roots.map(r => <Node key={r.id} id={r.id} depth={0} />)}</div>
+      <p className="small muted" style={{ gridColumn: '1 / -1', margin: 0 }}>See the positions as a chart, with vacant seats, on the <Link to="/organogram">Organogram</Link>.</p>
       {edit && <Modal title={edit.id ? `Edit ${edit.code}` : 'New position'} onClose={() => setEdit(null)}>
         <ErrorBox error={save.error} />
         <div className="form-grid">
           <Field label="Code *"><input value={edit.code ?? ''} disabled={!!edit.id} onChange={e => setEdit({ ...edit, code: e.target.value })} /></Field>
           <Field label="Title *"><input value={edit.title ?? ''} onChange={e => setEdit({ ...edit, title: e.target.value })} /></Field>
           <Field label="Department"><select value={edit.departmentId ?? ''} onChange={e => setEdit({ ...edit, departmentId: e.target.value || undefined })}><option value="">—</option>{depts.data?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
-          <Field label="Grade"><input value={edit.grade ?? ''} onChange={e => setEdit({ ...edit, grade: e.target.value })} /></Field>
+          <Field label="Grade (seniority band)"><input value={edit.grade ?? ''} placeholder="e.g. Band B" onChange={e => setEdit({ ...edit, grade: e.target.value })} /></Field>
+          <Field label="Reports to"><select value={edit.reportsToPositionId ?? ''} onChange={e => setEdit({ ...edit, reportsToPositionId: e.target.value || undefined })}><option value="">— Top of the organisation —</option>{q.data?.filter(p => p.id !== edit.id).map(p => <option key={p.id} value={p.id}>{p.title} ({p.code})</option>)}</select></Field>
           <Field label="Budgeted headcount"><input type="number" min={0} value={edit.budgetedHeadcount ?? 1} onChange={e => setEdit({ ...edit, budgetedHeadcount: Number(e.target.value) })} /></Field>
           <Field label="Salary min"><input type="number" value={edit.salaryMin ?? ''} onChange={e => setEdit({ ...edit, salaryMin: e.target.value ? Number(e.target.value) : undefined })} /></Field>
           <Field label="Salary max"><input type="number" value={edit.salaryMax ?? ''} onChange={e => setEdit({ ...edit, salaryMax: e.target.value ? Number(e.target.value) : undefined })} /></Field>

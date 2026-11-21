@@ -187,10 +187,12 @@ amounts that the next regular run picks up at calculation, marks processed at fi
 | **Performance** | Cycles move from goal setting to self review, manager review, calibration and acknowledgement. Goal weights must total 100. Also covers 360° feedback requests, improvement plans and a rating distribution. | A compensation review applies a merit/bonus matrix with budget checks and maker-checker. Approval creates salary assignments and BONUS items. |
 | **Learning** | Course catalogue, mandatory requirements by job title or department, sessions with capacity, and manager or self nominations. Certificates expire, and a compliance matrix shows gaps. Training bonds are recovered pro rata. | Session cost posts as a journal (6180/2196). NITA claims are built from completed sessions without double-claiming. Bond balances flow into final dues. |
 | **Recruitment & onboarding** | Requisitions, applicant pipeline, interviews and offers. Hiring creates the employee, salary, statutory record and an onboarding checklist. | New hires are payable from their hire date. |
-| **People records** | Employee documents with expiry dates and visibility levels, positions and an org chart, dependants and beneficiaries, medical schemes and enrolments, and an asset register. Dependants and beneficiaries need supporting documents, HR verification and a second person's approval before they count. | The employee share of medical premiums is deducted. Unreturned assets are recovered at exit. |
+| **People records** | Employee documents with expiry dates and visibility levels, positions with grades and reporting lines, dependants and beneficiaries, medical schemes and enrolments, and an asset register. Dependants and beneficiaries need supporting documents, HR verification and a second person's approval before they count. | The employee share of medical premiums is deducted. Unreturned assets are recovered at exit. |
 | **Cases** | Disciplinary cases and grievances, with a timeline. A s.41 hearing must be recorded before dismissal, final warning or suspension. Every case view is audited. | None. |
 | **Expenses** | Claims with receipts are approved first by the line manager, then by finance (a different person). Per diem above the KES 10,000/day tax-free amount is taxed. | Reimbursements are paid in the next payroll (REIMB, REIMB_TAXABLE) or marked paid directly. |
 | **HR analytics** | Headcount trend, turnover, absenteeism, tenure, department, gender, training hours, rating distribution and open items. | Shows employer cost per head to users with `salary.read`. |
+
+**Organogram.** People → Organogram draws the organisation top-down from employees' line managers, one row per level of seniority. Each card shows the person's title, department (colour-coded) and grade. With the HR suite there is also a positions view with vacant seats. It supports search, collapsing teams, zoom and print. It flags people whose manager has left and reporting loops. It is part of every plan and needs `employees.read`.
 
 **Access.** `HrAccess` decides access in this order: the employee themselves, their line manager (`Employee.ReportingManagerId`), then an HR permission (`hr.performance`, `hr.learning`, `hr.recruitment`, `hr.cases`, `hr.documents`, `hr.assets`, `hr.benefits`, `hr.separations`, `expenses.finance`). HR roles do not get `salary.read`. They see an exit's checklist but not its final dues.
 
@@ -240,7 +242,7 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Area | Endpoints |
 |---|---|
 | Auth & users | `POST /auth/login`, `GET /auth/me`, `POST /auth/mfa/{setup,enable,disable}`, `GET/POST /auth/users`, `POST /auth/users/{id}/mfa/reset` |
-| Organisation | `/organisation/{legal-entities,branches,departments,cost-centres,payroll-groups}`, `POST /organisation/payroll-groups/{id}/periods/generate` |
+| Organisation | `/organisation/{legal-entities,branches,departments,cost-centres,payroll-groups}`, `GET /organisation/chart` (organogram), `POST /organisation/payroll-groups/{id}/periods/generate` |
 | Employees | `GET/POST /employees`, `GET/PUT /employees/{id}`, `PUT /employees/{id}/statutory`, `POST /employees/{id}/{bank-accounts,salary,loans}` |
 | Compensation | `/compensation/components`, `/compensation/salary-structures` |
 | Statutory | `GET /statutory-rules`, `GET /statutory-rules/effective`, `POST /statutory-rules`, `POST /statutory-rules/{id}/{submit,approve,reject}`, `POST /statutory-rules/simulate` |

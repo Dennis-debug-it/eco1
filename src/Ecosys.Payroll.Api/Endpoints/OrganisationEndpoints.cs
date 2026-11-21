@@ -62,9 +62,70 @@ public static class OrganisationEndpoints
         if (e.Settings.MinimumApprovals is < 1 or > 5) throw new DomainException("Approvers needed must be between 1 and 5.", "VALIDATION");
     }
 
+    private static readonly Domain.Employees.EmploymentStatus[] OnTheBooks =
+        [Domain.Employees.EmploymentStatus.Active, Domain.Employees.EmploymentStatus.OnLeave, Domain.Employees.EmploymentStatus.Suspended];
+
     public static void MapOrganisation(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/organisation").RequireAuthorization();
+
+        // Organogram data: people by reporting line and, with the HR suite, positions by "reports to" (including vacant
+        // seats). Names, titles, departments and grades only: no pay. Part of every plan.
+        g.MapGet("/chart", async (ITenantContext ctx, PayrollDbContext db, Ecosys.Payroll.Infrastructure.Services.Saas.SubscriptionService subs, CancellationToken ct) =>
+        {
+            ctx.Require(Permissions.EmployeesRead);
+            var scoped = ctx.LegalEntityIds;
+            var emps = await db.Employees.Where(e => OnTheBooks.Contains(e.Status) && (scoped.Count == 0 || scoped.Contains(e.LegalEntityId)))
+                .Select(e => new { e.Id, e.FirstName, e.LastName, e.EmployeeNumber, e.JobTitle, e.DepartmentId, e.ReportingManagerId, e.PositionId, e.Status, e.LegalEntityId })
+                .ToListAsync(ct);
+            var depts = await db.Departments.ToDictionaryAsync(d => d.Id, d => d.Name, ct);
+            var positions = await db.Positions.Where(p => p.IsActive && (scoped.Count == 0 || scoped.Contains(p.LegalEntityId))).ToListAsync(ct);
+            var posById = positions.ToDictionary(p => p.Id);
+            var active = emps.ToDictionary(e => e.Id);
+            // Managers who have left (or sit outside the caller's companies) are not on the chart: their reports show at the top, flagged.
+            var leftIds = emps.Where(e => e.ReportingManagerId is { } m && !active.ContainsKey(m)).Select(e => e.ReportingManagerId!.Value).Distinct().ToList();
+            var left = await db.Employees.Where(e => leftIds.Contains(e.Id)).Select(e => new { e.Id, name = e.FirstName + " " + e.LastName }).ToDictionaryAsync(e => e.Id, e => e.name, ct);
+
+            var people = emps.Select(e =>
+            {
+                var pos = e.PositionId is { } pid ? posById.GetValueOrDefault(pid) : null;
+                var missing = e.ReportingManagerId is { } m && !active.ContainsKey(m);
+                return new
+                {
+                    e.Id, name = $"{e.FirstName} {e.LastName}", e.EmployeeNumber, jobTitle = e.JobTitle ?? pos?.Title, e.DepartmentId,
+                    department = e.DepartmentId is { } d ? depts.GetValueOrDefault(d) : null, managerId = missing ? null : e.ReportingManagerId,
+                    formerManager = missing ? left.GetValueOrDefault(e.ReportingManagerId!.Value) ?? "someone not on this chart" : null,
+                    grade = pos?.Grade, e.PositionId, status = e.Status.ToString(),
+                };
+            }).ToList();
+
+            var ent = await subs.GetEntitlementsAsync(ctx.RequireTenant(), ct);
+            object? positionNodes = null;
+            if (ent.Has(Domain.Billing.PlanFeatures.HrSuite) && positions.Count > 0)
+            {
+                var holders = emps.Where(e => e.PositionId != null).GroupBy(e => e.PositionId!.Value).ToDictionary(g => g.Key, g => g.ToList());
+                positionNodes = positions.Select(p =>
+                {
+                    var hs = holders.GetValueOrDefault(p.Id) ?? [];
+                    // Without an explicit "reports to", infer it from where the holders' managers sit.
+                    var parent = p.ReportsToPositionId is { } r && posById.ContainsKey(r) ? r : (Guid?)null;
+                    var inferred = false;
+                    if (parent is null && p.ReportsToPositionId is null)
+                    {
+                        parent = hs.Select(h => h.ReportingManagerId is { } m && active.TryGetValue(m, out var mgr) ? mgr.PositionId : null)
+                            .Where(x => x is not null && x != p.Id).GroupBy(x => x).OrderByDescending(x => x.Count()).Select(x => x.Key).FirstOrDefault();
+                        inferred = parent is not null;
+                    }
+                    return new
+                    {
+                        p.Id, p.Code, p.Title, p.Grade, p.DepartmentId, department = p.DepartmentId is { } d ? depts.GetValueOrDefault(d) : null,
+                        parentId = parent, parentInferred = inferred, budgeted = p.BudgetedHeadcount,
+                        holders = hs.Select(h => new { h.Id, name = $"{h.FirstName} {h.LastName}" }), vacancies = Math.Max(0, p.BudgetedHeadcount - hs.Count),
+                    };
+                }).ToList();
+            }
+            return Results.Ok(new { people, positions = positionNodes });
+        });
 
         g.MapGet("/legal-entities", async (ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {

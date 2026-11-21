@@ -404,4 +404,37 @@ public class HrModulesTests(PayrollApiFixture app)
         var hr = await app.LoginAsync("hr@demo.ecosys");
         Assert.NotNull((await hr.GetJson($"{B}/benefits/enrolments?employeeId={me}"))[0]!["premiumByCover"]);
     }
+
+    [Fact]
+    public async Task Organogram_follows_reporting_lines_and_positions()
+    {
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var chart = await admin.GetJson($"{B}/organisation/chart");
+        var people = chart["people"]!.AsArray();
+        // (Other tests add people without a manager, so look for the MD rather than counting the top row.)
+        var md0 = people.First(p => p!["employeeNumber"].Str() == "SL001")!;
+        Assert.Null(md0["managerId"]);
+        Assert.Equal("Managing Director", md0["jobTitle"].Str());
+        Assert.Equal("Band A", md0["grade"].Str());
+        var brian = people.First(p => p!["employeeNumber"].Str() == "SL006")!;
+        Assert.Equal(md0["id"].Id(), brian["managerId"].Id());
+        Assert.Equal("Band B", brian["grade"].Str());
+        Assert.DoesNotContain("basicSalary", chart.ToJsonString(), StringComparison.OrdinalIgnoreCase);
+        // Positions view: vacant seats counted.
+        var driver = chart["positions"]!.AsArray().First(p => p!["title"].Str() == "Driver")!;
+        Assert.True(driver["vacancies"]!.GetValue<int>() >= 1);
+
+        // Employees without employees.read can't read it.
+        Assert.Equal(HttpStatusCode.Forbidden, (await (await app.LoginAsync("brian.mwangi@demo.ecosys")).GetAsync($"{B}/organisation/chart")).StatusCode);
+
+        // A position cannot be made to report to itself, or to one below it.
+        var positions = (await admin.GetJson($"{B}/positions")).AsArray();
+        var md = positions.First(p => p!["title"].Str() == "Managing Director")!;
+        var under = positions.First(p => p!["reportsToPositionId"] is JsonNode r && r.Id() == md["id"].Id())!;
+        var body = md.AsObject().DeepClone().AsObject();
+        body["reportsToPositionId"] = md["id"]!.DeepClone();
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/positions/{md["id"].Id()}", body, PayrollApiFixture.Json)).StatusCode);
+        body["reportsToPositionId"] = under["id"]!.DeepClone();
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PutAsJsonAsync($"{B}/positions/{md["id"].Id()}", body, PayrollApiFixture.Json)).StatusCode);
+    }
 }

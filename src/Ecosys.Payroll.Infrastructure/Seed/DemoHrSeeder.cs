@@ -54,12 +54,23 @@ public sealed partial class DemoDataSeeder
         // Positions from current job titles.
         if (!await db.Positions.AnyAsync(p => p.LegalEntityId == le.Id, ct))
         {
+            // Seniority band from depth in the reporting lines: A for the top, then B, C, D.
+            int Depth(Employee e) { var d = 1; for (var m = e.ReportingManagerId; m is { } id && d < 10; m = emps.Values.FirstOrDefault(x => x.Id == id)?.ReportingManagerId) d++; return d; }
             var n = 0;
+            var created = new List<(Position Pos, List<Employee> Holders)>();
             foreach (var g in emps.Values.GroupBy(e => (e.JobTitle ?? "Staff", e.DepartmentId)))
             {
-                var p = new Position { TenantId = t.Id, LegalEntityId = le.Id, Code = $"POS-{++n:D3}", Title = g.Key.Item1, DepartmentId = g.Key.DepartmentId, BudgetedHeadcount = g.Key.Item1 == "Driver" ? 3 : g.Count() };
+                var depth = g.Min(Depth);
+                var p = new Position { TenantId = t.Id, LegalEntityId = le.Id, Code = $"POS-{++n:D3}", Title = g.Key.Item1, DepartmentId = g.Key.DepartmentId, BudgetedHeadcount = g.Key.Item1 == "Driver" ? 3 : g.Count(), Grade = $"Band {(char)('A' + Math.Min(depth, 5) - 1)}" };
                 db.Positions.Add(p);
                 foreach (var e in g) e.PositionId = p.Id;
+                created.Add((p, g.ToList()));
+            }
+            foreach (var (pos, holders) in created)
+            {
+                var mgr = holders.Select(h => h.ReportingManagerId).FirstOrDefault(m => m is not null);
+                var parent = mgr is { } mid ? emps.Values.FirstOrDefault(e => e.Id == mid)?.PositionId : null;
+                if (parent != pos.Id) pos.ReportsToPositionId = parent;
             }
         }
 
