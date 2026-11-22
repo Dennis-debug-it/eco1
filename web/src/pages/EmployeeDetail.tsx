@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { api, fmt, isoDate, nextMonthStart } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
-import { byId, useBranches, useComponents, useDepartments, useStructures } from '../lib/lookups'
+import { byId, useBranches, useComponents, useDepartments, useLegalEntities, useStructures } from '../lib/lookups'
 import type { BankAccount, EmployeeDetail, Payslip, StatutoryDetails } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
+import { BankPicker } from '../components/BankPicker'
 import { EmployeeForm } from './Employees'
 import { ContractsTab } from '../components/Contracts'
 
@@ -22,7 +23,7 @@ export default function EmployeeDetailPage() {
   const [bankModal, setBankModal] = useState(false)
   const [statModal, setStatModal] = useState(false)
   const [loanModal, setLoanModal] = useState(false)
-  const depts = useDepartments(); const branches = useBranches()
+  const depts = useDepartments(); const branches = useBranches(); const entities = useLegalEntities()
   const refresh = () => qc.invalidateQueries({ queryKey: ['employee', id] })
 
   if (q.isLoading) return <Loading />
@@ -39,6 +40,10 @@ export default function EmployeeDetailPage() {
     { id: 'history', label: 'Employment history' },
   ]
   const current = d.salaryAssignments?.find(a => !a.effectiveTo) ?? d.salaryAssignments?.[0]
+  const makerMayVerify = !!entities.data?.find(x => x.id === e.legalEntityId)?.settings.allowBankDetailSelfVerification
+  /** Why the current user can't verify this account (maker-checker), or null if they can. */
+  const cannotVerify = (b: BankAccount) => isSelf ? 'You can’t verify your own bank details.'
+    : b.createdBy === user?.id && !makerMayVerify ? 'You entered this account, so a colleague must verify it.' : null
 
   return (
     <>
@@ -90,10 +95,10 @@ export default function EmployeeDetailPage() {
           <div className="page-head" style={{ marginBottom: 8 }}><h2>Bank accounts</h2>{(can(P.EmployeesWrite) || isSelf) && <button className="btn primary" onClick={() => setBankModal(true)}>Add account</button>}</div>
           {d.bankAccounts.length === 0 ? <Empty>No bank account. Payment cannot be generated.</Empty> : (
             <table><thead><tr><th>Method</th><th>Bank</th><th>Branch</th><th>Account name</th><th>Account number</th><th>Primary</th><th>Verified</th><th /></tr></thead>
-              <tbody>{d.bankAccounts.map(b => <tr key={b.id}><td>{b.method}</td><td>{b.bankName} <span className="muted">{b.bankCode}</span></td><td>{b.branchName} <span className="muted">{b.branchCode}</span></td><td>{b.accountName}</td><td className="mono">{b.accountNumber}</td><td>{b.isPrimary ? 'Yes' : ''}</td>
-                <td>{b.isVerified ? <Badge status="Active">Verified</Badge> : <Badge status="Pending">Unverified</Badge>}</td>
-                <td>{!b.isVerified && can(P.EmployeesWrite) && <VerifyButton employeeId={id} accountId={b.id} onDone={refresh} />}</td></tr>)}</tbody></table>)}
-          {isSelf && <p className="muted small">Accounts you add yourself must be verified by HR before they are used for payment.</p>}
+              <tbody>{d.bankAccounts.map(b => <tr key={b.id}><td>{b.method}</td><td>{b.bankName} <span className="muted">{b.bankCode}</span></td><td>{b.branchName} <span className="muted">{b.branchCode}</span></td><td>{b.accountName}</td><td className="mono">{b.accountNumber}</td><td>{b.isPrimary ? (b.isVerified ? 'Yes' : 'Once verified') : ''}</td>
+                <td>{b.isVerified ? <Badge status="Active">Verified</Badge> : <Badge status="Pending">Awaiting verification</Badge>}</td>
+                <td>{!b.isVerified && can(P.EmployeesWrite) && (cannotVerify(b) ? <span className="muted small" title={cannotVerify(b)!}>Needs another verifier</span> : <VerifyButton employeeId={id} accountId={b.id} onDone={refresh} />)}</td></tr>)}</tbody></table>)}
+          <p className="muted small">A new account isn’t paid until someone other than the person who entered it verifies it. Until then pay goes to the current verified account, and the employee is notified of every change.</p>
         </div>
       )}
 
@@ -124,7 +129,10 @@ function AssignmentLines({ lines }: { lines: { salaryComponentId: string; method
 
 function VerifyButton({ employeeId, accountId, onDone }: { employeeId: string; accountId: string; onDone: () => void }) {
   const m = useMutation({ mutationFn: () => api.post(`/api/payroll/employees/${employeeId}/bank-accounts/${accountId}/verify`), onSuccess: onDone })
-  return <button className="btn sm" onClick={() => m.mutate()} disabled={m.isPending}>Verify</button>
+  return <>
+    <button className="btn sm" onClick={() => { if (confirm('Have you confirmed this account with the employee on a number already on file? Pay will go to it from the next run.')) m.mutate() }} disabled={m.isPending}>Verify</button>
+    {m.error && <ErrorBox error={m.error} />}
+  </>
 }
 
 export function PayslipList({ employeeId }: { employeeId: string }) {
@@ -163,22 +171,22 @@ function SalaryModal({ employeeId, legalEntityId, currentBasic, onClose }: { emp
 }
 
 function BankModal({ employeeId, onClose }: { employeeId: string; onClose: () => void }) {
-  const [f, setF] = useState<Partial<BankAccount>>({ method: 'BankTransfer', isPrimary: true })
+  const [f, setF] = useState<Partial<BankAccount>>({ method: 'BankTransfer', isPrimary: true, splitPercent: 100 })
   const set = (k: keyof BankAccount, v: unknown) => setF(x => ({ ...x, [k]: v }))
   const m = useMutation({ mutationFn: () => api.post(`/api/payroll/employees/${employeeId}/bank-accounts`, f), onSuccess: onClose })
+  const isBank = f.method === 'BankTransfer'
   return (
-    <Modal title="Add bank account" onClose={onClose}>
+    <Modal title="Add pay account" onClose={onClose}>
       <ErrorBox error={m.error} />
       <div className="form-grid">
-        <Field label="Method"><select value={f.method} onChange={e => set('method', e.target.value)}>{['BankTransfer', 'MobileMoney', 'Cash', 'Cheque'].map(x => <option key={x}>{x}</option>)}</select></Field>
-        <Field label="Bank name"><input value={f.bankName ?? ''} onChange={e => set('bankName', e.target.value)} /></Field>
-        <Field label="Bank code"><input value={f.bankCode ?? ''} onChange={e => set('bankCode', e.target.value)} /></Field>
-        <Field label="Branch name"><input value={f.branchName ?? ''} onChange={e => set('branchName', e.target.value)} /></Field>
-        <Field label="Branch code"><input value={f.branchCode ?? ''} onChange={e => set('branchCode', e.target.value)} /></Field>
+        <Field label="Method"><select value={f.method} onChange={e => set('method', e.target.value)}>{[['BankTransfer', 'Bank transfer'], ['MobileMoney', 'M-PESA'], ['Cash', 'Cash'], ['Cheque', 'Cheque']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        {isBank && <BankPicker bankCode={f.bankCode} branchCode={f.branchCode} onChange={(bank, branch) => setF(x => ({ ...x, bankCode: bank, branchCode: branch }))} />}
         <Field label="Account name *"><input value={f.accountName ?? ''} onChange={e => set('accountName', e.target.value)} /></Field>
-        <Field label="Account number / MSISDN *"><input value={f.accountNumber ?? ''} onChange={e => set('accountNumber', e.target.value)} /></Field>
+        <Field label={f.method === 'MobileMoney' ? 'M-PESA number *' : 'Account number *'}><input value={f.accountNumber ?? ''} inputMode="numeric" placeholder={f.method === 'MobileMoney' ? '07XX XXX XXX' : undefined} onChange={e => set('accountNumber', e.target.value)} /></Field>
       </div>
       <label className="field inline"><input type="checkbox" checked={!!f.isPrimary} onChange={e => set('isPrimary', e.target.checked)} /> Primary account for salary</label>
+      {!f.isPrimary && <Field label="Share of net pay to this account (%)"><input type="number" min={1} max={99} value={f.splitPercent ?? 100} onChange={e => set('splitPercent', Number(e.target.value))} /></Field>}
+      <p className="muted small">The account is paid only after a second person verifies it. The employee is notified.</p>
       <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={m.isPending} onClick={() => m.mutate()}>Save</button></div>
     </Modal>
   )

@@ -15,7 +15,7 @@ namespace Ecosys.Payroll.Api.Endpoints;
 public sealed record Comment(string? Text);
 public sealed record Reason(string Text);
 public sealed record VariableInputRequest(Guid EmployeeId, Guid SalaryComponentId, decimal Amount, string? Note);
-public sealed record PaymentFileRequest(PaymentFileFormat Format = PaymentFileFormat.GenericCsv, DateOnly? ValueDate = null);
+public sealed record PaymentFileRequest(PaymentFileFormat Format = PaymentFileFormat.GenericCsv, DateOnly? ValueDate = null, Guid? DebitAccountId = null);
 public sealed record ConfirmPaymentsRequest(Guid BatchId, string? BankReference, List<Guid>? FailedPaymentIds, string? FailureReason);
 public sealed record AdjustmentRequest(Guid EmployeeId, Guid OriginalRunId, Guid SalaryComponentId, AdjustmentType Type, decimal Amount, string Reason);
 
@@ -232,7 +232,7 @@ public static class PayrollEndpoints
 
         g.MapPost("/{id:guid}/payment-file", async (Guid id, PaymentFileRequest? req, PayrollRunService svc, CancellationToken ct) =>
         {
-            var (batch, content) = await svc.GeneratePaymentFileAsync(id, req?.Format ?? PaymentFileFormat.GenericCsv, req?.ValueDate, ct);
+            var (batch, content) = await svc.GeneratePaymentFileAsync(id, req?.Format ?? PaymentFileFormat.GenericCsv, req?.ValueDate, req?.DebitAccountId, ct);
             return Results.File(content, "text/csv", batch.FileName);
         });
         g.MapGet("/{id:guid}/payments", async (Guid id, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>

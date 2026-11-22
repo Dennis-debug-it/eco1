@@ -2,13 +2,17 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fmt, isoDate } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
-import { useDepartments, useEmployeeOptions, useLegalEntities, usePayrollGroups } from '../lib/lookups'
+import { useBranches, useDepartments, useEmployeeOptions, useLegalEntities, usePayrollGroups } from '../lib/lookups'
 import { Badge, Empty, ErrorBox, Field, FileLink, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
 import { OfferLetterPanel, OfferTemplateEditor } from '../components/OfferLetter'
 
-type Req = { id: string; reference: string; title: string; positionId?: string; departmentId?: string; openings: number; salaryMin?: number; salaryMax?: number; employmentType: string; justification?: string; status: string; closingDate?: string; requestedBy: string }
-type App = { id: string; firstName: string; lastName: string; email: string; phone?: string; source?: string; stage: string; cvFileId?: string; interviews: { scheduledAt: string; panel: string[]; score?: number; recommendation?: string; notes?: string }[]; offerBasic?: number; offerStartDate?: string; offerJobTitle?: string; offerStatus?: string; rejectionReason?: string; hiredEmployeeId?: string }
+type Req = { id: string; legalEntityId: string; reference: string; title: string; positionId?: string; departmentId?: string; branchId?: string; openings: number; salaryMin?: number; salaryMax?: number; employmentType: string; justification?: string; description?: string; status: string; closingDate?: string; requestedBy: string; isPublished: boolean; publishedAt?: string }
+type App = { id: string; firstName: string; lastName: string; email: string; phone?: string; source?: string; coverNote?: string; stage: string; cvFileId?: string; interviews: { scheduledAt: string; panel: string[]; score?: number; recommendation?: string; notes?: string }[]; offerBasic?: number; offerStartDate?: string; offerJobTitle?: string; offerStatus?: string; rejectionReason?: string; hiredEmployeeId?: string }
 const stages = ['Applied', 'Screening', 'Interview', 'Offer', 'Hired', 'Rejected']
+
+/** Shown on the public careers page: posted, open and not past its closing date. */
+const isLive = (r: Req) => r.isPublished && r.status === 'Open' && (!r.closingDate || r.closingDate >= isoDate())
+const careersUrl = (slug: string, jobId?: string) => `${window.location.origin}/careers/${slug}${jobId ? `/jobs/${jobId}` : ''}`
 
 export default function RecruitmentPage() {
   const [tab, setTab] = useState<'pipeline' | 'onboarding' | 'template'>('pipeline')
@@ -38,7 +42,7 @@ function Pipeline() {
         <ErrorBox error={q.error ?? approve.error} />
         {q.isLoading ? <Loading /> : !q.data?.length ? <Empty>No requisitions.</Empty> : <table><thead><tr><th>Reference</th><th>Title</th><th className="num">Openings</th><th>Salary range</th><th>Pipeline</th><th>Status</th><th /></tr></thead>
           <tbody>{q.data.map(({ requisition: r, pipeline }) => <tr key={r.id} className="clickable" onClick={() => setSel(r.id)} style={r.id === current?.id ? { fontWeight: 600 } : undefined}><td className="mono">{r.reference}</td><td>{r.title}{r.justification?.startsWith('[Over budget') && <div><Badge status="Warning">Over headcount budget</Badge></div>}</td><td className="num">{r.openings}</td><td>{r.salaryMin || r.salaryMax ? `${fmt.int(r.salaryMin)} – ${fmt.int(r.salaryMax)}` : '—'}</td>
-            <td className="small">{stages.filter(s => pipeline[s]).map(s => `${s} ${pipeline[s]}`).join(' · ') || '—'}</td><td><Badge status={r.status === 'Open' ? 'Open' : r.status === 'Filled' ? 'Active' : r.status === 'PendingApproval' ? 'Pending' : 'neutral'}>{r.status}</Badge></td>
+            <td className="small">{stages.filter(s => pipeline[s]).map(s => `${s} ${pipeline[s]}`).join(' · ') || '—'}</td><td><Badge status={r.status === 'Open' ? 'Open' : r.status === 'Filled' ? 'Active' : r.status === 'PendingApproval' ? 'Pending' : 'neutral'}>{r.status}</Badge>{r.isPublished && <div className="small muted" style={{ marginTop: 2 }}>{isLive(r) ? 'On careers page' : r.status === 'PendingApproval' ? 'Posts when approved' : 'Posted, not showing'}</div>}</td>
             <td>{r.status === 'PendingApproval' && can(P.PayrollApprove) && r.requestedBy !== user?.id && <button className="btn sm primary" onClick={e => { e.stopPropagation(); approve.mutate(r.id) }}>Approve</button>}</td></tr>)}</tbody></table>}
       </div>
       {current && <Applicants req={current} />}
@@ -48,10 +52,10 @@ function Pipeline() {
 }
 
 function NewRequisition({ onClose }: { onClose: () => void }) {
-  const les = useLegalEntities(); const depts = useDepartments()
+  const les = useLegalEntities(); const depts = useDepartments(); const branches = useBranches()
   const positions = useQuery({ queryKey: ['positions'], queryFn: () => api.get<{ id: string; code: string; title: string; vacancies: number }[]>('/api/payroll/positions') })
-  const [f, setF] = useState({ title: '', positionId: '', departmentId: '', openings: 1, salaryMin: '', salaryMax: '', employmentType: 'Permanent', justification: '', description: '' })
-  const m = useMutation({ mutationFn: () => api.post('/api/payroll/recruitment/requisitions', { ...f, legalEntityId: les.data?.[0]?.id, positionId: f.positionId || null, departmentId: f.departmentId || null, salaryMin: f.salaryMin ? Number(f.salaryMin) : null, salaryMax: f.salaryMax ? Number(f.salaryMax) : null }), onSuccess: onClose })
+  const [f, setF] = useState({ title: '', positionId: '', departmentId: '', branchId: '', openings: 1, salaryMin: '', salaryMax: '', employmentType: 'Permanent', justification: '', description: '', closingDate: '', isPublished: false })
+  const m = useMutation({ mutationFn: () => api.post('/api/payroll/recruitment/requisitions', { ...f, legalEntityId: les.data?.[0]?.id, positionId: f.positionId || null, departmentId: f.departmentId || null, branchId: f.branchId || null, closingDate: f.closingDate || null, salaryMin: f.salaryMin ? Number(f.salaryMin) : null, salaryMax: f.salaryMax ? Number(f.salaryMax) : null }), onSuccess: onClose })
   return (
     <Modal title="New requisition" onClose={onClose}>
       <ErrorBox error={m.error} />
@@ -63,10 +67,15 @@ function NewRequisition({ onClose }: { onClose: () => void }) {
         <Field label="Salary min"><input type="number" value={f.salaryMin} onChange={e => setF({ ...f, salaryMin: e.target.value })} /></Field>
         <Field label="Salary max"><input type="number" value={f.salaryMax} onChange={e => setF({ ...f, salaryMax: e.target.value })} /></Field>
         <Field label="Employment type"><select value={f.employmentType} onChange={e => setF({ ...f, employmentType: e.target.value })}>{['Permanent', 'Contract', 'Casual', 'Intern'].map(t => <option key={t}>{t}</option>)}</select></Field>
+        <Field label="Location (branch)"><select value={f.branchId} onChange={e => setF({ ...f, branchId: e.target.value })}><option value="">—</option>{branches.data?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
+        <Field label="Closing date"><input type="date" min={isoDate()} value={f.closingDate} onChange={e => setF({ ...f, closingDate: e.target.value })} /></Field>
       </div>
-      <Field label="Justification"><textarea rows={2} value={f.justification} onChange={e => setF({ ...f, justification: e.target.value })} /></Field>
+      <Field label="Justification (internal)"><textarea rows={2} value={f.justification} onChange={e => setF({ ...f, justification: e.target.value })} /></Field>
+      <Field label={f.isPublished ? 'Job description * (shown on the careers page)' : 'Job description (shown on the careers page if posted)'}><textarea rows={6} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></Field>
+      <label className="field inline"><input type="checkbox" checked={f.isPublished} onChange={e => setF({ ...f, isPublished: e.target.checked })} /> Post on the careers page once approved</label>
+      <p className="small muted">The salary range and justification are never shown publicly.</p>
       <p className="small muted">The requisition needs approval from a budget holder (payroll approver) other than you.</p>
-      <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!f.title || m.isPending} onClick={() => m.mutate()}>Submit for approval</button></div>
+      <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!f.title || (f.isPublished && !f.description.trim()) || m.isPending} onClick={() => m.mutate()}>Submit for approval</button></div>
     </Modal>
   )
 }
@@ -76,10 +85,11 @@ function Applicants({ req }: { req: Req }) {
   const q = useQuery({ queryKey: ['applications', req.id], queryFn: () => api.get<App[]>(`/api/payroll/recruitment/requisitions/${req.id}/applications`) })
   const [open, setOpen] = useState<App | null>(null)
   const [add, setAdd] = useState(false)
+  const [posting, setPosting] = useState(false)
   const refresh = () => { qc.invalidateQueries({ queryKey: ['applications', req.id] }); qc.invalidateQueries({ queryKey: ['requisitions'] }) }
   return (
     <div className="card" style={{ gridColumn: '1 / -1' }}>
-      <div className="toolbar"><h2 style={{ margin: 0 }}>Applicants — {req.title} <span className="muted small mono">{req.reference}</span></h2><span style={{ flex: 1 }} />{req.status === 'Open' && <button className="btn" onClick={() => setAdd(true)}>Add applicant</button>}</div>
+      <div className="toolbar"><h2 style={{ margin: 0 }}>Applicants — {req.title} <span className="muted small mono">{req.reference}</span></h2><span style={{ flex: 1 }} />{!['Cancelled', 'Filled'].includes(req.status) && <button className="btn" onClick={() => setPosting(true)}>{req.isPublished ? 'Careers page posting' : 'Post on careers page'}</button>}{req.status === 'Open' && <button className="btn" onClick={() => setAdd(true)}>Add applicant</button>}</div>
       {q.isLoading ? <Loading /> : !q.data?.length ? <Empty>No applicants yet.</Empty> : (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(140px, 1fr))`, gap: 8, overflowX: 'auto' }}>
           {stages.map(s => <div key={s}><h3>{s} ({q.data!.filter(a => a.stage === s).length})</h3>
@@ -88,7 +98,41 @@ function Applicants({ req }: { req: Req }) {
         </div>)}
       {open && <ApplicantDialog a={open} req={req} onClose={() => { setOpen(null); refresh() }} />}
       {add && <AddApplicant req={req} onClose={() => { setAdd(false); refresh() }} />}
+      {posting && <PostingDialog req={req} onClose={() => { setPosting(false); refresh() }} />}
     </div>
+  )
+}
+
+function PostingDialog({ req, onClose }: { req: Req; onClose: () => void }) {
+  const { user } = useAuth()
+  const branches = useBranches(req.legalEntityId)
+  const [f, setF] = useState({ published: req.isPublished || !req.publishedAt, description: req.description ?? '', closingDate: req.closingDate ?? '', branchId: req.branchId ?? '' })
+  const [copied, setCopied] = useState('')
+  const [saved, setSaved] = useState<Req | null>(null)
+  const m = useMutation({ mutationFn: () => api.post<Req>(`/api/payroll/recruitment/requisitions/${req.id}/posting`, { ...f, closingDate: f.closingDate || null, branchId: f.branchId || null }),
+    onSuccess: r => { if (isLive(r)) setSaved(r); else onClose() } }) // stay open to share a job that just went live
+  const current = saved ?? req
+  const slug = user?.tenantSlug
+  const copy = async (url: string) => { try { await navigator.clipboard.writeText(url); setCopied(url) } catch { setCopied('') } }
+  return (
+    <Modal title={`Careers page — ${req.title}`} onClose={onClose} width={680}>
+      <ErrorBox error={m.error} />
+      {saved && <div className="alert ok">Posted. Candidates can apply now — share the link below.</div>}
+      <label className="field inline"><input type="checkbox" checked={f.published} onChange={e => setF({ ...f, published: e.target.checked })} /> Show this job on the careers page</label>
+      <p className="small muted">{req.status === 'Open' ? 'It appears while the requisition is open and until the closing date.' : req.status === 'PendingApproval' ? 'It appears once the requisition is approved.' : `It appears only while the requisition is open (now ${req.status}).`} Candidates apply without an account; applications arrive here at “Applied”. The salary range and justification are never shown.</p>
+      <div className="form-grid">
+        <Field label="Location (branch)"><select value={f.branchId} onChange={e => setF({ ...f, branchId: e.target.value })}><option value="">—</option>{branches.data?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
+        <Field label="Closing date"><input type="date" min={isoDate()} value={f.closingDate} onChange={e => setF({ ...f, closingDate: e.target.value })} /></Field>
+      </div>
+      <Field label="Job description *"><textarea rows={10} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} placeholder={'What the job involves, and what the candidate needs.\n\nPlain text; blank lines start new paragraphs.'} /></Field>
+      {slug && isLive(current) && <div className="card" style={{ marginBottom: 12 }}>
+        <h3>Share</h3>
+        {[['This job', careersUrl(slug, req.id)], ['All open jobs', careersUrl(slug)]].map(([label, url]) => <div key={url} className="toolbar" style={{ marginBottom: 6 }}>
+          <span className="small" style={{ width: 90 }}>{label}</span><input readOnly value={url} onFocus={e => e.target.select()} aria-label={`${label} link`} style={{ flex: 1, minWidth: 0 }} />
+          <button className="btn sm" onClick={() => copy(url)}>{copied === url ? 'Copied' : 'Copy'}</button><a className="btn sm" href={url} target="_blank" rel="noreferrer">Open</a></div>)}
+      </div>}
+      <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>{saved ? 'Done' : 'Cancel'}</button><button className="btn primary" disabled={m.isPending || (f.published && !f.description.trim())} onClick={() => m.mutate()}>{f.published ? (current.isPublished ? 'Save changes' : 'Save and post') : current.isPublished ? 'Take down' : 'Save'}</button></div>
+    </Modal>
   )
 }
 
@@ -122,7 +166,7 @@ function ApplicantDialog({ a, req, onClose }: { a: App; req: Req; onClose: () =>
   const closed = a.stage === 'Hired' || a.stage === 'Rejected'
   return (
     <Modal title={`${a.firstName} ${a.lastName}`} onClose={onClose} width={760}>
-      <dl className="kv"><dt>Contact</dt><dd>{a.email} · {a.phone ?? '—'}</dd><dt>Source</dt><dd>{a.source ?? '—'}</dd><dt>Stage</dt><dd><Badge status="neutral">{a.stage}</Badge> {a.rejectionReason && <span className="muted small">({a.rejectionReason})</span>}</dd><dt>CV</dt><dd>{a.cvFileId ? <FileLink id={a.cvFileId} label="Download CV" /> : '—'}</dd></dl>
+      <dl className="kv"><dt>Contact</dt><dd>{a.email} · {a.phone ?? '—'}</dd><dt>Source</dt><dd>{a.source ?? '—'}</dd><dt>Stage</dt><dd><Badge status="neutral">{a.stage}</Badge> {a.rejectionReason && <span className="muted small">({a.rejectionReason})</span>}</dd><dt>CV</dt><dd>{a.cvFileId ? <FileLink id={a.cvFileId} label="Download CV" /> : '—'}</dd>{a.coverNote && <><dt>Cover note</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{a.coverNote}</dd></>}</dl>
       <ErrorBox error={stage.error ?? interview.error ?? saveOffer.error ?? doHire.error} />
       {!closed && <div className="toolbar" style={{ marginTop: 10 }}><span className="small muted">Move to</span>{['Screening', 'Interview'].filter(s => s !== a.stage).map(s => <button key={s} className="btn sm" onClick={() => stage.mutate(s)}>{s}</button>)}<button className="btn sm danger" onClick={() => setReject(true)}>Reject</button></div>}
       <h3 style={{ marginTop: 12 }}>Interviews</h3>

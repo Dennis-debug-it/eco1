@@ -14,6 +14,7 @@ namespace Ecosys.Payroll.Api.Endpoints;
 
 public sealed record StageBody(ApplicationStage Stage, string? Reason);
 public sealed record RequisitionStatusBody(RequisitionStatus Status);
+public sealed record PostingBody(bool Published, string? Description, DateOnly? ClosingDate, Guid? BranchId);
 public sealed record InterviewBody(DateTimeOffset ScheduledAt, List<string> Panel, int? Score, string? Recommendation, string? Notes);
 public sealed record OfferBody(decimal Basic, DateOnly StartDate, string? JobTitle, string Status);
 public sealed record DocumentMeta(Guid EmployeeId, DocumentCategory Category, string Title, DateOnly? IssuedOn, DateOnly? ExpiresOn, bool VisibleToEmployee);
@@ -81,6 +82,14 @@ public static class HrEndpoints
         }).RequireAuthorization();
     }
 
+    private static void ValidatePosting(bool published, string? description, DateOnly? closingDate)
+    {
+        if (description?.Length > 8000) throw new DomainException("Keep the job description under 8,000 characters.", "VALIDATION");
+        if (!published) return;
+        if (string.IsNullOrWhiteSpace(description)) throw new DomainException("Add a job description before posting the job on the careers page.", "VALIDATION");
+        if (closingDate is { } c && c < BusinessClock.Today()) throw new DomainException("The closing date has already passed.", "VALIDATION");
+    }
+
     // =====================================================================================
     private static void MapRecruitment(RouteGroupBuilder api)
     {
@@ -97,6 +106,9 @@ public static class HrEndpoints
             ctx.Require(Permissions.HrRecruitment); ctx.RequireLegalEntity(body.LegalEntityId);
             if (string.IsNullOrWhiteSpace(body.Title) || body.Openings < 1) throw new DomainException("Title and at least one opening are required.", "VALIDATION");
             if (body.SalaryMin > body.SalaryMax) throw new DomainException("Salary range is inverted.", "VALIDATION");
+            if (body.DepartmentId is { } d && !await db.Departments.AnyAsync(x => x.Id == d && x.LegalEntityId == body.LegalEntityId, ct)) throw new DomainException("Department is not valid for this legal entity.", "VALIDATION");
+            if (body.BranchId is { } br && !await db.Branches.AnyAsync(x => x.Id == br && x.LegalEntityId == body.LegalEntityId, ct)) throw new DomainException("Branch is not valid for this legal entity.", "VALIDATION");
+            ValidatePosting(body.IsPublished, body.Description, body.ClosingDate);
             if (body.PositionId is { } p)
             {
                 var pos = await db.Positions.FirstOrDefaultAsync(x => x.Id == p && x.LegalEntityId == body.LegalEntityId, ct) ?? throw new DomainException("Position not found.", "VALIDATION");
@@ -107,8 +119,9 @@ public static class HrEndpoints
             }
             var count = await db.JobRequisitions.CountAsync(r => r.LegalEntityId == body.LegalEntityId, ct) + 1;
             body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.Reference = $"REQ-{DateTime.UtcNow:yyyy}-{count:D3}"; body.Status = RequisitionStatus.PendingApproval; body.RequestedBy = ctx.RequireUser();
+            body.Description = body.Description?.Trim(); body.PublishedAt = body.IsPublished ? DateTimeOffset.UtcNow : null; // listed once approved
             db.JobRequisitions.Add(body);
-            audit.Record("recruitment.requisition.created", nameof(JobRequisition), body.Id, new { body.Reference, body.Title, body.Openings }, body.LegalEntityId);
+            audit.Record("recruitment.requisition.created", nameof(JobRequisition), body.Id, new { body.Reference, body.Title, body.Openings, body.IsPublished }, body.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/payroll/recruitment/requisitions/{body.Id}", body);
         });
@@ -137,6 +150,24 @@ public static class HrEndpoints
             if (!ok) throw new InvalidStateException($"A requisition cannot move from {r.Status} to {body.Status}.");
             r.Status = body.Status;
             audit.Record("recruitment.requisition.status", nameof(JobRequisition), id, new { body.Status }, r.LegalEntityId);
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(r);
+        });
+        // What the public careers page shows. Salary range and justification stay internal whatever is set here.
+        g.MapPost("/requisitions/{id:guid}/posting", async (Guid id, PostingBody body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        {
+            ctx.Require(Permissions.HrRecruitment);
+            var r = await db.JobRequisitions.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(JobRequisition), id);
+            ctx.RequireLegalEntity(r.LegalEntityId);
+            if (body.Published && r.Status is RequisitionStatus.Cancelled or RequisitionStatus.Filled) throw new InvalidStateException($"A {r.Status.ToString().ToLowerInvariant()} requisition can't be posted.");
+            ValidatePosting(body.Published, body.Description, body.ClosingDate);
+            if (body.BranchId is { } br && !await db.Branches.AnyAsync(x => x.Id == br && x.LegalEntityId == r.LegalEntityId, ct)) throw new DomainException("Branch is not valid for this legal entity.", "VALIDATION");
+            r.Description = body.Description?.Trim();
+            r.ClosingDate = body.ClosingDate;
+            r.BranchId = body.BranchId;
+            if (body.Published && !r.IsPublished) r.PublishedAt = DateTimeOffset.UtcNow;
+            r.IsPublished = body.Published;
+            audit.Record(body.Published ? "recruitment.requisition.posted" : "recruitment.requisition.unposted", nameof(JobRequisition), id, new { r.Reference, r.ClosingDate }, r.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Ok(r);
         });

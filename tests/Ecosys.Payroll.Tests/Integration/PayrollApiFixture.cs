@@ -33,6 +33,7 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     protected virtual bool RequireMfa => false;
     /// <summary>Settings a derived fixture adds or overrides (e.g. SaaS mode).</summary>
     protected virtual IReadOnlyDictionary<string, string> ExtraSettings => new Dictionary<string, string>();
+    protected virtual int CareersApplicationsPerHour => 100000;
 
     public string ConnectionString => $"{_server};Database={_database}";
     public Guid RivalTenantId { get; private set; }
@@ -52,6 +53,7 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             ["Auth:SigningKey"] = "integration-test-signing-key-0123456789abcdefghij",
             ["Auth:RequireMfaForPrivilegedRoles"] = RequireMfa ? "true" : "false",
             ["Auth:LoginAttemptsPerMinute"] = "100000", // every test signs in from the same in-memory client address
+            ["Careers:ApplicationsPerHour"] = CareersApplicationsPerHour.ToString(),
             ["Notifications:Enabled"] = "false", // tests drive the dispatcher explicitly
             ["Logging:LogLevel:Default"] = "Warning",
         }.Concat(ExtraSettings))

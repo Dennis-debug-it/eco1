@@ -26,6 +26,14 @@ public sealed partial class DemoDataSeeder
         Employee E(string no) => emps[no];
         var today = BusinessClock.Today();
 
+        // The company's paying account, needed to generate bank payment files.
+        if (!await db.CompanyBankAccounts.AnyAsync(a => a.LegalEntityId == le.Id, ct))
+            db.CompanyBankAccounts.Add(new Domain.Organisation.CompanyBankAccount
+            {
+                TenantId = t.Id, LegalEntityId = le.Id, Label = "Salaries account (KCB)", BankCode = "01", BankName = "KCB Bank Kenya",
+                BranchCode = "091", BranchName = "Moi Avenue", AccountName = le.Name, AccountNumber = "1107654321", IsDefault = true,
+            });
+
         // Reporting lines: MD at the top; managers below.
         if (emps.Values.All(e => e.ReportingManagerId is null) && emps.Count >= 16)
         {
@@ -154,7 +162,9 @@ public sealed partial class DemoDataSeeder
         if (!await db.JobRequisitions.AnyAsync(r => r.LegalEntityId == le.Id, ct))
         {
             var driverPos = await db.Positions.FirstOrDefaultAsync(p => p.LegalEntityId == le.Id && p.Title == "Driver", ct);
-            var req = new JobRequisition { TenantId = t.Id, LegalEntityId = le.Id, Reference = $"REQ-{today.Year}-001", Title = "Driver", PositionId = driverPos?.Id, DepartmentId = E("SL010").DepartmentId, BranchId = E("SL010").BranchId, Openings = 1, SalaryMin = 38_000, SalaryMax = 45_000, Justification = "Fleet expansion (third truck)", Status = RequisitionStatus.Open, RequestedBy = Guid.Empty };
+            var req = new JobRequisition { TenantId = t.Id, LegalEntityId = le.Id, Reference = $"REQ-{today.Year}-001", Title = "Driver", PositionId = driverPos?.Id, DepartmentId = E("SL010").DepartmentId, BranchId = E("SL010").BranchId, Openings = 1, SalaryMin = 38_000, SalaryMax = 45_000, Justification = "Fleet expansion (third truck)", Status = RequisitionStatus.Open, RequestedBy = Guid.Empty,
+                Description = "We are hiring a driver for our Mombasa–Nairobi route.\n\nYou will:\n- Drive a 30-tonne truck safely and on schedule\n- Complete pre-trip vehicle checks and delivery paperwork\n\nYou have:\n- A valid class CE driving licence and a clean driving record\n- At least three years' experience driving heavy commercial vehicles",
+                IsPublished = true, PublishedAt = DateTimeOffset.UtcNow };
             db.JobRequisitions.Add(req);
             db.JobApplications.AddRange(
                 new JobApplication { TenantId = t.Id, LegalEntityId = le.Id, JobRequisitionId = req.Id, FirstName = "Kevin", LastName = "Otieno", Email = "kevin.otieno@example.com", Phone = "+254711000111", Source = "Referral", Stage = ApplicationStage.Interview, ConsentToRetain = true,

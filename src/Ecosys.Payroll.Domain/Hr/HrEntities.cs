@@ -384,10 +384,15 @@ public class JobRequisition : LegalEntityScopedEntity
     public decimal? SalaryMin { get; set; }
     public decimal? SalaryMax { get; set; }
     public string EmploymentType { get; set; } = "Permanent";
+    /// <summary>Internal only: never shown on the careers page.</summary>
     public string? Justification { get; set; }
+    /// <summary>The job description. Shown publicly on the careers page when the requisition is published.</summary>
     public string? Description { get; set; }
     public DateOnly? ClosingDate { get; set; }
     public RequisitionStatus Status { get; set; } = RequisitionStatus.Draft;
+    /// <summary>Listed on the public careers page while Open and before the closing date. Salary is never published.</summary>
+    public bool IsPublished { get; set; }
+    public DateTimeOffset? PublishedAt { get; set; }
     public Guid RequestedBy { get; set; }
     public Guid? ApprovedBy { get; set; }
 }
@@ -403,6 +408,8 @@ public class JobApplication : LegalEntityScopedEntity
     public required string Email { get; set; }
     public string? Phone { get; set; }
     public string? Source { get; set; }
+    /// <summary>The candidate's own note, from the careers page.</summary>
+    public string? CoverNote { get; set; }
     public Guid? CvFileId { get; set; }
     public ApplicationStage Stage { get; set; } = ApplicationStage.Applied;
     public List<InterviewRecord> Interviews { get; set; } = [];

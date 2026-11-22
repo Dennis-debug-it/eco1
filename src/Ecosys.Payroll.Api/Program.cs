@@ -41,13 +41,19 @@ builder.Services.AddSingleton<EntitlementCache>();
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    o.OnRejected = async (c, ct) => await c.HttpContext.Response.WriteAsJsonAsync(new { title = "Too many requests", status = 429, code = "RATE_LIMITED", detail = "Too many sign-in attempts from this network. Wait a minute and try again." }, ct);
+    o.OnRejected = async (c, ct) => await c.HttpContext.Response.WriteAsJsonAsync(new { title = "Too many requests", status = 429, code = "RATE_LIMITED",
+        detail = c.HttpContext.Request.Path.StartsWithSegments("/api/payroll/public/careers")
+            ? "Too many applications from this network. Try again later."
+            : "Too many sign-in attempts from this network. Wait a minute and try again." }, ct);
     o.AddPolicy(AuthEndpoints.LoginRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 10), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.AddPolicy(OfferEndpoints.OfferRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Recruitment:OfferRequestsPerMinute", 30), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.AddPolicy(SignupEndpoints.SignupRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Saas:SignupAttemptsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
+    // Anyone can apply on the public careers page, so applications per network address are capped.
+    o.AddPolicy(CareersEndpoints.ApplyRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Careers:ApplicationsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
 });
 
 // Behind a TLS-terminating proxy (Caddy, nginx, a cloud load balancer) trust its X-Forwarded-* headers so client
@@ -121,6 +127,8 @@ app.MapGet("/health/ready", async (PayrollDbContext db, CancellationToken ct) =>
 var api = app.MapGroup("/api/payroll");
 api.MapAuth();
 api.MapOrganisation();
+api.MapBanking();
+api.MapCareers();
 api.MapEmployees();
 api.MapCompensation();
 api.MapStatutory();
@@ -153,6 +161,7 @@ using (var scope = app.Services.CreateScope())
     await seeder.SeedPlatformRulesAsync();
     if (scope.ServiceProvider.GetRequiredService<Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions>().Enabled && await PlanCatalogue.EnsureAsync(db) > 0)
         app.Logger.LogInformation("Created the starter price list. Review prices in the operator console before taking sign-ups.");
+    await seeder.SeedPlatformBanksAsync();
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && await seeder.SeedDemoTenantAsync())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false))

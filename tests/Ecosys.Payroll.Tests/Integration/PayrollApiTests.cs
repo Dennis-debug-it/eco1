@@ -28,6 +28,20 @@ public class PayrollApiTests(PayrollApiFixture app)
         return (le, group, periods.First(p => p!["name"].Str() == name)!["id"].Id());
     }
 
+    /// <summary>
+    /// The demo data has 14 monthly periods (from January 2025) and other tests use all of them; tests that need a period of
+    /// their own take one from 2024, generated on demand (generation skips existing periods). Not a future year: finalising a
+    /// future period would lock salary changes dated before it.
+    /// </summary>
+    private async Task<string> OwnPeriodAsync(string month)
+    {
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var le = (await admin.GetJson($"{B}/organisation/legal-entities"))[0]!["id"].Id();
+        var group = (await admin.GetJson($"{B}/organisation/payroll-groups?legalEntityId={le}"))[0]!["id"].Id();
+        await admin.PostJson($"{B}/organisation/payroll-groups/{group}/periods/generate", new { year = 2024, payDay = 28 });
+        return $"{month} 2024";
+    }
+
     private async Task<Guid> CalculatedRunAsync(HttpClient payroll, string periodName)
     {
         var (le, group, period) = await PeriodAsync(payroll, periodName);
@@ -251,7 +265,7 @@ public class PayrollApiTests(PayrollApiFixture app)
     {
         // The tenant administrator stands in for a sole payroll officer: they hold prepare and approve permissions.
         var admin = await app.LoginAsync("admin@demo.ecosys");
-        var run = await CalculatedRunAsync(admin, "February 2026");
+        var run = await CalculatedRunAsync(admin, await OwnPeriodAsync("October"));
         await admin.PostJson($"{B}/runs/{run}/submit", new { text = "Feb" });
         var le = await app.WithDbAsync(null, db => db.PayrollRuns.Where(r => r.Id == run).Select(r => r.LegalEntityId).FirstAsync());
         try
@@ -299,20 +313,30 @@ public class PayrollApiTests(PayrollApiFixture app)
     [Fact]
     public async Task Payslip_shows_nssf_to_date_and_leave_remaining_but_not_employer_cost()
     {
-        var run = await ApprovedRunAsync("January 2025");
+        var run = await ApprovedRunAsync(await OwnPeriodAsync("November"));
         await (await app.LoginAsync("approver@demo.ecosys")).PostJson($"{B}/runs/{run}/finalise");
 
         var brian = await app.LoginAsync("brian.mwangi@demo.ecosys");
         var me = (await brian.GetJson($"{B}/auth/me"))["employeeId"].Id();
-        var slipId = (await brian.GetJson($"{B}/employees/{me}/payslips")).AsArray().First(p => p!["periodEnd"].Str() == "2025-01-31")!["id"].Id();
+        var slipId = (await brian.GetJson($"{B}/employees/{me}/payslips")).AsArray().First(p => p!["periodEnd"].Str() == "2024-11-30")!["id"].Id();
 
-        // NSSF to date: employee + employer contributions; January 2025 is the first period, so just this run.
-        var expected = await app.WithDbAsync(null, db => db.PayrollRunEmployees.Where(e => e.PayrollRunId == run && e.EmployeeId == me)
+        // NSSF to date: employee + employer contributions from every approved, unreversed run up to this period, plus any opening balance.
+        var counted = new[] { PayrollRunStatus.Approved, PayrollRunStatus.PaymentProcessing, PayrollRunStatus.Paid, PayrollRunStatus.Finalised };
+        var expected = await app.WithDbAsync(null, async db =>
+        {
+            var runIds = await db.PayrollRuns.Where(r => counted.Contains(r.Status)).Join(db.PayrollPeriods, r => r.PayrollPeriodId, p => p.Id, (r, p) => new { r.Id, p.PeriodEnd })
+                .Where(x => x.PeriodEnd <= new DateOnly(2024, 11, 30)).Select(x => x.Id).ToListAsync();
+            var nssf = await db.PayrollRunEmployees.Where(e => runIds.Contains(e.PayrollRunId) && e.EmployeeId == me)
+                .SelectMany(e => e.Lines).Where(l => l.StatutoryRuleCode == "KE.NSSF").SumAsync(l => l.Amount);
+            var opening = await db.EmployeeStatutoryDetails.Where(x => x.EmployeeId == me).Select(x => (decimal?)x.NssfOpeningBalance).FirstOrDefaultAsync() ?? 0m;
+            return nssf + opening;
+        });
+        var thisRun = await app.WithDbAsync(null, db => db.PayrollRunEmployees.Where(e => e.PayrollRunId == run && e.EmployeeId == me)
             .SelectMany(e => e.Lines).Where(l => l.StatutoryRuleCode == "KE.NSSF").SumAsync(l => l.Amount));
-        Assert.True(expected > 0);
+        Assert.True(thisRun > 0 && expected >= thisRun);
         var own = await brian.GetJson($"{B}/payslips/{slipId}");
         Assert.Equal(expected, own["slip"]!["nssfContributionsToDate"].Dec());
-        // (Demo data records days taken without dates, so the January figure can be negative; only its presence is checked.)
+        // (Demo data records days taken without dates, so the figure can be negative; only its presence is checked.)
         Assert.Contains(own["slip"]!["leaveBalances"]!.AsArray(), l => l!["leaveType"].Str() == "Annual leave" && l["daysRemaining"] is not null);
         // The employee's own view leaves out what they cost the employer; payroll still sees it.
         Assert.Null(own["result"]!["totalEmployerCost"]);

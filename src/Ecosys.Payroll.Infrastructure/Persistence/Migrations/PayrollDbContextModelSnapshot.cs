@@ -1482,6 +1482,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at");
+
+                    b.Property<Guid?>("VerifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verified_by");
+
                     b.HasKey("Id")
                         .HasName("pk_employee_bank_accounts");
 
@@ -3443,6 +3451,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("consent_to_retain");
 
+                    b.Property<string>("CoverNote")
+                        .HasColumnType("text")
+                        .HasColumnName("cover_note");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -3602,6 +3614,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_published");
+
                     b.Property<string>("Justification")
                         .HasColumnType("text")
                         .HasColumnName("justification");
@@ -3617,6 +3633,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PositionId")
                         .HasColumnType("uuid")
                         .HasColumnName("position_id");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
 
                     b.Property<string>("Reference")
                         .IsRequired()
@@ -5768,6 +5788,135 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.ToTable("public_holidays", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.BankDirectoryBank", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("SwiftCode")
+                        .HasColumnType("text")
+                        .HasColumnName("swift_code");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_directory_banks");
+
+                    b.HasIndex("Code", "TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bank_directory_banks_code_tenant_id");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("Code", "TenantId"), false);
+
+                    b.ToTable("bank_directory_banks", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.BankDirectoryBranch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BankCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("bank_code");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bank_directory_branches");
+
+                    b.HasIndex("BankCode", "Code", "TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bank_directory_branches_bank_code_code_tenant_id");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("BankCode", "Code", "TenantId"), false);
+
+                    b.ToTable("bank_directory_branches", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Branch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5838,6 +5987,101 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_branches_legal_entity_id_code");
 
                     b.ToTable("branches", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.CompanyBankAccount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AccountName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("account_name");
+
+                    b.Property<string>("AccountNumber")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("account_number");
+
+                    b.Property<string>("BankCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("bank_code");
+
+                    b.Property<string>("BankName")
+                        .HasColumnType("text")
+                        .HasColumnName("bank_name");
+
+                    b.Property<string>("BranchCode")
+                        .HasColumnType("text")
+                        .HasColumnName("branch_code");
+
+                    b.Property<string>("BranchName")
+                        .HasColumnType("text")
+                        .HasColumnName("branch_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("currency_code");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_company_bank_accounts");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_company_bank_accounts_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_company_bank_accounts_tenant_id");
+
+                    b.ToTable("company_bank_accounts", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.CostCentre", b =>
@@ -6750,6 +6994,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<Guid?>("DebitAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("debit_account_id");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -6816,6 +7064,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_payment_batches");
+
+                    b.HasIndex("DebitAccountId")
+                        .HasDatabaseName("ix_payment_batches_debit_account_id");
 
                     b.HasIndex("LegalEntityId")
                         .HasDatabaseName("ix_payment_batches_legal_entity_id");
@@ -7152,6 +7403,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<Guid?>("EmployeeBankAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_bank_account_id");
+
                     b.Property<Guid>("EmployeeId")
                         .HasColumnType("uuid")
                         .HasColumnName("employee_id");
@@ -7218,6 +7473,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_payroll_payments_tenant_id");
+
+                    b.HasIndex("EmployeeBankAccountId", "Status")
+                        .HasDatabaseName("ix_payroll_payments_employee_bank_account_id_status");
 
                     b.HasIndex("PayrollRunId", "Status")
                         .HasDatabaseName("ix_payroll_payments_payroll_run_id_status");
@@ -8580,6 +8838,16 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_branches_legal_entities_legal_entity_id");
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.CompanyBankAccount", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_company_bank_accounts_legal_entities_legal_entity_id");
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.CostCentre", b =>
                 {
                     b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
@@ -8605,6 +8873,8 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.OwnsOne("Ecosys.Payroll.Domain.Organisation.PayrollSettings", "Settings", b1 =>
                         {
                             b1.Property<Guid>("LegalEntityId");
+
+                            b1.Property<bool>("AllowBankDetailSelfVerification");
 
                             b1.Property<bool>("AllowPreparerToApprove");
 
@@ -8712,6 +8982,12 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Payroll.PaymentBatch", b =>
                 {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.CompanyBankAccount", null)
+                        .WithMany()
+                        .HasForeignKey("DebitAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_payment_batches_company_bank_accounts_debit_account_id");
+
                     b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
                         .WithMany()
                         .HasForeignKey("LegalEntityId")

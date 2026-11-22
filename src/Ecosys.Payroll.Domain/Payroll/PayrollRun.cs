@@ -192,6 +192,8 @@ public class PayrollPayment : LegalEntityScopedEntity
     public Guid PayrollRunEmployeeId { get; set; }
     public Guid EmployeeId { get; set; }
     public Guid? PaymentBatchId { get; set; }
+    /// <summary>The employee account paid; null on payments made before this was recorded.</summary>
+    public Guid? EmployeeBankAccountId { get; set; }
     public required string Reference { get; set; }
     public decimal Amount { get; set; }
     public string CurrencyCode { get; set; } = "KES";
@@ -215,6 +217,8 @@ public class PaymentBatch : LegalEntityScopedEntity
     public Guid PayrollRunId { get; set; }
     public required string Reference { get; set; }
     public PaymentFileFormat Format { get; set; }
+    /// <summary>The company account the bank debits for this batch.</summary>
+    public Guid? DebitAccountId { get; set; }
     public int PaymentCount { get; set; }
     public decimal TotalAmount { get; set; }
     public required string FileName { get; set; }

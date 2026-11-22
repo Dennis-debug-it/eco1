@@ -68,6 +68,28 @@ public sealed class NotificationService(PayrollDbContext db, ITenantContext tena
         }
     }
 
+    /// <summary>
+    /// Tells the employee, through the contact details already on file, that their pay account changed — the main way
+    /// a diverted salary is caught before payday. Carries only the bank and the last digits, never amounts.
+    /// </summary>
+    public void BankDetailsChanged(Domain.Employees.Employee e, Domain.Employees.EmployeeBankAccount account, bool verified)
+    {
+        var where = $"{account.BankName ?? account.Method.ToString()} account {FieldEncryptor.Mask(account.AccountNumber)}";
+        var body = verified
+            ? $"Hello {e.FirstName}, {where} has been verified on your payroll record and your pay will now go there. If you didn't ask for this, contact HR immediately."
+            : $"Hello {e.FirstName}, {where} was added to your payroll record. It will be used once HR verifies it. If you didn't ask for this, contact HR immediately.";
+        const string subject = "Your pay account details changed";
+        if (!string.IsNullOrWhiteSpace(e.Email)) Enqueue(NotificationChannel.Email, e.Email, e.FirstName, "employee.bank.changed", subject, body, nameof(Domain.Employees.EmployeeBankAccount), account.Id, e.TenantId);
+        if (!string.IsNullOrWhiteSpace(e.Phone)) Enqueue(NotificationChannel.WhatsApp, e.Phone, e.FirstName, "employee.bank.changed", subject, body, nameof(Domain.Employees.EmployeeBankAccount), account.Id, e.TenantId);
+    }
+
+    /// <summary>Acknowledges a careers-page application. Says nothing about the candidate's chances or the salary.</summary>
+    public void ApplicationReceived(Domain.Hr.JobApplication a, string jobTitle, string company) =>
+        Enqueue(NotificationChannel.Email, a.Email, a.FirstName, "recruitment.application.received", $"Your application for {jobTitle} at {company}",
+            $"Hello {a.FirstName}, thank you for applying for {jobTitle} at {company}. We have received your application and CV. "
+            + "If your experience matches what we need, someone from our team will contact you. You don't need to do anything else for now.",
+            nameof(Domain.Hr.JobApplication), a.Id, a.TenantId);
+
     public async Task LeaveDecidedAsync(Domain.Leave.LeaveRequest r, bool approved, CancellationToken ct)
     {
         var e = await db.Employees.Where(x => x.Id == r.EmployeeId).Select(x => new { x.FirstName, x.Email, x.Phone }).FirstOrDefaultAsync(ct);

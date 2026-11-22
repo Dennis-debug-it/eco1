@@ -15,6 +15,8 @@ public sealed record EmployeeListItem(Guid Id, string EmployeeNumber, string Ful
 
 public sealed record EmployeeDetail(Employee Employee, EmployeeStatutoryDetails? Statutory, IReadOnlyList<EmployeeBankAccount> BankAccounts, IReadOnlyList<EmployeeSalaryAssignment>? SalaryAssignments, IReadOnlyList<EmploymentRecord> EmploymentHistory, IReadOnlyList<StaffLoan>? Loans);
 
+public sealed record BankAccountRequest(PaymentMethod Method, string? BankCode, string? BranchCode, string AccountName, string AccountNumber, bool IsPrimary = true, decimal SplitPercent = 100m);
+
 public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalaryStructureId, DateOnly EffectiveFrom, string? ChangeReason, List<EmployeeSalaryAssignmentLine>? Lines);
 
 public static class EmployeeEndpoints
@@ -195,28 +197,50 @@ public static class EmployeeEndpoints
             return Results.Ok(s);
         });
 
-        g.MapPost("/{id:guid}/bank-accounts", async (Guid id, EmployeeBankAccount body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        // Maker-checker: a new account is never paid until a second person verifies it, and the employee is told
+        // about every change through the contact details already on file.
+        g.MapPost("/{id:guid}/bank-accounts", async (Guid id, BankAccountRequest req, ITenantContext ctx, PayrollDbContext db, BankDirectoryService directory, NotificationService notify, AuditService audit, CancellationToken ct) =>
         {
             var self = ctx.EmployeeId == id;
             if (!self) ctx.Require(Permissions.EmployeesWrite);
             var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
             ctx.RequireLegalEntity(e.LegalEntityId);
-            if (string.IsNullOrWhiteSpace(body.AccountNumber) || string.IsNullOrWhiteSpace(body.AccountName)) throw new DomainException("Account name and number are required.", "VALIDATION");
-            body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.LegalEntityId = e.LegalEntityId; body.EmployeeId = id;
-            body.IsVerified = !self; // employee-submitted details must be verified by HR before payment (PRD §6)
-            if (body.IsPrimary) foreach (var other in await db.EmployeeBankAccounts.Where(b => b.EmployeeId == id).ToListAsync(ct)) other.IsPrimary = false;
-            db.EmployeeBankAccounts.Add(body);
-            audit.Record("employee.bank.added", nameof(EmployeeBankAccount), body.Id, new { employeeId = id, body.BankName, account = FieldEncryptor.Mask(body.AccountNumber), self }, e.LegalEntityId);
+            if (string.IsNullOrWhiteSpace(req.AccountNumber) || string.IsNullOrWhiteSpace(req.AccountName)) throw new DomainException("Account name and number are required.", "VALIDATION");
+            if (req.SplitPercent is <= 0 or > 100) throw new DomainException("Split percent should be more than 0 and at most 100.", "VALIDATION");
+            var details = await directory.ResolveAsync(req.Method, req.BankCode, req.BranchCode, req.AccountNumber, ct);
+            var account = new EmployeeBankAccount
+            {
+                TenantId = ctx.RequireTenant(), LegalEntityId = e.LegalEntityId, EmployeeId = id, Method = req.Method,
+                BankCode = details.BankCode, BankName = details.BankName, BranchCode = details.BranchCode, BranchName = details.BranchName,
+                AccountName = req.AccountName.Trim(), AccountNumber = details.AccountNumber, IsPrimary = req.IsPrimary, SplitPercent = req.SplitPercent,
+                IsVerified = false, // the current verified account keeps being paid until this one is verified
+            };
+            db.EmployeeBankAccounts.Add(account);
+            audit.Record("employee.bank.added", nameof(EmployeeBankAccount), account.Id, new { employeeId = id, account.Method, account.BankCode, account.BranchCode, account = FieldEncryptor.Mask(account.AccountNumber), self }, e.LegalEntityId);
+            notify.BankDetailsChanged(e, account, verified: false);
             await db.SaveChangesAsync(ct);
-            return Results.Created($"/api/payroll/employees/{id}/bank-accounts/{body.Id}", body);
+            return Results.Created($"/api/payroll/employees/{id}/bank-accounts/{account.Id}", account);
         });
 
-        g.MapPost("/{id:guid}/bank-accounts/{accountId:guid}/verify", async (Guid id, Guid accountId, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
+        g.MapPost("/{id:guid}/bank-accounts/{accountId:guid}/verify", async (Guid id, Guid accountId, ITenantContext ctx, PayrollDbContext db, NotificationService notify, AuditService audit, CancellationToken ct) =>
         {
             ctx.Require(Permissions.EmployeesWrite);
             var b = await db.EmployeeBankAccounts.FirstOrDefaultAsync(x => x.Id == accountId && x.EmployeeId == id, ct) ?? throw new NotFoundException(nameof(EmployeeBankAccount), accountId);
+            ctx.RequireLegalEntity(b.LegalEntityId);
+            if (b.IsVerified) return Results.Ok(b);
+            if (ctx.EmployeeId == id) throw new ForbiddenException("You can't verify your own bank details. Ask a colleague in HR or payroll.");
+            var entity = await db.LegalEntities.FirstAsync(x => x.Id == b.LegalEntityId, ct);
+            if (b.CreatedBy is { } maker && maker == ctx.UserId && !entity.Settings.AllowBankDetailSelfVerification)
+                throw new ForbiddenException("A different person must verify bank details you entered.");
+            var e = await db.Employees.FirstAsync(x => x.Id == id, ct);
+
             b.IsVerified = true;
-            audit.Record("employee.bank.verified", nameof(EmployeeBankAccount), b.Id, new { employeeId = id }, b.LegalEntityId);
+            b.VerifiedBy = ctx.RequireUser();
+            b.VerifiedAt = DateTimeOffset.UtcNow;
+            if (b.IsPrimary)
+                foreach (var other in await db.EmployeeBankAccounts.Where(x => x.EmployeeId == id && x.Id != b.Id && x.IsPrimary).ToListAsync(ct)) other.IsPrimary = false;
+            audit.Record("employee.bank.verified", nameof(EmployeeBankAccount), b.Id, new { employeeId = id, account = FieldEncryptor.Mask(b.AccountNumber), enteredBy = b.CreatedBy }, b.LegalEntityId);
+            notify.BankDetailsChanged(e, b, verified: true);
             await db.SaveChangesAsync(ct);
             return Results.Ok(b);
         });

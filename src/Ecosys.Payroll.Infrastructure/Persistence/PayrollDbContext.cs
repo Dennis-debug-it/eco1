@@ -38,6 +38,9 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<EmploymentRecord> EmploymentRecords => Set<EmploymentRecord>();
     public DbSet<EmployeeBankAccount> EmployeeBankAccounts => Set<EmployeeBankAccount>();
+    public DbSet<BankDirectoryBank> BankDirectoryBanks => Set<BankDirectoryBank>();
+    public DbSet<BankDirectoryBranch> BankDirectoryBranches => Set<BankDirectoryBranch>();
+    public DbSet<CompanyBankAccount> CompanyBankAccounts => Set<CompanyBankAccount>();
     public DbSet<EmployeeStatutoryDetails> EmployeeStatutoryDetails => Set<EmployeeStatutoryDetails>();
 
     public DbSet<SalaryComponent> SalaryComponents => Set<SalaryComponent>();
@@ -109,6 +112,21 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
         Scoped<Department>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());
         Scoped<CostCentre>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());
         Scoped<PayrollGroup>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Code }).IsUnique());
+        Scoped<CompanyBankAccount>(b, e => e.Property(x => x.AccountNumber).HasConversion(encryptor.RequiredConverter()));
+
+        // Bank directory: platform rows (TenantId null) shared by all tenants, plus each tenant's own.
+        b.Entity<BankDirectoryBank>(e =>
+        {
+            e.ToTable("bank_directory_banks");
+            e.HasIndex(x => new { x.Code, x.TenantId }).IsUnique().AreNullsDistinct(false);
+            e.HasQueryFilter(x => !x.IsDeleted && (IgnoreTenantFilter || x.TenantId == null || x.TenantId == tenant.TenantId));
+        });
+        b.Entity<BankDirectoryBranch>(e =>
+        {
+            e.ToTable("bank_directory_branches");
+            e.HasIndex(x => new { x.BankCode, x.Code, x.TenantId }).IsUnique().AreNullsDistinct(false);
+            e.HasQueryFilter(x => !x.IsDeleted && (IgnoreTenantFilter || x.TenantId == null || x.TenantId == tenant.TenantId));
+        });
         Scoped<PayrollPeriod>(b, e =>
         {
             e.HasIndex(x => new { x.PayrollGroupId, x.PeriodStart, x.PeriodEnd }).IsUnique();
@@ -201,13 +219,19 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
         });
         TenantEntity<PayrollResultLineRecord>(b, e => e.HasIndex(x => new { x.PayrollRunEmployeeId, x.Sequence }));
         Scoped<PayrollApproval>(b, e => { e.HasIndex(x => x.PayrollRunId); e.HasOne<PayrollRun>().WithMany().HasForeignKey(x => x.PayrollRunId); });
-        Scoped<PaymentBatch>(b, e => { e.HasIndex(x => x.PayrollRunId); e.HasOne<PayrollRun>().WithMany().HasForeignKey(x => x.PayrollRunId); });
+        Scoped<PaymentBatch>(b, e =>
+        {
+            e.HasIndex(x => x.PayrollRunId);
+            e.HasOne<PayrollRun>().WithMany().HasForeignKey(x => x.PayrollRunId);
+            e.HasOne<CompanyBankAccount>().WithMany().HasForeignKey(x => x.DebitAccountId).OnDelete(DeleteBehavior.Restrict);
+        });
         Scoped<PayrollPayment>(b, e =>
         {
             e.HasIndex(x => new { x.PayrollRunId, x.Status });
             e.Property(x => x.AccountNumber).HasConversion(encryptor.Converter());
             e.HasOne<PayrollRun>().WithMany().HasForeignKey(x => x.PayrollRunId);
             e.HasOne<PaymentBatch>().WithMany().HasForeignKey(x => x.PaymentBatchId);
+            e.HasIndex(x => new { x.EmployeeBankAccountId, x.Status });
         });
         Scoped<Payslip>(b, e =>
         {

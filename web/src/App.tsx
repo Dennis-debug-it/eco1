@@ -26,6 +26,7 @@ import ExpensesPage from './pages/Expenses'
 import HrAnalyticsPage from './pages/HrAnalytics'
 import DataProtectionPage from './pages/DataProtection'
 import BillingPage from './pages/Billing'
+import CareersPage from './pages/Careers'
 import OrganogramPage from './pages/Organogram'
 import OfferResponsePage from './pages/OfferResponse'
 import PlatformPage from './pages/Platform'
@@ -39,8 +40,16 @@ export default function App() {
   const ready = !!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied)
   const hrMe = useHrMe(ready)
   const billing = useBillingStatus(ready)
-  // A candidate's offer link works whether or not anyone is signed in on this browser.
+  // Public pages that work whether or not anyone is signed in on this browser:
+  // a candidate's offer link, and the careers page (candidates never sign in).
   if (location.pathname.startsWith('/offer/')) return <Routes><Route path="/offer/:token" element={<OfferResponsePage />} /></Routes>
+  if (location.pathname.startsWith('/careers/')) return (
+    <Routes>
+      <Route path="/careers/:slug" element={<CareersPage />} />
+      <Route path="/careers/:slug/jobs/:jobId" element={<CareersPage />} />
+      <Route path="*" element={<CareersPage />} />
+    </Routes>
+  )
   if (loading) return <Loading what="Signing in" />
   if (!user) return (
     <Routes>
