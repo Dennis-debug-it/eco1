@@ -63,12 +63,17 @@ public static class HrEndpoints
                 nameof(Dependant) => Permissions.HrBenefits,
                 nameof(OfferLetter) => Permissions.HrRecruitment,
                 nameof(Domain.Organisation.Letterhead) => Permissions.OrganisationManage,
+                nameof(ContractDocument) => Permissions.SalaryRead,
                 _ => Permissions.HrDocuments,
             };
             var allowed = ctx.Has(permission) || (f.EmployeeId is { } e && (access.IsSelf(e) && f.OwnerType != nameof(HrCase) || await access.IsLineManagerOfAsync(e, ct) && f.OwnerType is nameof(LeaveRequest) or nameof(ExpenseClaim)));
             if (f.OwnerType == nameof(EmployeeDocument) && access.IsSelf(f.EmployeeId ?? Guid.Empty) && !ctx.Has(permission))
                 allowed = await db.EmployeeDocuments.AnyAsync(d => d.StoredFileId == f.Id && d.VisibleToEmployee, ct);
             if (f.OwnerType == nameof(OfferLetter) && !ctx.Has(Permissions.SalaryRead)) allowed = false; // the letter states the salary
+            // Contracts on an employee's file state their pay: besides the employee, only people with salary access may open them.
+            if (allowed && f.OwnerType == nameof(EmployeeDocument) && !access.IsSelf(f.EmployeeId ?? Guid.Empty) && !ctx.Has(Permissions.SalaryRead)
+                && await db.EmployeeDocuments.AnyAsync(d => d.StoredFileId == f.Id && d.Category == DocumentCategory.Contract, ct))
+                allowed = false;
             if (!allowed) throw new ForbiddenException("You do not have access to this file.");
             audit.Record("file.downloaded", "StoredFile", f.Id, new { f.OwnerType, f.FileName });
             await db.SaveChangesAsync(ct);

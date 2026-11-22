@@ -192,6 +192,8 @@ amounts that the next regular run picks up at calculation, marks processed at fi
 | **Expenses** | Claims with receipts are approved first by the line manager, then by finance (a different person). Per diem above the KES 10,000/day tax-free amount is taxed. | Reimbursements are paid in the next payroll (REIMB, REIMB_TAXABLE) or marked paid directly. |
 | **HR analytics** | Headcount trend, turnover, absenteeism, tenure, department, gender, training hours, rating distribution and open items. | Shows employer cost per head to users with `salary.read`. |
 
+**Contracts of service.** On an employee's record, **Contracts & letters** drafts a contract from the company template for their type (permanent, fixed-term, casual or internship), filled from their record and current pay. Gaps such as a missing address are listed before issue. HR issues it, prints it for signature and uploads the signed scan, which is filed in the employee's documents. **Variation letters** (s.10(5)) list each change to job, place of work, reporting line, pay, allowances, notice or end date since the last contract or letter. Templates are under People records → Contract templates. Contracts state pay, so they need `salary.read` plus documents or salary-write access.
+
 **Letterheads.** Each company can set a letterhead under Organisation → Legal entities → Letterhead. Either a logo (PNG or JPG, under 1 MB) with a brand colour, tagline, website, P.O. Box and footer, or its own wide header artwork. Letters (offer, certificate of service, final dues) and payslips print it. Images are embedded by the built-in PDF writer, with transparency supported. Documents already sent keep the letterhead they were sent with.
 
 **Organogram.** People → Organogram draws the organisation top-down from employees' line managers, one row per level of seniority. Each card shows the person's title, department (colour-coded) and grade. With the HR suite there is also a positions view with vacant seats. It supports search, collapsing teams, zoom and print. It flags people whose manager has left and reporting loops. It is part of every plan and needs `employees.read`.
@@ -244,7 +246,7 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Area | Endpoints |
 |---|---|
 | Auth & users | `POST /auth/login`, `GET /auth/me`, `POST /auth/mfa/{setup,enable,disable}`, `GET/POST /auth/users`, `POST /auth/users/{id}/mfa/reset` |
-| Organisation | `/organisation/{legal-entities,branches,departments,cost-centres,payroll-groups}`, `/organisation/legal-entities/{id}/letterhead[/logo,/header,/preview]`, `GET /organisation/chart` (organogram), `POST /organisation/payroll-groups/{id}/periods/generate` |
+| Organisation | `/organisation/{legal-entities,branches,departments,cost-centres,payroll-groups}`, `/organisation/legal-entities/{id}/letterhead[/logo,/header,/preview]`, `/contract-templates/{legalEntityId}/{kind}`, `/employees/{id}/{contracts,variations}`, `/contracts/{id}[/pdf,/issue,/signed,/cancel]`, `GET /organisation/chart` (organogram), `POST /organisation/payroll-groups/{id}/periods/generate` |
 | Employees | `GET/POST /employees`, `GET/PUT /employees/{id}`, `PUT /employees/{id}/statutory`, `POST /employees/{id}/{bank-accounts,salary,loans}` |
 | Compensation | `/compensation/components`, `/compensation/salary-structures` |
 | Statutory | `GET /statutory-rules`, `GET /statutory-rules/effective`, `POST /statutory-rules`, `POST /statutory-rules/{id}/{submit,approve,reject}`, `POST /statutory-rules/simulate` |

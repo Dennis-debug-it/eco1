@@ -315,7 +315,10 @@ public class HrModulesTests(PayrollApiFixture app)
         var warning = await Upload("Disciplinary", true); // disciplinary documents are never employee-visible
         Assert.Equal(HttpStatusCode.OK, (await brian.GetAsync($"{B}/files/{contract}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await brian.GetAsync($"{B}/files/{warning}")).StatusCode);
-        Assert.Single((await brian.GetJson($"{B}/documents?employeeId={brianId}")).AsArray());
+        // (Other tests file documents for Brian too, so check by title rather than counting.)
+        var mine = (await brian.GetJson($"{B}/documents?employeeId={brianId}")).AsArray().Select(d => d!["title"].Str()).ToList();
+        Assert.Contains("Contract letter", mine);
+        Assert.DoesNotContain("Disciplinary letter", mine);
         Assert.Equal(HttpStatusCode.Forbidden, (await brian.GetAsync($"{B}/documents?employeeId={await EmployeeIdAsync("SL001")}")).StatusCode);
     }
 
@@ -564,5 +567,72 @@ public class HrModulesTests(PayrollApiFixture app)
             // Leave the shared demo company with a plain letterhead for other tests.
             await app.WithDbAsync(null, async db => { db.Letterheads.RemoveRange(db.Letterheads); return await db.SaveChangesAsync(); });
         }
+    }
+
+    [Fact]
+    public async Task Contract_is_drafted_issued_for_signature_filed_and_varied()
+    {
+        var admin = await app.LoginAsync("admin@demo.ecosys");
+        var hr = await app.LoginAsync("hr@demo.ecosys");
+        var brian = await app.LoginAsync("brian.mwangi@demo.ecosys");
+        var emp = (await brian.GetJson($"{B}/auth/me"))["employeeId"].Id();
+
+        // Contracts state pay: HR without salary access can't prepare or read them.
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.GetAsync($"{B}/employees/{emp}/contracts")).StatusCode);
+
+        var draft = await admin.PostJson($"{B}/employees/{emp}/contracts", new { });
+        var id = draft["id"].Id();
+        Assert.Equal("PermanentContract", draft["kind"].Str());
+        Assert.Equal("Draft", draft["status"].Str());
+        var preview = draft["preview"]!["body"].Str();
+        Assert.Contains("KES 180,000.00 per month", preview);
+        Assert.Contains("one month's notice", preview);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"{B}/employees/{emp}/contracts", new { })).StatusCode); // one draft at a time
+
+        // Gaps in the employee record are listed and block issuing until filled in (here, typed into the text).
+        var problems = draft["preview"]!["problems"]!.AsArray().Select(p => p!.GetValue<string>()).ToList();
+        var body = draft["body"].Str();
+        if (problems.Count > 0)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsync($"{B}/contracts/{id}/issue", null)).StatusCode);
+            body = body.Replace("{national_id}", "12345678").Replace("{date_of_birth}", "2 March 1994").Replace("{gender}", "male").Replace("{employee_address}", "Kilimani, Nairobi");
+        }
+        var edited = await admin.PutJson($"{B}/contracts/{id}", new { title = draft["title"].Str(), body, startDate = draft["startDate"].Str(), endDate = (string?)null, signatoryName = "Wanjiru Kamau", signatoryTitle = "Managing Director" });
+        Assert.Empty(edited["preview"]!["problems"]!.AsArray());
+
+        var issued = await admin.PostJson($"{B}/contracts/{id}/issue");
+        Assert.Equal("Issued", issued["status"].Str());
+        var pdf = System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/contracts/{id}/pdf")).Content.ReadAsByteArrayAsync());
+        Assert.StartsWith("%PDF", pdf);
+        Assert.Contains("SIGNED BY THE PARTIES", pdf);
+        Assert.DoesNotContain("DRAFT", pdf);
+
+        // Printed, signed, scanned and uploaded.
+        var scan = new MultipartFormDataContent { { new ByteArrayContent("%PDF-1.4\n%signed scan\n"u8.ToArray()), "file", "signed-contract.pdf" }, { new StringContent(BusinessClockToday().ToString("yyyy-MM-dd")), "signedOn" } };
+        var signed = await (await admin.PostAsync($"{B}/contracts/{id}/signed", scan)).Json();
+        Assert.Equal("Signed", signed["status"].Str());
+        var docs = (await admin.GetJson($"{B}/documents?employeeId={emp}")).AsArray();
+        var filed = docs.First(d => d!["title"].Str() == "Contract of service (signed)")!;
+        Assert.Equal("Contract", filed["category"].Str());
+        var fileId = filed["storedFileId"].Id();
+        Assert.Equal(HttpStatusCode.OK, (await brian.GetAsync($"{B}/files/{fileId}")).StatusCode);   // the employee's own contract
+        Assert.Equal(HttpStatusCode.Forbidden, (await hr.GetAsync($"{B}/files/{fileId}")).StatusCode); // states pay
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"{B}/contracts/{id}/cancel", new { reason = "x" })).StatusCode);
+
+        // A pay rise: the variation letter lists exactly what changed since the signed contract.
+        await admin.PostJson($"{B}/employees/{emp}/salary", new { basicSalary = 195_000m, effectiveFrom = BusinessClockToday().ToString("yyyy-MM-dd"), changeReason = "Annual review" }, HttpStatusCode.Created);
+        var variation = await admin.PostJson($"{B}/employees/{emp}/variations", new { });
+        Assert.Equal("VariationLetter", variation["kind"].Str());
+        var changes = variation["changes"]!.AsArray().Select(c => c!.GetValue<string>()).ToList();
+        Assert.Contains("Basic salary: from KES 180,000.00 to KES 195,000.00 a month", changes);
+        Assert.Contains("section 10(5)", variation["preview"]!["body"].Str());
+        Assert.Contains("- Basic salary: from KES 180,000.00 to KES 195,000.00 a month.", variation["preview"]!["body"].Str());
+        Assert.Equal("Issued", (await admin.PostJson($"{B}/contracts/{variation["id"].Id()}/issue"))["status"].Str());
+        Assert.Contains("ACKNOWLEDGEMENT", System.Text.Encoding.Latin1.GetString(await (await admin.GetAsync($"{B}/contracts/{variation["id"].Id()}/pdf")).Content.ReadAsByteArrayAsync()));
+
+        var list = (await admin.GetJson($"{B}/employees/{emp}/contracts")).AsArray();
+        Assert.Equal(2, list.Count);
+        var actions = await app.WithDbAsync(null, db => db.PayrollAuditLogs.Where(a => a.Action.StartsWith("contract.")).Select(a => a.Action).ToListAsync());
+        foreach (var a in new[] { "contract.drafted", "contract.issued", "contract.signed", "contract.variation.drafted" }) Assert.Contains(a, actions);
     }
 }

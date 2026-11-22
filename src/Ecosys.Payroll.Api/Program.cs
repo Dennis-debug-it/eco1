@@ -136,6 +136,7 @@ api.MapReports();
 api.MapBilling();
 api.MapSignup();
 api.MapOffers();
+api.MapContracts();
 app.MapPlatform();
 
 // Static SPA (built React app copied into wwwroot in the container image).

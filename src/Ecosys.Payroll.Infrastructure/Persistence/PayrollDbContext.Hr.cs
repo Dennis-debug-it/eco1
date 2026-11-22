@@ -32,6 +32,8 @@ public partial class PayrollDbContext
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
     public DbSet<OfferLetterTemplate> OfferLetterTemplates => Set<OfferLetterTemplate>();
     public DbSet<OfferLetter> OfferLetters => Set<OfferLetter>();
+    public DbSet<ContractTemplate> ContractTemplates => Set<ContractTemplate>();
+    public DbSet<ContractDocument> ContractDocuments => Set<ContractDocument>();
     public DbSet<OnboardingTask> OnboardingTasks => Set<OnboardingTask>();
     public DbSet<EmployeeDocument> EmployeeDocuments => Set<EmployeeDocument>();
     public DbSet<HrCase> HrCases => Set<HrCase>();
@@ -112,6 +114,15 @@ public partial class PayrollDbContext
 
         Scoped<JobRequisition>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Reference }).IsUnique());
         Scoped<OfferLetterTemplate>(b, e => e.HasIndex(x => x.LegalEntityId).IsUnique());
+        Scoped<ContractTemplate>(b, e => e.HasIndex(x => new { x.LegalEntityId, x.Kind }).IsUnique());
+        Scoped<ContractDocument>(b, e =>
+        {
+            e.HasIndex(x => new { x.EmployeeId, x.Status });
+            e.HasIndex(x => new { x.TenantId, x.Reference }).IsUnique();
+            e.HasOne<Employee>().WithMany().HasForeignKey(x => x.EmployeeId);
+            e.Property(x => x.Terms).HasColumnType("jsonb").HasConversion(JsonConverter(() => new ContractTerms()), JsonComparer<ContractTerms>());
+            e.Property(x => x.PreviousTerms!).HasColumnType("jsonb").HasConversion(JsonConverter(() => new ContractTerms()), JsonComparer<ContractTerms>());
+        });
         Scoped<OfferLetter>(b, e =>
         {
             e.HasIndex(x => new { x.JobApplicationId, x.Version }).IsUnique();

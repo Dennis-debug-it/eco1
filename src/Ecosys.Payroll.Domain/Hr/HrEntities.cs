@@ -466,6 +466,78 @@ public class OfferLetter : LegalEntityScopedEntity
     public string? DeclineReason { get; set; }
 }
 
+// =====================================================================================
+// Contracts of service and variation letters
+// =====================================================================================
+
+public enum ContractKind { PermanentContract, FixedTermContract, CasualContract, InternshipContract, VariationLetter }
+
+/// <summary>Company wording for one kind of contract or the variation letter, with {placeholders}. Created from a Kenyan default on first use.</summary>
+public class ContractTemplate : LegalEntityScopedEntity
+{
+    public ContractKind Kind { get; set; }
+    public required string Title { get; set; }
+    public required string Body { get; set; }
+    public string? SignatoryName { get; set; }
+    public string? SignatoryTitle { get; set; }
+}
+
+public enum ContractStatus { Draft, Issued, Signed, Cancelled }
+
+/// <summary>The terms a contract or variation states, kept so the next variation can say exactly what changed.</summary>
+public sealed class ContractTerms
+{
+    public string? JobTitle { get; set; }
+    public string? Department { get; set; }
+    public string? Location { get; set; }
+    public string? EmploymentType { get; set; }
+    public string? ReportsTo { get; set; }
+    public decimal Basic { get; set; }
+    public string Currency { get; set; } = "KES";
+    public List<ContractAllowance> Allowances { get; set; } = [];
+    public int NoticeDays { get; set; }
+    public DateOnly? EndDate { get; set; }
+}
+
+public sealed class ContractAllowance
+{
+    public required string Name { get; set; }
+    public decimal Amount { get; set; }
+}
+
+/// <summary>
+/// A contract of service or a variation letter for an employee (Employment Act 2007 s.9–10). Drafted from the
+/// template, edited, issued (text frozen, PDF kept) and printed for signature; the signed copy is then uploaded and
+/// filed in the employee's documents.
+/// </summary>
+public class ContractDocument : LegalEntityScopedEntity
+{
+    public Guid EmployeeId { get; set; }
+    public ContractKind Kind { get; set; }
+    public required string Reference { get; set; }
+    public required string Title { get; set; }
+    public required string Body { get; set; }
+    public string? SignatoryName { get; set; }
+    public string? SignatoryTitle { get; set; }
+    /// <summary>Contracts: when the employment (or this term) starts. Variations: when the change takes effect.</summary>
+    public DateOnly StartDate { get; set; }
+    /// <summary>Fixed-term contracts only.</summary>
+    public DateOnly? EndDate { get; set; }
+    public ContractStatus Status { get; set; } = ContractStatus.Draft;
+    public ContractTerms Terms { get; set; } = new();
+    /// <summary>Variations: the terms being changed from.</summary>
+    public ContractTerms? PreviousTerms { get; set; }
+    public DateTimeOffset? IssuedAt { get; set; }
+    public string? IssuedBy { get; set; }
+    public Guid? IssuedFileId { get; set; }
+    public DateOnly? SignedOn { get; set; }
+    public Guid? SignedFileId { get; set; }
+    public Guid? EmployeeDocumentId { get; set; }
+    public string? CancelReason { get; set; }
+
+    public bool IsContract => Kind != ContractKind.VariationLetter;
+}
+
 public sealed class InterviewRecord
 {
     public DateTimeOffset ScheduledAt { get; set; }

@@ -7,8 +7,9 @@ import { byId, useBranches, useComponents, useDepartments, useStructures } from 
 import type { BankAccount, EmployeeDetail, Payslip, StatutoryDetails } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
 import { EmployeeForm } from './Employees'
+import { ContractsTab } from '../components/Contracts'
 
-type Tab = 'profile' | 'salary' | 'statutory' | 'bank' | 'payslips' | 'history'
+type Tab = 'profile' | 'salary' | 'statutory' | 'bank' | 'payslips' | 'contracts' | 'history'
 
 export default function EmployeeDetailPage() {
   const { id = '' } = useParams()
@@ -34,6 +35,7 @@ export default function EmployeeDetailPage() {
     ...(d.salaryAssignments ? [{ id: 'salary' as Tab, label: 'Salary' }] : []),
     { id: 'statutory', label: 'Statutory' }, { id: 'bank', label: 'Bank accounts' },
     ...(isSelf || can(P.SalaryRead) ? [{ id: 'payslips' as Tab, label: 'Payslips' }] : []),
+    ...(can(P.SalaryRead) && (can(P.HrDocuments) || can(P.SalaryWrite)) ? [{ id: 'contracts' as Tab, label: 'Contracts & letters' }] : []),
     { id: 'history', label: 'Employment history' },
   ]
   const current = d.salaryAssignments?.find(a => !a.effectiveTo) ?? d.salaryAssignments?.[0]
@@ -97,6 +99,7 @@ export default function EmployeeDetailPage() {
 
       {tab === 'payslips' && <PayslipList employeeId={id} />}
 
+      {tab === 'contracts' && <ContractsTab employeeId={id} employmentType={e.employmentType} hireDate={e.hireDate} contractEndDate={e.contractEndDate ?? undefined} />}
       {tab === 'history' && (
         <div className="card"><h2>Employment history</h2>
           <table><thead><tr><th>From</th><th>To</th><th>Job title</th><th>Type</th><th>Status</th><th>Reason</th></tr></thead>

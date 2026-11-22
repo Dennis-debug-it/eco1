@@ -120,82 +120,191 @@ public static class HrDocumentRenderer
     /// </summary>
     public static byte[] OfferLetter(LegalEntity entity, OfferLetter letter, string candidateName, string candidateEmail, DateOnly issuedOn, bool draft, Brand? brand = null)
     {
-        brand ??= Brand.Plain;
-        var pdf = new PdfWriter();
-        const float size = 10.5f, lineGap = size * 1.45f;
-        var bottom = PdfWriter.A4Height - (string.IsNullOrWhiteSpace(brand.Footer) ? 70 : 84);
-        var page = 1;
-        void Footer()
-        {
-            brand.DrawFooter(pdf, Left, Right);
-            pdf.Text(Left, PdfWriter.A4Height - 40, $"{letter.Reference} · Private and confidential", 7.5f);
-            pdf.Text(Right, PdfWriter.A4Height - 40, $"Page {page}", 7.5f, align: TextAlign.Right);
-            if (draft) pdf.Text((Left + Right) / 2, PdfWriter.A4Height - 40, "DRAFT: NOT SENT", 9, bold: true, TextAlign.Center);
-        }
-        var y = Letterhead(pdf, entity, "", brand);
-        pdf.Text(Right, y, $"Date: {issuedOn:d MMMM yyyy}", 10, align: TextAlign.Right);
-        pdf.Text(Right, y + 13, $"Ref: {letter.Reference}", 9, align: TextAlign.Right);
-        pdf.Text(Left, y, "PRIVATE AND CONFIDENTIAL", 9, bold: true);
-        y += 18;
-        pdf.Text(Left, y, candidateName, 10.5f, bold: true); y += 13;
-        pdf.Text(Left, y, candidateEmail, 9.5f); y += 26;
-        Footer();
+        var c = new LetterComposer(entity, brand ?? Brand.Plain, letter.Reference, draft ? "DRAFT: NOT SENT" : null);
+        c.Opening(issuedOn, [candidateName, candidateEmail]);
+        c.Heading(letter.Subject);
+        c.Body(letter.Body);
 
-        void Ensure(float needed)
+        c.Space(14); c.Ensure(90);
+        c.Line("Yours sincerely,"); c.Space(30);
+        c.SignatureLine(letter.SignatoryName ?? "Authorised signatory", letter.SignatoryTitle, "For and on behalf of " + entity.Name);
+        c.Space(16);
+
+        c.Section("ACCEPTANCE", 110);
+        if (letter.Status == OfferLetterStatus.Accepted && letter.RespondedAt is { } at)
         {
-            if (y + needed <= bottom) return;
-            pdf.NewPage(); page++; y = 60; Footer();
+            c.Wrapped($"I, {letter.ResponseName}, accept this offer of employment on the terms set out above.");
+            var how = letter.RecordedByHr ? $"Acceptance recorded by {letter.ResponseName} on behalf of the candidate" : $"Accepted electronically by {letter.ResponseName}";
+            c.Wrapped($"{how} on {BusinessClock.ToLocal(at):d MMMM yyyy 'at' HH:mm} {BusinessClock.Abbreviation}{(string.IsNullOrWhiteSpace(letter.ResponseIp) ? "" : $" from {letter.ResponseIp}")}.", fontSize: 9);
         }
-        void Wrapped(string text, float x, float width, bool bold = false, float fontSize = size, PdfColor? color = null)
+        else
         {
+            c.Wrapped($"I, {candidateName}, accept this offer of employment on the terms set out above.");
+            c.Space(30); c.SignAndDate();
+        }
+        return c.Pdf.ToBytes();
+    }
+
+    /// <summary>
+    /// Contract of service or variation letter, for printing and wet signature. Contracts end with signature blocks for
+    /// the employer and the employee; a variation letter is signed by the employer and acknowledged by the employee.
+    /// </summary>
+    public static byte[] ContractDocument(LegalEntity entity, ContractDocument doc, Employee emp, DateOnly issuedOn, bool draft, Brand? brand = null)
+    {
+        var c = new LetterComposer(entity, brand ?? Brand.Plain, doc.Reference, draft ? "DRAFT: NOT ISSUED" : null);
+        if (doc.IsContract)
+        {
+            c.TitleBlock(doc.Title, issuedOn);
+        }
+        else
+        {
+            c.Opening(issuedOn, [emp.FullName, $"Employee number {emp.EmployeeNumber}"]);
+            c.Heading(doc.Title);
+        }
+        c.Body(doc.Body);
+
+        if (doc.IsContract)
+        {
+            c.Section("SIGNED BY THE PARTIES", 200);
+            c.Wrapped("Each party has read and understood this contract and agrees to its terms.", fontSize: 9.5f);
+            c.Space(28);
+            c.SignatureLine($"For and on behalf of {entity.Name}", doc.SignatoryName is null ? "Name and title" : $"{doc.SignatoryName}{(string.IsNullOrWhiteSpace(doc.SignatoryTitle) ? "" : ", " + doc.SignatoryTitle)}", "Date:", withDate: false);
+            c.Space(26);
+            c.SignatureLine($"Employee: {emp.FullName}", $"ID / passport: {Masked(emp.NationalId ?? emp.PassportNumber)}", "Date:", withDate: false);
+            c.Space(26);
+            c.SignatureLine("Witness", "Name:", "Date:", withDate: false);
+        }
+        else
+        {
+            c.Space(14); c.Ensure(90);
+            c.Line("Yours sincerely,"); c.Space(30);
+            c.SignatureLine(doc.SignatoryName ?? "Authorised signatory", doc.SignatoryTitle, "For and on behalf of " + entity.Name);
+            c.Space(16);
+            c.Section("ACKNOWLEDGEMENT", 100);
+            c.Wrapped($"I, {emp.FullName}, acknowledge receipt of this letter and agree to the changes to my terms of employment set out above.");
+            c.Space(30); c.SignAndDate();
+        }
+        return c.Pdf.ToBytes();
+    }
+
+    /// <summary>ID numbers on printed contracts show the last four digits only; the full number is on the employee's file.</summary>
+    private static string Masked(string? id) => string.IsNullOrWhiteSpace(id) ? "________________" : id.Length <= 4 ? id : new string('*', id.Length - 4) + id[^4..];
+
+    /// <summary>Lays out a multi-page letter on the company letterhead: wrapping, page breaks, footer and page numbers.</summary>
+    private sealed class LetterComposer
+    {
+        private const float Size = 10.5f, Gap = Size * 1.45f;
+        private readonly LegalEntity _entity;
+        private readonly Brand _brand;
+        private readonly string _reference;
+        private readonly string? _draftMark;
+        private readonly float _bottom;
+        private int _page = 1;
+        private float _y;
+        public PdfWriter Pdf { get; } = new();
+
+        public LetterComposer(LegalEntity entity, Brand brand, string reference, string? draftMark)
+        {
+            _entity = entity; _brand = brand; _reference = reference; _draftMark = draftMark;
+            _bottom = PdfWriter.A4Height - (string.IsNullOrWhiteSpace(brand.Footer) ? 70 : 84);
+            _y = Letterhead(Pdf, entity, "", brand);
+            Footer();
+        }
+
+        private void Footer()
+        {
+            _brand.DrawFooter(Pdf, Left, Right);
+            Pdf.Text(Left, PdfWriter.A4Height - 40, $"{_reference} · Private and confidential", 7.5f);
+            Pdf.Text(Right, PdfWriter.A4Height - 40, $"Page {_page}", 7.5f, align: TextAlign.Right);
+            if (_draftMark is not null) Pdf.Text((Left + Right) / 2, PdfWriter.A4Height - 40, _draftMark, 9, bold: true, TextAlign.Center);
+        }
+
+        public void Ensure(float needed)
+        {
+            if (_y + needed <= _bottom) return;
+            Pdf.NewPage(); _page++; _y = 60; Footer();
+        }
+
+        public void Space(float points) => _y += points;
+
+        /// <summary>Date and reference on the right, "private and confidential" and the addressee on the left.</summary>
+        public void Opening(DateOnly date, IReadOnlyList<string> addressee)
+        {
+            Pdf.Text(Right, _y, $"Date: {date:d MMMM yyyy}", 10, align: TextAlign.Right);
+            Pdf.Text(Right, _y + 13, $"Ref: {_reference}", 9, align: TextAlign.Right);
+            Pdf.Text(Left, _y, "PRIVATE AND CONFIDENTIAL", 9, bold: true);
+            _y += 18;
+            for (var i = 0; i < addressee.Count; i++) { Pdf.Text(Left, _y, addressee[i], i == 0 ? 10.5f : 9.5f, bold: i == 0); _y += 13; }
+            _y += 13;
+        }
+
+        /// <summary>A centred document title (contracts), with date and reference beneath.</summary>
+        public void TitleBlock(string title, DateOnly date)
+        {
+            _y += 4;
+            Pdf.Text((Left + Right) / 2, _y, title.ToUpperInvariant(), 14, bold: true, TextAlign.Center, Right - Left, _brand.TextColour);
+            _y += 16;
+            Pdf.Text((Left + Right) / 2, _y, $"Ref: {_reference}   ·   Prepared {date:d MMMM yyyy}", 9, align: TextAlign.Center);
+            _y += 24;
+        }
+
+        public void Heading(string text) { Wrapped(text, bold: true, fontSize: 11.5f, color: _brand.TextColour); _y += 6; }
+
+        public void Line(string text) { Ensure(Gap); Pdf.Text(Left, _y, text, Size); _y += Gap; }
+
+        public void Wrapped(string text, float indent = 0, bool bold = false, float fontSize = Size, PdfColor? color = null)
+        {
+            float x = Left + indent, width = Right - Left - indent, gap = fontSize * 1.45f;
             var line = "";
             foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
                 var candidate = line.Length == 0 ? word : line + " " + word;
-                if (PdfWriter.Measure(candidate, fontSize, bold) > width && line.Length > 0) { Ensure(lineGap); pdf.Text(x, y, line, fontSize, bold, color: color); y += lineGap; line = word; }
+                if (PdfWriter.Measure(candidate, fontSize, bold) > width && line.Length > 0) { Ensure(gap); Pdf.Text(x, _y, line, fontSize, bold, color: color); _y += gap; line = word; }
                 else line = candidate;
             }
-            if (line.Length > 0) { Ensure(lineGap); pdf.Text(x, y, line, fontSize, bold, color: color); y += lineGap; }
+            if (line.Length > 0) { Ensure(gap); Pdf.Text(x, _y, line, fontSize, bold, color: color); _y += gap; }
         }
 
-        Wrapped(letter.Subject, Left, Right - Left, bold: true, fontSize: 11.5f, color: brand.TextColour);
-        y += 6;
-        foreach (var block in Blocks(letter.Body))
+        /// <summary>Letter text: "## " headings (kept with what follows), "- " bullets, paragraphs.</summary>
+        public void Body(string body)
         {
-            switch (block.Kind)
+            foreach (var block in Blocks(body))
             {
-                case 'h': y += 4; Ensure(lineGap * 2); Wrapped(block.Text, Left, Right - Left, bold: true, fontSize: 11); break;
-                case '-': Ensure(lineGap); pdf.Text(Left + 8, y, "•", size); Wrapped(block.Text, Left + 22, Right - Left - 22); y += 1; break;
-                default: Wrapped(block.Text, Left, Right - Left); y += 7; break;
+                switch (block.Kind)
+                {
+                    case 'h': _y += 4; Ensure(Gap * 3); Wrapped(block.Text, bold: true, fontSize: 11); break;
+                    case '-': Ensure(Gap); Pdf.Text(Left + 8, _y, "•", Size); Wrapped(block.Text, indent: 22); _y += 1; break;
+                    default: Wrapped(block.Text); _y += 7; break;
+                }
             }
         }
 
-        // Signature.
-        y += 14; Ensure(90);
-        pdf.Text(Left, y, "Yours sincerely,", size); y += 44;
-        pdf.Line(Left, y, Left + 200, y, 0.6f); y += 14;
-        pdf.Text(Left, y, letter.SignatoryName ?? "Authorised signatory", size, bold: true); y += 13;
-        if (!string.IsNullOrWhiteSpace(letter.SignatoryTitle)) { pdf.Text(Left, y, letter.SignatoryTitle, 9.5f); y += 13; }
-        pdf.Text(Left, y, "For and on behalf of " + entity.Name, 9.5f); y += 30;
+        /// <summary>A rule and a bold heading, starting a new page unless <paramref name="keepTogether"/> points fit.</summary>
+        public void Section(string title, float keepTogether)
+        {
+            _y += 10; Ensure(keepTogether);
+            Pdf.Line(Left, _y, Right, _y, 0.5f, 0.6f); _y += 18;
+            Pdf.Text(Left, _y, title, 10, bold: true); _y += 16;
+        }
 
-        // Acceptance.
-        Ensure(110);
-        pdf.Line(Left, y, Right, y, 0.5f, 0.6f); y += 18;
-        pdf.Text(Left, y, "ACCEPTANCE", 10, bold: true); y += 16;
-        if (letter.Status == OfferLetterStatus.Accepted && letter.RespondedAt is { } at)
+        /// <summary>A signature rule with up to three lines beneath it, and optionally a date rule beside it.</summary>
+        public void SignatureLine(string first, string? second, string? third, bool withDate = false)
         {
-            Wrapped($"I, {letter.ResponseName}, accept this offer of employment on the terms set out above.", Left, Right - Left);
-            var how = letter.RecordedByHr ? $"Acceptance recorded by {letter.ResponseName} on behalf of the candidate" : $"Accepted electronically by {letter.ResponseName}";
-            Wrapped($"{how} on {BusinessClock.ToLocal(at):d MMMM yyyy 'at' HH:mm} {BusinessClock.Abbreviation}{(string.IsNullOrWhiteSpace(letter.ResponseIp) ? "" : $" from {letter.ResponseIp}")}.", Left, Right - Left, fontSize: 9);
+            Ensure(60);
+            Pdf.Line(Left, _y, Left + 220, _y, 0.6f);
+            if (withDate) Pdf.Line(Left + 260, _y, Left + 400, _y, 0.6f);
+            _y += 14;
+            Pdf.Text(Left, _y, first, Size, bold: true, maxWidth: 300); _y += 13;
+            if (!string.IsNullOrWhiteSpace(second)) { Pdf.Text(Left, _y, second, 9.5f, maxWidth: 300); _y += 13; }
+            if (!string.IsNullOrWhiteSpace(third)) { Pdf.Text(Left, _y, third, 9.5f, maxWidth: 300); _y += 13; }
         }
-        else
+
+        public void SignAndDate()
         {
-            Wrapped($"I, {candidateName}, accept this offer of employment on the terms set out above.", Left, Right - Left);
-            y += 30;
-            pdf.Line(Left, y, Left + 200, y, 0.6f); pdf.Line(Left + 260, y, Left + 400, y, 0.6f); y += 13;
-            pdf.Text(Left, y, "Signature", 9); pdf.Text(Left + 260, y, "Date", 9);
+            Ensure(30);
+            Pdf.Line(Left, _y, Left + 200, _y, 0.6f); Pdf.Line(Left + 260, _y, Left + 400, _y, 0.6f); _y += 13;
+            Pdf.Text(Left, _y, "Signature", 9); Pdf.Text(Left + 260, _y, "Date", 9); _y += 13;
         }
-        return pdf.ToBytes();
     }
 
     /// <summary>A short sample letter to preview the letterhead.</summary>
