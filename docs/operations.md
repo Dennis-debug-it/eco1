@@ -154,7 +154,7 @@ With `SAAS_ENABLED=false` (the default) none of this appears. That is the licens
 
 ### Before taking sign-ups
 
-1. Configure email delivery (`NOTIFICATIONS_PROVIDER=Ecosys`): sign-up confirmations and invoices go by email. The app refuses to start with sign-up on and no email delivery. To onboard customers only by hand, set `SAAS_SIGNUP_ENABLED=false` instead.
+1. Configure email delivery (`NOTIFICATIONS_PROVIDER=Ecosys`): sign-up confirmations, invoices and "Forgot password?" links go by email. The app refuses to start with sign-up on and no email delivery. To onboard customers only by hand, set `SAAS_SIGNUP_ENABLED=false` instead.
 2. Fill in `SAAS_SELLER_NAME`, `SAAS_SELLER_TAX_PIN`, `SAAS_SELLER_ADDRESS`, `SAAS_SUPPORT_EMAIL` and `SAAS_PAYMENT_INSTRUCTIONS`. They are printed on every invoice. If you are VAT-registered, have your accountant confirm the invoice layout meets KRA requirements (including eTIMS) before the first invoice goes out.
 3. Create your operator account:
 

@@ -281,6 +281,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
             e.Property(x => x.LegalEntityIds).HasColumnType("jsonb");
             e.Property(x => x.MfaSecret).HasConversion(encryptor.Converter());
             e.HasIndex(x => x.EmailVerificationTokenHash);
+            e.HasIndex(x => x.PasswordResetTokenHash);
         });
     }
 

@@ -9,11 +9,12 @@ export default function LoginPage() {
   const [demo, setDemo] = useState(false)
   const [signup, setSignup] = useState(false)
   const [demoOperator, setDemoOperator] = useState(false)
+  const [localLogin, setLocalLogin] = useState(true)
   const [unverified, setUnverified] = useState(false)
   const [resent, setResent] = useState(false)
   const [tenant, setTenant] = useState(() => { try { return localStorage.getItem('ecosys.org') ?? '' } catch { return '' } })
   useEffect(() => {
-    api.get<{ demo: boolean; demoOperator?: boolean; signup?: boolean }>('/api/payroll/auth/options').then(o => { setDemo(o.demo); setDemoOperator(!!o.demoOperator); setSignup(!!o.signup); if (o.demo) setTenant(t => t || 'demo') }).catch(() => {})
+    api.get<{ demo: boolean; demoOperator?: boolean; signup?: boolean; localLogin?: boolean }>('/api/payroll/auth/options').then(o => { setDemo(o.demo); setLocalLogin(o.localLogin !== false); setDemoOperator(!!o.demoOperator); setSignup(!!o.signup); if (o.demo) setTenant(t => t || 'demo') }).catch(() => {})
   }, [])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,6 +44,7 @@ export default function LoginPage() {
           <Field label="Organisation"><input value={tenant} onChange={e => setTenant(e.target.value)} autoComplete="organization" required /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" required autoFocus /></Field>
           <Field label="Password"><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></Field>
+          {localLogin && <p className="small" style={{ marginTop: -6, textAlign: 'right' }}><Link to={`/forgot-password?org=${encodeURIComponent(tenant.trim())}&email=${encodeURIComponent(email.trim())}`}>Forgot password?</Link></p>}
         </> : <>
           <p className="small">Enter the 6-digit code from your authenticator app for <b>{email}</b>.</p>
           <Field label="Authentication code"><input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} required autoFocus /></Field>

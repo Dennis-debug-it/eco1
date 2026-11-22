@@ -134,6 +134,9 @@ public class User : TenantEntity
     public string? EmailVerificationTokenHash { get; set; }
     public DateTimeOffset? EmailVerificationExpiresAt { get; set; }
     public DateTimeOffset? EmailVerifiedAt { get; set; }
+    /// <summary>SHA-256 of the pending "forgot password" token. Single use; cleared when used or when the password changes.</summary>
+    public string? PasswordResetTokenHash { get; set; }
+    public DateTimeOffset? PasswordResetExpiresAt { get; set; }
 
     public void RotateSecurityStamp() => SecurityStamp = Guid.NewGuid();
 }

@@ -49,6 +49,8 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 10), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.AddPolicy(OfferEndpoints.OfferRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Recruitment:OfferRequestsPerMinute", 30), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.AddPolicy(PasswordResetEndpoints.RateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:PasswordResetRequestsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
     o.AddPolicy(SignupEndpoints.SignupRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Saas:SignupAttemptsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
     // Anyone can apply on the public careers page, so applications per network address are capped.

@@ -31,6 +31,7 @@ import OrganogramPage from './pages/Organogram'
 import OfferResponsePage from './pages/OfferResponse'
 import PlatformPage from './pages/Platform'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
+import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordReset'
 import { useHrMe } from './lib/lookups'
 import { Feature, useBillingStatus, type BillingStatus } from './lib/billing'
 
@@ -42,6 +43,8 @@ export default function App() {
   const billing = useBillingStatus(ready)
   // Public pages that work whether or not anyone is signed in on this browser:
   // a candidate's offer link, and the careers page (candidates never sign in).
+  // A reset link must work even if someone else is still signed in on this browser.
+  if (location.pathname === '/reset-password') return <ResetPasswordPage />
   if (location.pathname.startsWith('/offer/')) return <Routes><Route path="/offer/:token" element={<OfferResponsePage />} /></Routes>
   if (location.pathname.startsWith('/careers/')) return (
     <Routes>
@@ -55,6 +58,7 @@ export default function App() {
     <Routes>
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="*" element={<LoginPage />} />
     </Routes>
   )

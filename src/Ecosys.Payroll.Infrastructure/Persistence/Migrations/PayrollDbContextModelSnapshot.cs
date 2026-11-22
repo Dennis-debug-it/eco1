@@ -5372,6 +5372,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
 
+                    b.Property<DateTimeOffset?>("PasswordResetExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("password_reset_expires_at");
+
+                    b.Property<string>("PasswordResetTokenHash")
+                        .HasColumnType("text")
+                        .HasColumnName("password_reset_token_hash");
+
                     b.Property<string>("Phone")
                         .HasColumnType("text")
                         .HasColumnName("phone");
@@ -5402,6 +5410,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EmailVerificationTokenHash")
                         .HasDatabaseName("ix_users_email_verification_token_hash");
+
+                    b.HasIndex("PasswordResetTokenHash")
+                        .HasDatabaseName("ix_users_password_reset_token_hash");
 
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_users_tenant_id");
