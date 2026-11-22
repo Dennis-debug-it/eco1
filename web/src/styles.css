@@ -84,3 +84,30 @@ label.field.inline { display: flex; align-items: center; gap: 8px; } label.field
 .bar { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; } .bar > i { display: block; height: 100%; background: var(--primary); }
 .chart { width: 100%; height: auto; } .chart text { font-size: 11px; fill: var(--muted); }
 .issue-list { margin: 0; padding-left: 18px; } .issue-list li { margin: 2px 0; }
+
+/* Public careers page (no sign-in) */
+.careers { min-height: 100%; background: var(--bg); }
+.careers-wrap { width: min(1040px, 100%); margin: 0 auto; padding: 0 16px; }
+.careers-head { background: var(--surface); border-bottom: 1px solid var(--border); padding: 28px 0 22px; margin-bottom: 20px; }
+.careers-head h1 { font-size: 26px; }
+.careers-kicker { display: block; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--primary); margin-bottom: 4px; }
+.careers main { padding-bottom: 40px; }
+.careers-intro { color: var(--muted); margin: 0 0 12px; }
+.careers-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.careers-list .card + .card { margin-top: 0; }
+.careers-list h2 { font-size: 17px; margin-bottom: 2px; }
+.careers-meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+.careers-snippet { margin: 0 0 12px; white-space: pre-line; }
+.careers-job { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
+.careers-job .card + .card { margin-top: 0; }
+.careers-title { font-size: 20px; margin-bottom: 4px; }
+.careers-description { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.careers-apply { position: sticky; top: 16px; }
+.careers-apply input:not([type=checkbox]), .careers-apply textarea { width: 100%; }
+.careers-privacy { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: 4px 0 12px; }
+.careers-privacy p { margin: 0 0 8px; color: var(--muted); }
+.careers-privacy label.field { color: var(--text); font-weight: 500; margin-bottom: 6px; }
+.careers-submit { width: 100%; justify-content: center; }
+.careers-empty { text-align: center; padding: 32px 16px; }
+.careers-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+@media (max-width: 760px) { .careers-job { grid-template-columns: 1fr; } .careers-apply { position: static; } .careers-head h1 { font-size: 22px; } }

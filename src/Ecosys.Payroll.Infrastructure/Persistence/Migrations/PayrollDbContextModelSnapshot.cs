@@ -2749,6 +2749,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("consent_to_retain");
 
+                    b.Property<string>("CoverNote")
+                        .HasColumnType("text")
+                        .HasColumnName("cover_note");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2908,6 +2912,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_published");
+
                     b.Property<string>("Justification")
                         .HasColumnType("text")
                         .HasColumnName("justification");
@@ -2923,6 +2931,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("PositionId")
                         .HasColumnType("uuid")
                         .HasColumnName("position_id");
+
+                    b.Property<DateTimeOffset?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("published_at");
 
                     b.Property<string>("Reference")
                         .IsRequired()

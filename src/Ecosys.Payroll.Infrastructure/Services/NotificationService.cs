@@ -83,6 +83,13 @@ public sealed class NotificationService(PayrollDbContext db, ITenantContext tena
         if (!string.IsNullOrWhiteSpace(e.Phone)) Enqueue(NotificationChannel.WhatsApp, e.Phone, e.FirstName, "employee.bank.changed", subject, body, nameof(Domain.Employees.EmployeeBankAccount), account.Id, e.TenantId);
     }
 
+    /// <summary>Acknowledges a careers-page application. Says nothing about the candidate's chances or the salary.</summary>
+    public void ApplicationReceived(Domain.Hr.JobApplication a, string jobTitle, string company) =>
+        Enqueue(NotificationChannel.Email, a.Email, a.FirstName, "recruitment.application.received", $"Your application for {jobTitle} at {company}",
+            $"Hello {a.FirstName}, thank you for applying for {jobTitle} at {company}. We have received your application and CV. "
+            + "If your experience matches what we need, someone from our team will contact you. You don't need to do anything else for now.",
+            nameof(Domain.Hr.JobApplication), a.Id, a.TenantId);
+
     public async Task LeaveDecidedAsync(Domain.Leave.LeaveRequest r, bool approved, CancellationToken ct)
     {
         var e = await db.Employees.Where(x => x.Id == r.EmployeeId).Select(x => new { x.FirstName, x.Email, x.Phone }).FirstOrDefaultAsync(ct);

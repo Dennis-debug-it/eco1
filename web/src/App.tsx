@@ -1,4 +1,4 @@
-import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { P, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
@@ -25,11 +25,21 @@ import CasesPage from './pages/Cases'
 import ExpensesPage from './pages/Expenses'
 import HrAnalyticsPage from './pages/HrAnalytics'
 import DataProtectionPage from './pages/DataProtection'
+import CareersPage from './pages/Careers'
 import { useHrMe } from './lib/lookups'
 
 export default function App() {
   const { user, loading, logout, can } = useAuth()
   const hrMe = useHrMe(!!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied))
+  const { pathname } = useLocation()
+  // The careers page is public: candidates never sign in.
+  if (pathname.startsWith('/careers/')) return (
+    <Routes>
+      <Route path="/careers/:slug" element={<CareersPage />} />
+      <Route path="/careers/:slug/jobs/:jobId" element={<CareersPage />} />
+      <Route path="*" element={<CareersPage />} />
+    </Routes>
+  )
   if (loading) return <Loading what="Signing in" />
   if (!user) return <LoginPage />
   if (user.mustChangePassword) return <ChangePassword gate />

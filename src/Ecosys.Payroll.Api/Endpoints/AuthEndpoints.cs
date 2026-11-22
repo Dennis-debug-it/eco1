@@ -10,7 +10,7 @@ namespace Ecosys.Payroll.Api.Endpoints;
 
 public sealed record LoginRequest(string Tenant, string Email, string Password, string? Code = null);
 public sealed record LoginResponse(string Token, DateTimeOffset ExpiresAt, MeResponse User);
-public sealed record MeResponse(Guid Id, string Email, string DisplayName, Guid TenantId, string TenantName, Guid? EmployeeId, IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions, IReadOnlyList<Guid> LegalEntityIds, bool MfaEnabled = false, bool MfaRequired = false, bool MfaSatisfied = false, bool MustChangePassword = false);
+public sealed record MeResponse(Guid Id, string Email, string DisplayName, Guid TenantId, string TenantName, Guid? EmployeeId, IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions, IReadOnlyList<Guid> LegalEntityIds, bool MfaEnabled = false, bool MfaRequired = false, bool MfaSatisfied = false, bool MustChangePassword = false, string? TenantSlug = null);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record ResetPasswordRequest(string? NewPassword);
 public sealed record UpdateUserRequest(string DisplayName, List<string> Roles, Guid? EmployeeId, List<Guid>? LegalEntityIds, bool IsActive, string? Phone = null);
@@ -270,5 +270,5 @@ public static class AuthEndpoints
 
     private static MeResponse Me(User u, Domain.Organisation.Tenant t, IConfiguration config, bool mfaSatisfied) =>
         new(u.Id, u.Email, u.DisplayName, t.Id, t.Name, u.EmployeeId, u.Roles, Permissions.ForRoles(u.Roles).Order().ToList(), u.LegalEntityIds,
-            u.MfaEnabled, config.GetValue("Auth:RequireMfaForPrivilegedRoles", true) && u.Roles.Intersect(Roles.Privileged).Any(), mfaSatisfied, u.MustChangePassword);
+            u.MfaEnabled, config.GetValue("Auth:RequireMfaForPrivilegedRoles", true) && u.Roles.Intersect(Roles.Privileged).Any(), mfaSatisfied, u.MustChangePassword, t.Slug);
 }
