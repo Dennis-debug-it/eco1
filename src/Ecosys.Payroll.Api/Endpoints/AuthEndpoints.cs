@@ -118,9 +118,11 @@ public static class AuthEndpoints
         }).RequireAuthorization();
 
         // What the sign-in page may show before anyone is signed in. Demo hints only on servers that load demo data.
-        g.MapGet("/options", (IConfiguration config, Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions saas) => Results.Ok(new
+        g.MapGet("/options", (IConfiguration config, IHostEnvironment env, Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions saas) => Results.Ok(new
         {
             demo = config.GetValue("Payroll:SeedDemoData", false),
+            // Matches the seeding rule in Program.cs: the demo operator account exists only in Development.
+            demoOperator = config.GetValue("Payroll:SeedDemoData", false) && env.IsDevelopment(),
             localLogin = config["Auth:Mode"] != "Ecosys",
             signup = saas.Enabled && saas.SignupEnabled,
         })).AllowAnonymous();

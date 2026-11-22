@@ -217,7 +217,9 @@ With `Saas:Enabled=true`, one installation serves many employers. It adds:
 
 Organisations without a subscription (licensed installs, contract customers) are *managed*: never billed or restricted. With SaaS mode off, the product behaves exactly as a single-employer install. Operating it is covered in [docs/operations.md §9](docs/operations.md#9-running-as-a-saas-many-customers).
 
-In Development, the sign-up confirmation link is written to the API log, and you can create an operator account with:
+"Start a free trial" on the sign-in page creates a new *customer* organisation, so it always leads to that customer's portal. The operator console needs a separate operator account in the `platform` organisation.
+
+In Development, the sign-up confirmation link is written to the API log, and the demo data includes an operator account: organisation `platform`, `ops@platform.ecosys`, password `Demo!2345` (the sign-in page shows it, with a button that fills it in). It is created only when the environment is Development. To create another operator account:
 
 ```bash
 dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-platform-admin --email ops@example.com --name "Ops"

@@ -166,6 +166,9 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false))
         await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoHrDataAsync();
+    // The operator console sees every customer's account, so its published-password account exists only on a developer machine.
+    if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && app.Environment.IsDevelopment() && await seeder.SeedDemoOperatorAsync())
+        app.Logger.LogInformation("Seeded operator account. Sign in with organisation '{Slug}', {Email} / {Password}", PlatformAdminProvisioner.PlatformSlug, DemoDataSeeder.DemoOperatorEmail, DemoDataSeeder.DemoPassword);
 }
 
 // One-off command: create a customer organisation and its first administrator, then exit.

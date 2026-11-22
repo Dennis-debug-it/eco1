@@ -163,6 +163,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm payroll
 ```
 
    Sign in with organisation code `platform` and the one-time password. You choose a password and enrol an authenticator app, then land in the **Operator console**.
+
+   This is the only way to get an operator account. "Start a free trial" on the sign-in page creates a *customer* organisation, and its administrator only ever sees that customer's portal. If you created your own account that way, it now shows up as a customer in the console; it does not give you the console.
 4. Open **Plans & prices**. The first start creates three placeholder plans (Starter, Growth, Enterprise). **Set your real prices before announcing sign-up.** Prices exclude VAT. A price change applies to each subscriber's next invoice; issued invoices keep their prices. Enterprise is private, so only you can assign it.
 
 ### How billing works

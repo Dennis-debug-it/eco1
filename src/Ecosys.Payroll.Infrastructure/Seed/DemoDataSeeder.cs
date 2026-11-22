@@ -60,6 +60,29 @@ public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext te
         db.IgnoreTenantFilter = false;
     }
 
+    public const string DemoOperatorEmail = "ops@platform.ecosys";
+
+    /// <summary>
+    /// Development only: an operator account (organisation code <c>platform</c>) with the demo password, so the operator
+    /// console can be reached without running <c>create-platform-admin</c>. Idempotent; adds the account to an existing
+    /// operator organisation and leaves other operators alone. Never call this on a server reachable by customers.
+    /// </summary>
+    public async Task<bool> SeedDemoOperatorAsync(CancellationToken ct = default)
+    {
+        db.IgnoreTenantFilter = true;
+        try
+        {
+            var t = await db.Tenants.FirstOrDefaultAsync(x => x.Slug == PlatformAdminProvisioner.PlatformSlug, ct);
+            if (t is not null && await db.Users.AnyAsync(u => u.TenantId == t.Id && u.Email == DemoOperatorEmail, ct)) return false;
+            if (t is null) { t = new Tenant { Name = "Platform operations", Slug = PlatformAdminProvisioner.PlatformSlug }; db.Tenants.Add(t); }
+            tenant.TenantId = t.Id; tenant.UserName = "seed"; tenant.IsPlatformAdministrator = true;
+            db.Users.Add(new User { TenantId = t.Id, Email = DemoOperatorEmail, DisplayName = "Demo Operator", PasswordHash = PasswordHasher.Hash(DemoPassword), Roles = [Roles.PlatformAdministrator] });
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        finally { db.IgnoreTenantFilter = false; }
+    }
+
     public async Task<bool> SeedDemoTenantAsync(CancellationToken ct = default)
     {
         db.IgnoreTenantFilter = true;
