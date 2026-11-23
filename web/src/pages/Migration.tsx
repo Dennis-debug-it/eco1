@@ -34,6 +34,7 @@ export default function MigrationPage() {
       <MigrationModeCard canManage={can(P.OrganisationManage)} />
       {can(P.EmployeesWrite) && <ImportCard />}
       <HistoryCard />
+      {can(P.OrganisationManage) && can(P.SalaryRead) && <ExportCard />}
     </>
   )
 }
@@ -187,6 +188,20 @@ function HistoryCard() {
           <td className="actions">{b.status === 'Applied' && can(P.EmployeesWrite) && <button className="btn sm" disabled={undo.isPending} onClick={() => { if (confirm(`Undo ${b.fileName}? Everything it added is removed.`)) undo.mutate(b.id) }}>Undo</button>}</td>
         </tr>)}</tbody>
       </table></div>}
+    </div>
+  )
+}
+
+function ExportCard() {
+  const [payslips, setPayslips] = useState(true)
+  const m = useMutation({ mutationFn: () => api.download(`/api/payroll/export/company.zip?payslips=${payslips}`) })
+  return (
+    <div className="card">
+      <h2>Export everything</h2>
+      <p className="small">Every record this organisation keeps in Ecosys as a zip: one spreadsheet-ready CSV per table, uploaded documents, and every issued payslip as a PDF. Use it to roll back to the old system after go-live, to move to another provider, or to answer a data request. It holds salaries, account numbers and KRA PINs in full, so keep it as securely as the payroll. Passwords and sign-in secrets are never included.</p>
+      <label className="field inline"><input type="checkbox" checked={payslips} onChange={e => setPayslips(e.target.checked)} /> Include payslip PDFs</label>
+      <ErrorBox error={m.error} />
+      <div className="actions"><button className="btn" disabled={m.isPending} onClick={() => m.mutate()}>{m.isPending ? 'Preparing…' : 'Download export (.zip)'}</button></div>
     </div>
   )
 }

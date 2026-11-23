@@ -279,6 +279,39 @@ public class MigrationTests(PayrollApiFixture app)
         Assert.Contains("already approved payroll", await res.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task Company_export_holds_the_organisations_data_in_full_and_no_credentials_or_other_tenants()
+    {
+        var c = await NewCompanyAsync();
+        await Import(c, "employees", StaffCsv);
+        var res = await c.Admin.GetAsync($"{B}/export/company.zip");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        using var zip = new ZipArchive(new MemoryStream(await res.Content.ReadAsByteArrayAsync()));
+        string Read(string path) { using var r = new StreamReader(zip.GetEntry(path)!.Open()); return r.ReadToEnd(); }
+        var names = zip.Entries.Select(e => e.FullName).ToList();
+
+        Assert.Contains("README.txt", names);
+        var employees = Read("data/employees.csv");
+        Assert.Contains("M100", employees);
+        Assert.Contains("Grace", employees);
+        Assert.Contains("1100223344", Read("data/employee_bank_accounts.csv")); // in full, as entered
+        Assert.Contains("A123456789B", Read("data/employee_statutory_details.csv"));
+        Assert.Contains("data/import_batches.csv", names);
+
+        var users = Read("data/users.csv");
+        Assert.DoesNotContain("PasswordHash", users);
+        Assert.DoesNotContain("MfaSecret", users);
+        Assert.DoesNotContain("SecurityStamp", users);
+        Assert.DoesNotContain(names, n => n.Contains("notification"));
+        // Only this organisation: nothing from the demo company or the rival tenant.
+        Assert.DoesNotContain(names.Where(n => n.EndsWith(".csv")).Select(Read), t => t.Contains("Secret") && t.Contains("Person") || t.Contains("demo.ecosys"));
+
+        // Exporting the whole organisation is for its administrators: payroll staff can't.
+        var payroll = await app.LoginAsync("payroll@demo.ecosys");
+        Assert.Equal(HttpStatusCode.Forbidden, (await payroll.GetAsync($"{B}/export/company.zip")).StatusCode);
+        Assert.Contains("company.export.downloaded", await app.WithDbAsync(c.TenantId, db => db.PayrollAuditLogs.Select(a => a.Action).ToListAsync()));
+    }
+
     /// <summary>A minimal .xlsx: header as shared strings, values as inline strings or numbers.</summary>
     private static byte[] Workbook(string[] headers, object[] values)
     {

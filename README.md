@@ -22,6 +22,7 @@ that feed payroll directly.
 - [Statutory rules](#statutory-rules)
 - [HR modules](#hr-modules)
 - [SaaS mode](#saas-mode)
+- [Moving in from another payroll system](#moving-in-from-another-payroll-system)
 - [Security model](#security-model)
 - [API overview](#api-overview)
 - [Known limitations](#known-limitations)
@@ -224,6 +225,19 @@ In Development, the sign-up confirmation link is written to the API log, and the
 ```bash
 dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-platform-admin --email ops@example.com --name "Ops"
 ```
+
+## Moving in from another payroll system
+
+**Administration → Data migration** takes an organisation off its old payroll. The steps are in [docs/operations.md §10](docs/operations.md#10-moving-a-customer-in-from-another-payroll-system).
+
+- **Migration mode.** Runs calculate and can be reconciled against the old system's register (each run's Parallel run tab), but nothing can be approved, paid, finalised or exported for filing. Signing go-live switches it off for good, with a checklist: employees loaded, bank accounts verified, two parallel runs fully reconciled. Signing also discards the parallel runs.
+- **Imports.** Three kinds, each CSV or .xlsx:
+  - **Employees:** records, statutory numbers, a bank or M-Pesa account, and pay. Fixed components such as HOUSE or SACCO are columns named after them.
+  - **Opening balances:** leave, loans and advances, NSSF before Ecosys.
+  - **Pay to date:** months of this tax year the old system paid. These count in P9s and the annual summary.
+
+  Headers are matched against the names Sage, QuickBooks, bureau files and spreadsheets use. Every row is checked first with the same rules as the screens, and nothing is saved unless the whole file is clean. Each import can be undone, newest first, until payroll uses it. Imported bank accounts arrive unverified.
+- **Export everything.** One zip holds a CSV per table, uploaded documents and payslip PDFs, for a rollback after go-live or a customer leaving. Credentials are never included.
 
 ## Security model
 

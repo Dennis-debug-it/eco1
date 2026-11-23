@@ -58,6 +58,9 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
 - **Offer letters** go through `OfferLetterService`. They state the salary: drafting and sending need `salary.write`, reading needs `salary.read`, and emails to the candidate carry the link but never the figures. A sent letter is frozen; changing the offer needs the letter withdrawn.
 - **Contracts and variation letters** go through `ContractService` (templates, draft, issue, signed-copy upload). They state pay: access needs `salary.read` plus `hr.documents` or `salary.write`, and contract-category employee documents need `salary.read` unless the employee is viewing their own.
 - **Company documents** draw their header with `LetterheadService.BrandAsync(legalEntityId)` and `Brand.Draw`. Pass the brand to every renderer of a company document.
+- **Data migration** loads go through `MigrationImportService`: a dry run, then all-or-nothing as an `ImportBatch` that undo reverses. Keep importer validation on the shared `EmployeeRules`, and add header spellings to the importer's `Columns` aliases.
+  - Anything new that pays, finalises or files calls `MigrationGuard.EnsureLiveAsync` first.
+  - `CompanyExportService` exports every `TenantEntity` table automatically. Add any new credential column to its `SecretColumns`.
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout

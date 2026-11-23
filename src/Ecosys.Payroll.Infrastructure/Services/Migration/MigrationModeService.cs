@@ -23,7 +23,7 @@ public sealed class MigrationGuard(PayrollDbContext db, ITenantContext tenant)
         var inMigration = await db.Tenants.Where(t => t.Id == id).Select(t => t.MigrationStartedAt != null && t.GoLiveSignedAt == null).FirstOrDefaultAsync(ct);
         if (inMigration)
             throw new InvalidStateException($"This organisation is still moving from its previous payroll system, so you can't {action} yet. Runs can be calculated and reconciled; " +
-                                            "paying, finalising and filing open once go-live is signed (Settings, Data migration).");
+                                            "paying, finalising and filing open once go-live is signed (Administration, Data migration).");
     }
 }
 

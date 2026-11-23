@@ -22,6 +22,13 @@ public static class MigrationEndpoints
         m.MapPost("/go-live", async (GoLiveRequest req, MigrationModeService svc, CancellationToken ct) => Results.Ok(await svc.GoLiveAsync(req.FirstPeriodStart, req.AcceptOpenItems, ct)));
         m.MapPost("/cancel", async (MigrationModeService svc, CancellationToken ct) => Results.Ok(await svc.CancelAsync(ct)));
 
+        // Everything the organisation keeps here, as a zip: for a rollback after go-live, leaving, or a whole-organisation data request.
+        api.MapGet("/export/company.zip", async (bool? payslips, CompanyExportService svc, CancellationToken ct) =>
+        {
+            var export = await svc.BuildAsync(payslips ?? true, ct);
+            return Results.File(export.Zip, "application/zip", export.FileName);
+        }).RequireAuthorization();
+
         var g = api.MapGroup("/imports").RequireAuthorization();
         g.MapGet("", async (Guid? legalEntityId, MigrationImportService svc, CancellationToken ct) =>
             Results.Ok((await svc.ListAsync(legalEntityId, ct)).Select(b => new
