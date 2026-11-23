@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { ErrorBox, Field } from '../components/ui'
+import { ErrorBox, Field, PasswordInput } from '../components/ui'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -43,7 +43,7 @@ export default function LoginPage() {
         {!needCode ? <>
           <Field label="Organisation"><input value={tenant} onChange={e => setTenant(e.target.value)} autoComplete="organization" required /></Field>
           <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" required autoFocus /></Field>
-          <Field label="Password"><input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></Field>
+          <Field label="Password"><PasswordInput value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" required /></Field>
           {localLogin && <p className="small" style={{ marginTop: -6, textAlign: 'right' }}><Link to={`/forgot-password?org=${encodeURIComponent(tenant.trim())}&email=${encodeURIComponent(email.trim())}`}>Forgot password?</Link></p>}
         </> : <>
           <p className="small">Enter the 6-digit code from your authenticator app for <b>{email}</b>.</p>

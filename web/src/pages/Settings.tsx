@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fmt } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { useLegalEntities } from '../lib/lookups'
-import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
+import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs, PasswordInput } from '../components/ui'
 import MfaEnrol from '../components/MfaEnrol'
 import ChangePassword from '../components/ChangePassword'
 
@@ -94,7 +94,7 @@ function Users() {
         <div className="form-grid">
           <Field label="Email *"><input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} /></Field>
           <Field label="Display name *"><input value={f.displayName} onChange={e => setF({ ...f, displayName: e.target.value })} /></Field>
-          <Field label="Temporary password * (10+ chars; they change it at first sign-in)"><input type="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} /></Field>
+          <Field label="Temporary password * (10+ chars; they change it at first sign-in)"><PasswordInput value={f.password} onChange={e => setF({ ...f, password: e.target.value })} /></Field>
           <Field label="Mobile (WhatsApp alerts)"><input value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} placeholder="+2547…" /></Field>
           <Field label="Linked employee id (self-service)"><input value={f.employeeId} onChange={e => setF({ ...f, employeeId: e.target.value })} placeholder="optional" /></Field>
         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { api, ApiError, fmt } from '../lib/api'
 
 export function PageHead({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
@@ -83,6 +83,18 @@ export function ReasonDialog({ title, label = 'Comment', required, confirmLabel 
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="field">{label}{children}</label>
+}
+
+/** A password box with a Show/Hide button, so people can check what they typed. Starts hidden. */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [shown, setShown] = useState(false)
+  return (
+    <span className="password-input">
+      <input {...props} type={shown ? 'text' : 'password'} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+      <button type="button" className="password-toggle" aria-pressed={shown} aria-label={shown ? 'Hide password' : 'Show password'}
+        onClick={() => setShown(v => !v)}>{shown ? 'Hide' : 'Show'}</button>
+    </span>
+  )
 }
 
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string }[]; value: T; onChange: (t: T) => void }) {

@@ -60,7 +60,13 @@ tfoot td { font-weight: 700; background: var(--surface-2); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-contrast); } .btn.primary:hover { filter: brightness(1.08); }
 .btn.danger { color: var(--danger); border-color: var(--danger); } .btn.sm { padding: 4px 8px; font-size: 12px; }
 label.field { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
-label.field > input, label.field > select, label.field > textarea { display: block; width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+label.field > input, label.field > select, label.field > textarea, label.field .password-input > input { display: block; width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+/* Password box with a Show/Hide button inside its right edge. */
+label.field .password-input { display: block; position: relative; margin-top: 4px; }
+label.field .password-input > input { margin-top: 0; padding-right: 58px; }
+.password-toggle { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); padding: 3px 8px; border: 0; border-radius: 4px; background: transparent; color: var(--primary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.password-toggle:hover { background: var(--primary-soft); }
+.password-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 label.field.inline { display: flex; align-items: center; gap: 8px; } label.field.inline input { width: auto; margin: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }

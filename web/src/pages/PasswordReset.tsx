@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
-import { ErrorBox, Field } from '../components/ui'
+import { ErrorBox, Field, PasswordInput } from '../components/ui'
 
 /** "Forgot password": asks for an emailed reset link. The answer is the same whether or not the account exists. */
 export function ForgotPasswordPage() {
@@ -69,8 +69,8 @@ export function ResetPasswordPage() {
           <ErrorBox error={err} />
           {!token || invalid ? <Link className="btn" to="/forgot-password">Request a new link</Link> : <>
             <div className="form-grid">
-              <Field label="New password"><input type="password" autoComplete="new-password" value={f.next} onChange={e => setF({ ...f, next: e.target.value })} required autoFocus /></Field>
-              <Field label="Confirm new password"><input type="password" autoComplete="new-password" value={f.confirm} onChange={e => setF({ ...f, confirm: e.target.value })} required /></Field>
+              <Field label="New password"><PasswordInput autoComplete="new-password" value={f.next} onChange={e => setF({ ...f, next: e.target.value })} required autoFocus /></Field>
+              <Field label="Confirm new password"><PasswordInput autoComplete="new-password" value={f.confirm} onChange={e => setF({ ...f, confirm: e.target.value })} required /></Field>
             </div>
             {mismatch && <p className="small" style={{ color: 'var(--danger)' }}>The new passwords don't match.</p>}
             <div className="actions">
