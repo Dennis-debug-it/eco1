@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
-import { ErrorBox, Field, PasswordInput } from '../components/ui'
+import { ErrorBox, Field, Loading, PasswordInput } from '../components/ui'
 
 /** "Forgot password": asks for an emailed reset link. The answer is the same whether or not the account exists. */
 export function ForgotPasswordPage() {
@@ -37,25 +37,39 @@ export function ForgotPasswordPage() {
   )
 }
 
-/** Opened from the emailed link: choose a new password. Works whether or not someone is signed in on this browser. */
+/**
+ * Opened from the emailed link: choose a new password. Works whether or not someone is signed in on this browser.
+ * Accounts with an authenticator app also give a current code, so the email link alone can't change the password.
+ */
 export function ResetPasswordPage() {
   const token = new URLSearchParams(window.location.search).get('token') ?? ''
-  const [f, setF] = useState({ next: '', confirm: '' })
+  const [f, setF] = useState({ next: '', confirm: '', code: '' })
+  // null while checking the link; then whether this account needs an authenticator code.
+  const [mfa, setMfa] = useState<boolean | null>(null)
   const [done, setDone] = useState<{ slug: string; email: string; mfaEnabled: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<unknown>(token ? null : new ApiError(400, { title: 'Link not valid', detail: 'The reset link is incomplete. Copy the whole link from the email, or request a new one.' }))
+  useEffect(() => {
+    if (!token) return
+    api.post<{ mfaRequired: boolean }>('/api/payroll/auth/password/reset/inspect', { token }).then(r => setMfa(r.mfaRequired)).catch(setErr)
+  }, [token])
   const mismatch = f.confirm.length > 0 && f.next !== f.confirm
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setErr(null)
     try {
-      const r = await api.post<{ slug: string; email: string; mfaEnabled: boolean }>('/api/payroll/auth/password/reset', { token, newPassword: f.next })
+      const r = await api.post<{ slug: string; email: string; mfaEnabled: boolean }>('/api/payroll/auth/password/reset', { token, newPassword: f.next, code: mfa ? f.code : undefined })
       try { localStorage.setItem('ecosys.org', r.slug) } catch { /* private mode */ }
       setDone(r)
-    } catch (ex) { setErr(ex) } finally { setBusy(false) }
+    } catch (ex) {
+      setErr(ex)
+      // A wrong or reused code: clear it so the next one from the app can be typed straight in.
+      if (ex instanceof ApiError && (ex.problem.code === 'MFA_CODE_INVALID' || ex.problem.code === 'MFA_CODE_REQUIRED')) { setMfa(true); setF(v => ({ ...v, code: '' })) }
+    } finally { setBusy(false) }
   }
   // Full reload, so a session that was open on this browser (now signed out by the reset) is dropped.
   const signIn = () => { window.location.href = '/' }
   const invalid = err instanceof ApiError && err.problem.code === 'RESET_LINK_INVALID'
+  const codeOk = !mfa || /^[0-9]{6}$/.test(f.code)
   return (
     <div className="login">
       <form className="card" onSubmit={submit} style={{ maxWidth: 520 }}>
@@ -65,16 +79,20 @@ export function ResetPasswordPage() {
           <button className="btn primary" type="button" onClick={signIn}>Sign in</button>
         </> : <>
           <h2>Choose a new password</h2>
-          <p className="small">Use at least 10 characters. A short phrase that is easy for you to remember works well; common words such as company or city names are refused.</p>
           <ErrorBox error={err} />
-          {!token || invalid ? <Link className="btn" to="/forgot-password">Request a new link</Link> : <>
+          {!token || invalid ? <Link className="btn" to="/forgot-password">Request a new link</Link> : mfa === null ? (err ? null : <Loading what="Checking your link" />) : <>
+            <p className="small">Use at least 10 characters. A short phrase that is easy for you to remember works well; common words such as company or city names are refused.</p>
             <div className="form-grid">
               <Field label="New password"><PasswordInput autoComplete="new-password" value={f.next} onChange={e => setF({ ...f, next: e.target.value })} required autoFocus /></Field>
               <Field label="Confirm new password"><PasswordInput autoComplete="new-password" value={f.confirm} onChange={e => setF({ ...f, confirm: e.target.value })} required /></Field>
             </div>
             {mismatch && <p className="small" style={{ color: 'var(--danger)' }}>The new passwords don't match.</p>}
+            {mfa && <>
+              <Field label="Code from your authenticator app"><input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={f.code} onChange={e => setF({ ...f, code: e.target.value.replace(/\D/g, '') })} required aria-describedby="mfa-hint" /></Field>
+              <p id="mfa-hint" className="small muted" style={{ marginTop: -6 }}>Your account uses two-step sign-in, so resetting the password needs a code as well. Lost your authenticator? Ask your administrator to reset it and your password.</p>
+            </>}
             <div className="actions">
-              <button className="btn primary" type="submit" disabled={busy || f.next.length < 10 || f.next !== f.confirm}>{busy ? 'Saving…' : 'Set new password'}</button>
+              <button className="btn primary" type="submit" disabled={busy || f.next.length < 10 || f.next !== f.confirm || !codeOk}>{busy ? 'Saving…' : 'Set new password'}</button>
               <Link className="btn" to="/">Cancel</Link>
             </div>
           </>}

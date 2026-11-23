@@ -36,8 +36,7 @@ public class PasswordResetTests(PayrollApiFixture app)
     private async Task<HttpResponseMessage> ForgotAsync(string? organisation, string email) =>
         await app.CreateClient().PostAsJsonAsync($"{B}/auth/password/forgot", new { organisation, email });
 
-    private async Task<HttpResponseMessage> ResetAsync(string token, string newPassword) =>
-        await app.CreateClient().PostAsJsonAsync($"{B}/auth/password/reset", new { token, newPassword });
+    private Task<HttpResponseMessage> ResetAsync(string token, string newPassword) => ResetAsync(token, newPassword, null);
 
     private async Task<HttpResponseMessage> SignInAsync(string tenant, string email, string password) =>
         await app.CreateClient().PostAsJsonAsync($"{B}/auth/login", new { tenant, email, password });
@@ -120,21 +119,78 @@ public class PasswordResetTests(PayrollApiFixture app)
         Assert.Equal(HttpStatusCode.BadRequest, (await ResetAsync(fresh, "baobab shade at noon")).StatusCode);
     }
 
-    [Fact]
-    public async Task Reset_keeps_the_authenticator_requirement()
+    private async Task<(Guid Id, string Secret, string Token)> MfaUserWithLinkAsync(string email)
     {
-        var id = await NewUserAsync("mfa-user@demo.ecosys");
+        var id = await NewUserAsync(email);
+        var secret = Totp.NewSecret();
         await app.WithDbAsync(null, async db =>
         {
             var u = await db.Users.FirstAsync(x => x.Id == id);
-            u.MfaEnabled = true; u.MfaSecret = Totp.NewSecret();
+            u.MfaEnabled = true; u.MfaSecret = secret;
             return await db.SaveChangesAsync();
         });
-        await ForgotAsync("demo", "mfa-user@demo.ecosys");
-        var res = await ResetAsync(TokenFrom((await LinksAsync(id)).Single()), "baobab shade at noon");
-        Assert.True((await res.Content.ReadFromJsonAsync<JsonObject>())!["mfaEnabled"]!.GetValue<bool>());
-        var login = await SignInAsync("demo", "mfa-user@demo.ecosys", "baobab shade at noon");
-        Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
-        Assert.Contains("MFA_CODE_REQUIRED", await login.Content.ReadAsStringAsync());
+        await ForgotAsync("demo", email);
+        return (id, secret, TokenFrom((await LinksAsync(id)).Single()));
+    }
+
+    private async Task<HttpResponseMessage> ResetAsync(string token, string newPassword, string? code) =>
+        await app.CreateClient().PostAsJsonAsync($"{B}/auth/password/reset", new { token, newPassword, code });
+
+    private async Task<string?> CodeOf(HttpResponseMessage res) => JsonNode.Parse(await res.Content.ReadAsStringAsync())?["code"]?.GetValue<string>();
+
+    [Fact]
+    public async Task Inspect_tells_the_page_whether_the_link_works_and_needs_a_code()
+    {
+        var plain = await NewUserAsync("no-mfa@demo.ecosys");
+        await ForgotAsync("demo", "no-mfa@demo.ecosys");
+        var anon = app.CreateClient();
+        var p = await anon.PostJson($"{B}/auth/password/reset/inspect", new { token = TokenFrom((await LinksAsync(plain)).Single()) });
+        Assert.False(p["mfaRequired"]!.GetValue<bool>());
+        var (_, _, token) = await MfaUserWithLinkAsync("mfa-inspect@demo.ecosys");
+        Assert.True((await anon.PostJson($"{B}/auth/password/reset/inspect", new { token }))["mfaRequired"]!.GetValue<bool>());
+        var bad = await anon.PostAsJsonAsync($"{B}/auth/password/reset/inspect", new { token = "nope" });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+        Assert.Equal("RESET_LINK_INVALID", await CodeOf(bad));
+    }
+
+    [Fact]
+    public async Task With_an_authenticator_the_link_alone_cannot_change_the_password()
+    {
+        var (id, secret, token) = await MfaUserWithLinkAsync("mfa-user@demo.ecosys");
+        var hashBefore = await app.WithDbAsync(null, db => db.Users.Where(u => u.Id == id).Select(u => u.PasswordHash).FirstAsync());
+
+        var noCode = await ResetAsync(token, "baobab shade at noon", null);
+        Assert.Equal(HttpStatusCode.BadRequest, noCode.StatusCode);
+        Assert.Equal("MFA_CODE_REQUIRED", await CodeOf(noCode));
+        var wrong = await ResetAsync(token, "baobab shade at noon", "000000");
+        Assert.Equal("MFA_CODE_INVALID", await CodeOf(wrong));
+        Assert.Equal(hashBefore, await app.WithDbAsync(null, db => db.Users.Where(u => u.Id == id).Select(u => u.PasswordHash).FirstAsync()));
+
+        // The link survives a wrong code; the right one completes the reset.
+        var code = Totp.Code(secret, DateTimeOffset.UtcNow);
+        var ok = await ResetAsync(token, "baobab shade at noon", code);
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var u = await app.WithDbAsync(null, db => db.Users.AsNoTracking().FirstAsync(x => x.Id == id));
+        Assert.Equal(0, u.FailedLoginCount); // a successful reset clears the wrong attempt
+
+        // The code used for the reset can't be replayed to sign in, and sign-in still needs the authenticator.
+        var login = await app.CreateClient().PostAsJsonAsync($"{B}/auth/login", new { tenant = "demo", email = "mfa-user@demo.ecosys", password = "baobab shade at noon" });
+        Assert.Equal("MFA_CODE_REQUIRED", await CodeOf(login));
+        var replay = await app.CreateClient().PostAsJsonAsync($"{B}/auth/login", new { tenant = "demo", email = "mfa-user@demo.ecosys", password = "baobab shade at noon", code });
+        Assert.Equal("MFA_CODE_INVALID", await CodeOf(replay));
+    }
+
+    [Fact]
+    public async Task Wrong_codes_on_a_reset_lock_the_account_like_failed_sign_ins()
+    {
+        var (id, secret, token) = await MfaUserWithLinkAsync("mfa-guess@demo.ecosys");
+        for (var i = 0; i < 5; i++) await ResetAsync(token, "baobab shade at noon", $"{i:000000}");
+        var locked = await ResetAsync(token, "baobab shade at noon", Totp.Code(secret, DateTimeOffset.UtcNow));
+        Assert.Equal((HttpStatusCode)429, locked.StatusCode);
+        Assert.Equal("ACCOUNT_LOCKED", await CodeOf(locked));
+        Assert.True(await app.WithDbAsync(null, db => db.NotificationMessages.AnyAsync(m => m.EntityId == id && m.Template == "auth.locked")));
+        var actions = await app.WithDbAsync(null, db => db.PayrollAuditLogs.Where(a => a.EntityId == id).Select(a => a.Action).ToListAsync());
+        Assert.Equal(5, actions.Count(a => a == "auth.password.reset.mfa_failed"));
+        Assert.Contains("auth.locked", actions);
     }
 }
