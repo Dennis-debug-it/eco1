@@ -201,7 +201,7 @@ public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext te
             db.Employees.Add(e);
             db.EmploymentRecords.Add(new EmploymentRecord { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = e.Id, EffectiveFrom = e.HireDate, EmploymentType = e.EmploymentType, Status = EmploymentStatus.Active, JobTitle = e.JobTitle, DepartmentId = e.DepartmentId, BranchId = e.BranchId, CostCentreId = e.CostCentreId, PayrollGroupId = monthly.Id, ChangeReason = "Hired" });
             db.EmployeeBankAccounts.Add(new EmployeeBankAccount { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = e.Id, BankName = p.Bank, BankCode = p.BankCode, BranchCode = "001", BranchName = "Head Office", AccountName = $"{p.First} {p.Last}", AccountNumber = $"{1_100_000_000L + i2 * 7_919L:D12}", IsVerified = true });
-            db.EmployeeStatutoryDetails.Add(new EmployeeStatutoryDetails { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = e.Id, KraPin = $"A{(i2 * 61_803 + 1_234_567) % 10_000_000:D9}{(char)('A' + i2 % 26)}", NssfNumber = $"{300_000 + i2 * 311}", ShifNumber = $"SHA{700_000 + i2 * 53}" });
+            db.EmployeeStatutoryDetails.Add(new EmployeeStatutoryDetails { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = e.Id, KraPin = $"A{(i2 * 61_803 + 1_234_567) % 10_000_000:D9}{(char)('A' + i2 % 26)}", NssfNumber = $"{2_000_300_000 + i2 * 311}", ShifNumber = $"SHA{700_000 + i2 * 53}" });
             db.EmployeeSalaryAssignments.Add(new EmployeeSalaryAssignment { TenantId = t.Id, LegalEntityId = le.Id, EmployeeId = e.Id, SalaryStructureId = p.Str.Id, BasicSalary = p.Basic, EffectiveFrom = e.HireDate, ChangeReason = "Initial appointment" });
         }
 

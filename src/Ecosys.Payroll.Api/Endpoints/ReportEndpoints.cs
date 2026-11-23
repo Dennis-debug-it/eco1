@@ -7,6 +7,7 @@ using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Security;
 using Ecosys.Payroll.Infrastructure.Services;
 using Ecosys.Payroll.Infrastructure.Services.Migration;
+using Ecosys.Payroll.Infrastructure.Services.Returns;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Payroll.Api.Endpoints;
@@ -33,6 +34,27 @@ public static class ReportEndpoints
                 new("Gross Pay", x => x.Gross, true), new("Contribution Base", x => x.Base, true), new("Employee", x => x.Employee, true), new("Employer", x => x.Employer, true), new("Total", x => x.Total, true),
             ], ["Totals", null, null, null, report.Rows.Sum(x => x.Gross), null, report.TotalEmployee, report.TotalEmployer, report.TotalEmployee + report.TotalEmployer]);
             return await Export(file, audit, db, "report.statutory.exported", runId, ct);
+        });
+
+        // NSSF upload files, laid out exactly as NSSF specifies. The check lists anything to fix; the file is only made when there is nothing.
+        r.MapGet("/nssf-file/check", async (Guid runId, NssfReturnService svc, CancellationToken ct) => Results.Ok(await svc.CheckAsync(runId, ct)));
+        r.MapGet("/nssf-file", async (Guid runId, string? layout, NssfReturnService svc, CancellationToken ct) =>
+        {
+            var l = (layout ?? "portal").ToLowerInvariant() switch
+            {
+                "portal" => NssfFileLayout.PortalTemplate,
+                "returns" => NssfFileLayout.Returns2014,
+                _ => throw new DomainException("Layout is 'portal' (the employer portal's payroll template) or 'returns' (the returns file).", "VALIDATION"),
+            };
+            try
+            {
+                var file = await svc.ExportAsync(runId, l, ct);
+                return Results.File(file.Content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.FileName);
+            }
+            catch (ReturnNotReadyException ex)
+            {
+                return Results.Json(new { title = "The return has problems", status = 422, code = ex.Code, detail = "Fix the members listed, then export again.", check = ex.Check }, statusCode: 422);
+            }
         });
 
         r.MapGet("/payroll-register", async (Guid runId, string? format, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>

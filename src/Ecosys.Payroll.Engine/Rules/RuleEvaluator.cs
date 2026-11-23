@@ -3,6 +3,9 @@ namespace Ecosys.Payroll.Engine.Rules;
 /// <summary>Employee and employer amounts produced by one statutory rule, with a human-readable working.</summary>
 public sealed record RuleOutcome(decimal Employee, decimal Employer, string Working);
 
+/// <summary>A tiered contribution split into its tiers (NSSF Tier I up to the LEL, Tier II from the LEL to the UEL), each rounded as the rule rounds.</summary>
+public sealed record TierSplit(decimal Tier1Base, decimal Tier2Base, decimal Tier1Employee, decimal Tier1Employer, decimal Tier2Employee, decimal Tier2Employer, decimal Lel, decimal Uel);
+
 /// <summary>Pure, stateless evaluation of the generic calculation methods.</summary>
 public static class RuleEvaluator
 {
@@ -37,6 +40,17 @@ public static class RuleEvaluator
 
     private static RuleOutcome Tiered(StatutoryRuleVersion rule, decimal baseAmount)
     {
+        var t = Tiers(rule, baseAmount);
+        var working = $"Tier I {Pct(rule.EmployeeRate)} x {t.Tier1Base:N2}; Tier II {Pct(rule.EmployeeRate)} x {t.Tier2Base:N2} (LEL {t.Lel:N0}, UEL {t.Uel:N0})";
+        return new RuleOutcome(t.Tier1Employee + t.Tier2Employee, t.Tier1Employer + t.Tier2Employer, working);
+    }
+
+    /// <summary>
+    /// The tiers of a tiered contribution. Returns files that report Tier I and Tier II on separate rows (NSSF) use this,
+    /// so the split always adds back to exactly what the payroll deducted.
+    /// </summary>
+    public static TierSplit Tiers(StatutoryRuleVersion rule, decimal baseAmount)
+    {
         var lel = rule.Parameters.LowerEarningsLimit
             ?? throw new StatutoryConfigurationException($"Rule {rule.RuleCode} v{rule.Version} has no lower earnings limit.");
         var uel = rule.Parameters.UpperEarningsLimit
@@ -46,11 +60,9 @@ public static class RuleEvaluator
         var basis = Math.Max(0m, baseAmount);
         var tier1Base = Math.Min(basis, lel);
         var tier2Base = Math.Max(0m, Math.Min(basis, uel) - lel);
-
-        var employee = rule.Rounding.Apply(tier1Base * rule.EmployeeRate) + rule.Rounding.Apply(tier2Base * rule.EmployeeRate);
-        var employer = rule.Rounding.Apply(tier1Base * rule.EmployerRate) + rule.Rounding.Apply(tier2Base * rule.EmployerRate);
-        var working = $"Tier I {Pct(rule.EmployeeRate)} x {tier1Base:N2}; Tier II {Pct(rule.EmployeeRate)} x {tier2Base:N2} (LEL {lel:N0}, UEL {uel:N0})";
-        return new RuleOutcome(employee, employer, working);
+        return new TierSplit(tier1Base, tier2Base,
+            rule.Rounding.Apply(tier1Base * rule.EmployeeRate), rule.Rounding.Apply(tier1Base * rule.EmployerRate),
+            rule.Rounding.Apply(tier2Base * rule.EmployeeRate), rule.Rounding.Apply(tier2Base * rule.EmployerRate), lel, uel);
     }
 
     private static RuleOutcome Fixed(StatutoryRuleVersion rule)

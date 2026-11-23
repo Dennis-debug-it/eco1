@@ -15,7 +15,7 @@ Last reviewed: 19 November 2026.
 | Approval controls | Done (C1) |
 | Data Protection Act 2019 | System features done (D1–D3). **Registration, the processing agreement and the privacy notice are organisational tasks (D4–D6).** |
 | Hosting, TLS, backups, provisioning | Done (E1–E5). **Hosting location to decide (E6).** |
-| Statutory filing formats | **Open (F1–F3).** Exports exist, but the exact KRA, NSSF and SHA upload templates still need confirming. |
+| Statutory filing formats | **Open (F1, F3); F2 built, awaiting a test upload.** NSSF files follow NSSF's templates. The KRA and SHA upload templates still need mapping. |
 | Bank payment formats | **Open (F4).** Each bank's specification needs confirming. |
 | Email and WhatsApp delivery | **Open (G1).** Only the Ecosys Notifications provider exists, so a standalone install needs an SMTP or SMS provider. |
 | Independent checks | **Open (H1–H3).** Penetration test, load test and user acceptance testing. |
@@ -94,7 +94,7 @@ Last reviewed: 19 November 2026.
   - Two parallel payrolls must then be reconciled to the shilling against the outgoing system.
   - *Owner: customer's payroll practitioner. Tool: each payroll run's **Parallel run** tab. Upload the outgoing system's register (CSV) and every employee is compared figure by figure, at a tolerance from exact to KES 1. Export the result to Excel or PDF for the sign-off pack. Each comparison is audited.*
 - **F1. KRA iTax P10.** The PAYE return exports as CSV, Excel and PDF, but not yet in the column layout of KRA's current P10 Excel template. *Next step: get the current template from iTax, map the columns, and confirm one upload in iTax's validation step.*
-- **F2. NSSF return.** Confirm the employer portal's upload format and map to it.
+- **F2. NSSF return.** Built from NSSF's own documents: the employer portal's payroll template (release 03.02.18) and the returns-file specification (NSSF Act 2013). Each payroll run has **NSSF portal file** and **NSSF returns file** once approved. Before either is made, every member is checked: NSSF number of 9–10 characters, ID number present, and Tier I + Tier II adding back to what was deducted. *Next step: upload one file to the NSSF employer portal and confirm it's accepted. Also confirm with the practitioner whether NSSF expects gross pay or pensionable pay: the files carry the pensionable pay the deduction was worked out on, and warn when that's below gross.*
 - **F3. SHA return.** Confirm the SHA employer portal's contribution upload format and map to it.
 
 ### Payments
