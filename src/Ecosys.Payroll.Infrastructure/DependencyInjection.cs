@@ -48,6 +48,12 @@ public static class DependencyInjection
         services.AddScoped<PayrollInputAssembler>();
         services.AddScoped<JournalBuilder>();
         services.AddScoped<PayrollRunService>();
+        services.AddScoped<Services.Migration.MigrationGuard>();
+        services.AddScoped<Services.Migration.MigrationModeService>();
+        services.AddScoped<Services.Migration.MigrationImportService>();
+        services.AddScoped<Services.Migration.EmployeeImporter>();
+        services.AddScoped<Services.Migration.OpeningBalanceImporter>();
+        services.AddScoped<Services.Migration.YearToDateImporter>();
         services.AddScoped<ReportingService>();
         services.AddScoped<DemoDataSeeder>();
         services.AddScoped<NotificationService>();

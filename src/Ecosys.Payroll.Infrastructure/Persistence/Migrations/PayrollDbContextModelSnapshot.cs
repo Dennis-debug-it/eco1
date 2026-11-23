@@ -5799,6 +5799,220 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.ToTable("public_holidays", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AppliedByName")
+                        .HasColumnType("text")
+                        .HasColumnName("applied_by_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_name");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Records")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("records");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UndoneAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("undone_at");
+
+                    b.Property<string>("UndoneByName")
+                        .HasColumnType("text")
+                        .HasColumnName("undone_by_name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_import_batches");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_import_batches_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_import_batches_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "CreatedAt")
+                        .HasDatabaseName("ix_import_batches_legal_entity_id_created_at");
+
+                    b.ToTable("import_batches", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.PayrollHistoryMonth", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AllowableDeductions")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("allowable_deductions");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<decimal>("Gross")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("gross");
+
+                    b.Property<decimal>("GrossTax")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("gross_tax");
+
+                    b.Property<decimal>("HousingLevy")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("housing_levy");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("import_batch_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer")
+                        .HasColumnName("month");
+
+                    b.Property<decimal>("NetPay")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("net_pay");
+
+                    b.Property<decimal>("Nssf")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("nssf");
+
+                    b.Property<decimal>("Paye")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("paye");
+
+                    b.Property<decimal>("Reliefs")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("reliefs");
+
+                    b.Property<decimal>("Shif")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("shif");
+
+                    b.Property<decimal>("TaxableEarnings")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("taxable_earnings");
+
+                    b.Property<decimal>("TaxablePay")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("taxable_pay");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id")
+                        .HasName("pk_payroll_history_months");
+
+                    b.HasIndex("ImportBatchId")
+                        .HasDatabaseName("ix_payroll_history_months_import_batch_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_payroll_history_months_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_payroll_history_months_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Year")
+                        .HasDatabaseName("ix_payroll_history_months_legal_entity_id_year");
+
+                    b.HasIndex("EmployeeId", "Year", "Month")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payroll_history_months_employee_id_year_month");
+
+                    b.ToTable("payroll_history_months", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.BankDirectoryBank", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6744,6 +6958,18 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<DateOnly?>("GoLiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("go_live_from");
+
+                    b.Property<DateTimeOffset?>("GoLiveSignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("go_live_signed_at");
+
+                    b.Property<string>("GoLiveSignedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("go_live_signed_by");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -6751,6 +6977,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<DateTimeOffset?>("MigrationStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("migration_started_at");
+
+                    b.Property<string>("MigrationStartedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("migration_started_by");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -8837,6 +9071,40 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_public_holidays_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.ImportBatch", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_import_batches_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.PayrollHistoryMonth", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Employees.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payroll_history_months_employees_employee_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Migration.ImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payroll_history_months_import_batches_import_batch_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payroll_history_months_legal_entities_legal_entity_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Branch", b =>

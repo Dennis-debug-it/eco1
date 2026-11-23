@@ -128,6 +128,7 @@ app.MapGet("/health/ready", async (PayrollDbContext db, CancellationToken ct) =>
 
 var api = app.MapGroup("/api/payroll");
 api.MapAuth();
+api.MapMigration();
 api.MapOrganisation();
 api.MapBanking();
 api.MapCareers();

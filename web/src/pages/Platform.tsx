@@ -9,6 +9,7 @@ type TenantRow = { id: string; name: string; slug: string; isActive: boolean; cr
 type InvoiceRow = { id: string; tenantId: string; tenant: string; slug: string; number: string; planName: string; periodStart: string; periodEnd: string; issuedOn: string; dueOn: string; currency: string; total: number; amountPaid: number; balance: number; status: string; overdue: boolean }
 type Detail = {
   tenant: { id: string; name: string; slug: string; isActive: boolean; createdAt: string }
+  migration?: { inMigration: boolean; migrationStartedAt?: string; goLiveSignedAt?: string; goLiveSignedBy?: string; goLiveFrom?: string }
   subscription?: { status: string; trialEndsOn?: string; activatedAt?: string; currentPeriodStart?: string; currentPeriodEnd?: string; cancelAtPeriodEnd: boolean; suspensionReason?: string; inTrialStage?: boolean; billingName?: string; billingEmail?: string; billingTaxPin?: string } | null
   plan?: PlanView | null
   usage: { employees: number; legalEntities: number; users: number; payrollRuns: number }
@@ -111,6 +112,9 @@ function TenantDialog({ id, onClose }: { id: string; onClose: () => void }) {
           <dt>Sign-in code</dt><dd className="mono">{d.tenant.slug}</dd>
           <dt>Created</dt><dd>{fmt.date(d.tenant.createdAt)}</dd>
           <dt>Status</dt><dd>{s ? <Badge status={s.status} /> : <Badge status="Managed" />} {s?.suspensionReason && <span className="small muted">{s.suspensionReason}</span>}</dd>
+          {d.migration && (d.migration.inMigration || d.migration.goLiveSignedAt) && <><dt>Migration</dt><dd>{d.migration.inMigration
+            ? <><Badge status="Warning">Migrating</Badge> <span className="small muted">since {fmt.date(d.migration.migrationStartedAt!)}; nothing paid or filed until go-live</span></>
+            : <span className="small">Live since {fmt.date(d.migration.goLiveSignedAt!)} ({d.migration.goLiveSignedBy}), paying from {fmt.date(d.migration.goLiveFrom!)}</span>}</dd></>}
           <dt>Plan</dt><dd>{d.plan ? `${d.plan.name} (${priceLine(d.plan)})` : 'Operator-managed: not billed here'}</dd>
           {s?.trialEndsOn && <><dt>Trial ends</dt><dd>{fmt.date(s.trialEndsOn)}{s.activatedAt ? ' · billing details given' : ''}</dd></>}
           {s?.currentPeriodEnd && <><dt>Period</dt><dd>{fmt.date(s.currentPeriodStart)} – {fmt.date(s.currentPeriodEnd)}{s.cancelAtPeriodEnd && ' · cancels at end'}</dd></>}

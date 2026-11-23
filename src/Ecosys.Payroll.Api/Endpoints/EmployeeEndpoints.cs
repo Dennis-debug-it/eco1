@@ -21,40 +21,11 @@ public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalarySt
 
 public static class EmployeeEndpoints
 {
+    private static void ValidateIdentifiers(Employee e) => EmployeeRules.ThrowIfAny(EmployeeRules.IdentifierProblems(e));
+
+    private static void ValidateStatutory(EmployeeStatutoryDetails s) => EmployeeRules.ThrowIfAny(EmployeeRules.StatutoryProblems(s));
+
     /// <summary>Organisational references must exist within the employee's own legal entity (and therefore tenant).</summary>
-    /// <summary>Normalises Kenyan identifiers in place and rejects malformed ones, listing every problem at once.</summary>
-    private static void ValidateIdentifiers(Employee e)
-    {
-        var problems = new List<string>();
-        e.NationalId = KenyaIdentifiers.NormaliseNationalId(e.NationalId);
-        if (e.NationalId is not null && !KenyaIdentifiers.IsValidNationalId(e.NationalId)) problems.Add("National ID should be 6–9 digits. For non-citizens, leave it blank and enter the passport or alien ID number.");
-        e.PassportNumber = string.IsNullOrWhiteSpace(e.PassportNumber) ? null : e.PassportNumber.Trim().ToUpperInvariant();
-        foreach (var (label, value, set) in new (string, string?, Action<string?>)[] { ("Phone", e.Phone, v => e.Phone = v), ("Emergency contact phone", e.EmergencyContactPhone, v => e.EmergencyContactPhone = v) })
-        {
-            if (string.IsNullOrWhiteSpace(value)) { set(null); continue; }
-            var n = KenyaIdentifiers.NormalisePhone(value);
-            if (n is null) problems.Add($"{label} '{value}' isn't a valid number. Use 07XX XXX XXX, 01XX XXX XXX or +country code.");
-            else set(n);
-        }
-        e.Email = string.IsNullOrWhiteSpace(e.Email) ? null : e.Email.Trim().ToLowerInvariant();
-        if (e.Email is not null && (!e.Email.Contains('@') || e.Email.Contains(' '))) problems.Add($"Email '{e.Email}' isn't valid.");
-        if (problems.Count > 0) throw new DomainException(string.Join(" ", problems), "VALIDATION");
-    }
-
-    private static void ValidateStatutory(EmployeeStatutoryDetails s)
-    {
-        var problems = new List<string>();
-        s.KraPin = KenyaIdentifiers.NormalisePin(s.KraPin);
-        if (s.KraPin is not null && !KenyaIdentifiers.IsValidPin(s.KraPin))
-            problems.Add(s.KraPin.StartsWith('P') ? "KRA PIN starting with P belongs to a company. An employee's PIN starts with A." : "KRA PIN should be 11 characters: A, nine digits and a letter (e.g. A012345678Z).");
-        s.NssfNumber = KenyaIdentifiers.NormaliseMembership(s.NssfNumber);
-        if (s.NssfNumber is not null && !KenyaIdentifiers.IsPlausibleMembership(s.NssfNumber)) problems.Add("NSSF number should be 4–20 letters or digits.");
-        s.ShifNumber = KenyaIdentifiers.NormaliseMembership(s.ShifNumber);
-        if (s.ShifNumber is not null && !KenyaIdentifiers.IsPlausibleMembership(s.ShifNumber)) problems.Add("SHA (SHIF) number should be 4–20 letters or digits.");
-        s.NhifNumber = KenyaIdentifiers.NormaliseMembership(s.NhifNumber);
-        if (problems.Count > 0) throw new DomainException(string.Join(" ", problems), "VALIDATION");
-    }
-
     private static async Task ValidateReferencesAsync(Employee e, PayrollDbContext db, CancellationToken ct)
     {
         if (!await db.PayrollGroups.AnyAsync(x => x.Id == e.PayrollGroupId && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Payroll group is not valid for this legal entity.", "VALIDATION");

@@ -172,3 +172,9 @@ a.org-name:hover { color: var(--primary); }
   .org-toggle { display: none; }
   .org-card { box-shadow: none; break-inside: avoid; }
 }
+
+/* Go-live checklist on the Data migration page. */
+.checklist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.checklist li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+.checklist .tick { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--warn-soft); color: var(--warn); }
+.checklist li.done .tick { background: var(--ok-soft); color: var(--ok); }

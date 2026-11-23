@@ -6,6 +6,7 @@ using Ecosys.Payroll.Infrastructure.Documents;
 using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Security;
 using Ecosys.Payroll.Infrastructure.Services;
+using Ecosys.Payroll.Infrastructure.Services.Migration;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Payroll.Api.Endpoints;
@@ -21,10 +22,11 @@ public static class ReportEndpoints
 
         var r = api.MapGroup("/reports").RequireAuthorization();
 
-        r.MapGet("/statutory", async (Guid runId, string ruleCode, string? format, ReportingService svc, AuditService audit, PayrollDbContext db, CancellationToken ct) =>
+        r.MapGet("/statutory", async (Guid runId, string ruleCode, string? format, ReportingService svc, AuditService audit, PayrollDbContext db, MigrationGuard migration, CancellationToken ct) =>
         {
             var report = await svc.StatutoryAsync(runId, ruleCode, ct);
-            if (TabularExport.Parse(format) is not { } f) return Results.Ok(report);
+            if (TabularExport.Parse(format) is not { } f) return Results.Ok(report); // on screen: compare it with the old system's return
+            await migration.EnsureLiveAsync("export a statutory return for filing", ct);
             var file = TabularExport.Build(f, report.Title, $"{report.RunReference} · {report.Period}", $"{report.RunReference}-{ruleCode}", report.Rows,
             [
                 new("Employee No", x => x.EmployeeNumber), new("Employee Name", x => x.EmployeeName), new("PIN", x => x.Pin), new("Member No", x => x.MemberNumber),

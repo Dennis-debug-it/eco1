@@ -19,6 +19,7 @@ public sealed record CreateRunRequest(Guid LegalEntityId, Guid PayrollGroupId, G
 
 /// <summary>Drives the payroll lifecycle (PRD §5). Every transition is authorised, audited and state-checked.</summary>
 public sealed class PayrollRunService(
+    Migration.MigrationGuard migration,
     PayslipFacts payslipFacts,
     PayrollDbContext db,
     ITenantContext tenant,
@@ -247,6 +248,7 @@ public sealed class PayrollRunService(
     public async Task<PayrollRun> ApproveAsync(Guid runId, string? comment, CancellationToken ct = default)
     {
         tenant.Require(Permissions.PayrollApprove);
+        await migration.EnsureLiveAsync("approve payroll", ct);
         var run = await LoadAsync(runId, includeEmployees: false, ct);
         if (run.Status != PayrollRunStatus.UnderReview) throw new InvalidStateException("Only a run under review can be approved.");
         var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
@@ -303,6 +305,7 @@ public sealed class PayrollRunService(
     public async Task<(PaymentBatch Batch, byte[] Content)> GeneratePaymentFileAsync(Guid runId, PaymentFileFormat format, DateOnly? valueDate, Guid? debitAccountId = null, CancellationToken ct = default)
     {
         tenant.Require(Permissions.PaymentsManage);
+        await migration.EnsureLiveAsync("make a payment file", ct);
         var run = await LoadAsync(runId, includeEmployees: true, ct);
         if (run.Status is not (PayrollRunStatus.Approved or PayrollRunStatus.PaymentProcessing)) throw new InvalidStateException("Payment files can only be generated for an approved run.");
 
@@ -416,6 +419,7 @@ public sealed class PayrollRunService(
     public async Task<PayrollRun> ConfirmPaymentsAsync(Guid runId, Guid batchId, string? bankReference, IReadOnlyList<Guid>? failedPaymentIds, string? failureReason, CancellationToken ct = default)
     {
         tenant.Require(Permissions.PaymentsManage);
+        await migration.EnsureLiveAsync("confirm payments", ct);
         var run = await LoadAsync(runId, includeEmployees: false, ct);
         if (run.Status != PayrollRunStatus.PaymentProcessing) throw new InvalidStateException("Run is not in payment processing.");
         var batch = await db.PaymentBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.PayrollRunId == runId, ct) ?? throw new NotFoundException("PaymentBatch", batchId);
@@ -441,6 +445,7 @@ public sealed class PayrollRunService(
     public async Task<PayrollRun> FinaliseAsync(Guid runId, CancellationToken ct = default)
     {
         tenant.Require(Permissions.PayrollFinalise);
+        await migration.EnsureLiveAsync("finalise payroll", ct);
         var run = await LoadAsync(runId, includeEmployees: true, ct);
         if (run.Status is not (PayrollRunStatus.Paid or PayrollRunStatus.Approved)) throw new InvalidStateException("Only a paid (or approved, for cash payrolls) run can be finalised.");
         if (run.Status == PayrollRunStatus.Approved)

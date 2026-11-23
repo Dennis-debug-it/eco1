@@ -272,6 +272,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
         ConfigureHr(b);
         ConfigureLeaveAndJournals(b);
         ConfigureBilling(b);
+        ConfigureMigration(b);
 
         // ---- Identity ---------------------------------------------------------------------
         TenantEntity<User>(b, e =>

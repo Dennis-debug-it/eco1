@@ -27,6 +27,8 @@ public sealed record AnnualMonth(int Month, string Period, decimal Gross, decima
 public sealed record AnnualEmployee(Guid EmployeeId, string EmployeeNumber, string EmployeeName, string? KraPin, IReadOnlyList<AnnualMonth> Months, AnnualMonth Totals);
 public sealed record AnnualReport(int Year, string LegalEntity, string EmployerPin, IReadOnlyList<AnnualEmployee> Employees);
 
+internal sealed record AnnualPart(Guid EmployeeId, int Month, decimal Gross, decimal TaxableEarnings, decimal Allowable, decimal TaxablePay, decimal GrossTax, decimal Reliefs, decimal Paye, decimal Nssf, decimal Shif, decimal HousingLevy, decimal Net);
+
 public sealed class ReportingService(PayrollDbContext db, ITenantContext tenant)
 {
     /// <summary>
@@ -48,20 +50,32 @@ public sealed class ReportingService(PayrollDbContext db, ITenantContext tenant)
         var q = db.PayrollRunEmployees.Where(e => runIds.Contains(e.PayrollRunId));
         if (employeeId is { } only) q = q.Where(e => e.EmployeeId == only);
         var rows = await q.ToListAsync(ct);
-        var ids = rows.Select(r => r.EmployeeId).Distinct().ToList();
+        // Months the previous payroll system paid before the switch to Ecosys, imported so the card covers the whole year.
+        var historyQuery = db.PayrollHistoryMonths.Where(h => h.LegalEntityId == legalEntityId && h.Year == year);
+        if (employeeId is { } onlyHistory) historyQuery = historyQuery.Where(h => h.EmployeeId == onlyHistory);
+        var history = await historyQuery.ToListAsync(ct);
+        var ids = rows.Select(r => r.EmployeeId).Concat(history.Select(h => h.EmployeeId)).Distinct().ToList();
         var pins = await db.EmployeeStatutoryDetails.Where(s => ids.Contains(s.EmployeeId)).ToDictionaryAsync(s => s.EmployeeId, s => s.KraPin, ct);
+        var people = await db.Employees.Where(e => ids.Contains(e.Id)).ToDictionaryAsync(e => e.Id, e => new { e.EmployeeNumber, Name = e.FirstName + " " + e.LastName }, ct);
 
-        static AnnualMonth Sum(int month, string label, IEnumerable<PayrollRunEmployee> xs)
+        // One shape for both sources: a run's employee row, or an imported month.
+        var parts = rows.Select(x => new AnnualPart(x.EmployeeId, runMonth[x.PayrollRunId], x.GrossPay, x.TaxableEarnings, x.TaxableEarnings - x.TaxablePay, x.TaxablePay, x.GrossTax, x.TotalReliefs, x.Paye, x.Nssf, x.Shif, x.HousingLevy, x.NetPay))
+            .Concat(history.Select(h => new AnnualPart(h.EmployeeId, h.Month, h.Gross, h.TaxableEarnings, h.AllowableDeductions, h.TaxablePay, h.GrossTax, h.Reliefs, h.Paye, h.Nssf, h.Shif, h.HousingLevy, h.NetPay)))
+            .ToList();
+        static AnnualMonth Sum(int month, string label, IEnumerable<AnnualPart> xs)
         {
             var l = xs.ToList();
-            return new AnnualMonth(month, label, l.Sum(x => x.GrossPay), l.Sum(x => x.TaxableEarnings), l.Sum(x => x.TaxableEarnings - x.TaxablePay), l.Sum(x => x.TaxablePay),
-                l.Sum(x => x.GrossTax), l.Sum(x => x.TotalReliefs), l.Sum(x => x.Paye), l.Sum(x => x.Nssf), l.Sum(x => x.Shif), l.Sum(x => x.HousingLevy), l.Sum(x => x.NetPay));
+            return new AnnualMonth(month, label, l.Sum(x => x.Gross), l.Sum(x => x.TaxableEarnings), l.Sum(x => x.Allowable), l.Sum(x => x.TaxablePay),
+                l.Sum(x => x.GrossTax), l.Sum(x => x.Reliefs), l.Sum(x => x.Paye), l.Sum(x => x.Nssf), l.Sum(x => x.Shif), l.Sum(x => x.HousingLevy), l.Sum(x => x.Net));
         }
-        var employees = rows.GroupBy(r => r.EmployeeId).Select(g =>
+        // The name on the card is the latest one Ecosys paid under, or today's record for someone only in imported history.
+        var latestName = rows.GroupBy(r => r.EmployeeId).ToDictionary(g => g.Key, g => g.OrderByDescending(x => runMonth[x.PayrollRunId]).First());
+        var employees = parts.GroupBy(p => p.EmployeeId).Select(g =>
         {
-            var first = g.OrderByDescending(x => runMonth[x.PayrollRunId]).First();
-            var months = Enumerable.Range(1, 12).Select(m => Sum(m, new DateOnly(year, m, 1).ToString("MMM yyyy"), g.Where(x => runMonth[x.PayrollRunId] == m))).ToList();
-            return new AnnualEmployee(g.Key, first.EmployeeNumber, first.EmployeeName, pins.GetValueOrDefault(g.Key), months, Sum(0, "Total", g));
+            var (number, name) = latestName.TryGetValue(g.Key, out var lr) ? (lr.EmployeeNumber, lr.EmployeeName)
+                : people.TryGetValue(g.Key, out var pe) ? (pe.EmployeeNumber, pe.Name) : ("", "");
+            var months = Enumerable.Range(1, 12).Select(m => Sum(m, new DateOnly(year, m, 1).ToString("MMM yyyy"), g.Where(x => x.Month == m))).ToList();
+            return new AnnualEmployee(g.Key, number, name, pins.GetValueOrDefault(g.Key), months, Sum(0, "Total", g));
         }).OrderBy(e => e.EmployeeNumber).ToList();
         return new AnnualReport(year, entity.Name, entity.TaxPin, employees);
     }
