@@ -80,6 +80,13 @@ public class Subscription : TenantEntity
 
     /// <summary>Suspended and cancelled tenants can read and export, but not change anything.</summary>
     public bool IsReadOnly => Status is SubscriptionStatus.Suspended or SubscriptionStatus.Cancelled;
+
+    /// <summary>
+    /// Still within the free-trial stage: a trial was given and no paid billing period has started (conversion,
+    /// activation and operator-started subscriptions all set one). True while trialing, and also while suspended or
+    /// cancelled during the trial, so reopening the account returns it to the trial rather than starting billing.
+    /// </summary>
+    public bool InTrialStage => TrialEndsOn is not null && CurrentPeriodStart is null;
 }
 
 public enum InvoiceStatus { Open, Paid, Void }

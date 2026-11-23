@@ -9,7 +9,7 @@ type TenantRow = { id: string; name: string; slug: string; isActive: boolean; cr
 type InvoiceRow = { id: string; tenantId: string; tenant: string; slug: string; number: string; planName: string; periodStart: string; periodEnd: string; issuedOn: string; dueOn: string; currency: string; total: number; amountPaid: number; balance: number; status: string; overdue: boolean }
 type Detail = {
   tenant: { id: string; name: string; slug: string; isActive: boolean; createdAt: string }
-  subscription?: { status: string; trialEndsOn?: string; activatedAt?: string; currentPeriodStart?: string; currentPeriodEnd?: string; cancelAtPeriodEnd: boolean; suspensionReason?: string; billingName?: string; billingEmail?: string; billingTaxPin?: string } | null
+  subscription?: { status: string; trialEndsOn?: string; activatedAt?: string; currentPeriodStart?: string; currentPeriodEnd?: string; cancelAtPeriodEnd: boolean; suspensionReason?: string; inTrialStage?: boolean; billingName?: string; billingEmail?: string; billingTaxPin?: string } | null
   plan?: PlanView | null
   usage: { employees: number; legalEntities: number; users: number; payrollRuns: number }
   administrators: { email: string; displayName: string; lastLoginAt?: string; mfaEnabled: boolean; emailVerified: boolean }[]
@@ -99,6 +99,10 @@ function TenantDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const act = useMutation({ mutationFn: ({ path, body }: { path: string; body?: unknown }) => api.post(`/api/platform/tenants/${id}/${path}`, body ?? {}), onSuccess: refresh })
   if (!q.data) return <Modal title="Customer" onClose={onClose}>{q.error ? <ErrorBox error={q.error} /> : <Loading />}</Modal>
   const d = q.data, s = d.subscription
+  // Read-only during its free trial: reopening goes back to the trial, or needs a new end date once it has passed.
+  const readOnlyInTrial = !!s?.inTrialStage && ['Suspended', 'Cancelled'].includes(s.status)
+  const trialOver = readOnlyInTrial && !!s?.trialEndsOn && s.trialEndsOn < isoDate(0)
+  const reopensTrial = readOnlyInTrial && !trialOver
   return (
     <Modal title={d.tenant.name} onClose={onClose} width={860}>
       <ErrorBox error={act.error} />
@@ -125,16 +129,19 @@ function TenantDialog({ id, onClose }: { id: string; onClose: () => void }) {
       <div className="toolbar" style={{ flexWrap: 'wrap' }}>
         <select value={plan} onChange={e => setPlan(e.target.value)} aria-label="Plan"><option value="">Choose plan…</option>{plans.data?.filter(p => p.plan.isActive).map(p => <option key={p.plan.code} value={p.plan.code}>{p.plan.name}{p.plan.isPublic ? '' : ' (private)'}</option>)}</select>
         <button className="btn" disabled={!plan || act.isPending} onClick={() => act.mutate({ path: s ? 'plan' : 'subscription', body: { planCode: plan } })}>{s ? 'Change plan' : 'Start subscription'}</button>
-        {s && (s.status === 'Trialing' || s.suspensionReason === 'Trial ended') && <>
+        {s && s.inTrialStage && ['Trialing', 'Suspended', 'Cancelled'].includes(s.status) && <>
           <input type="date" value={until} onChange={e => setUntil(e.target.value)} aria-label="Extend trial until" />
           <button className="btn" disabled={act.isPending} onClick={() => act.mutate({ path: 'extend-trial', body: { until } })}>Extend trial</button>
         </>}
         {s && !['Suspended', 'Cancelled'].includes(s.status) && <button className="btn" onClick={() => setDialog('suspend')}>Make read-only</button>}
-        {s && ['Suspended', 'Cancelled', 'PastDue'].includes(s.status) && <button className="btn" disabled={act.isPending} onClick={() => act.mutate({ path: 'reactivate' })}>Reactivate</button>}
+        {s && ['Suspended', 'Cancelled', 'PastDue'].includes(s.status) && !trialOver && <button className="btn" disabled={act.isPending} onClick={() => act.mutate({ path: 'reactivate' })}>{reopensTrial ? 'Reopen trial' : 'Reactivate'}</button>}
         {d.tenant.isActive
           ? <button className="btn danger" onClick={() => setDialog('block')}>Block sign-in</button>
           : <button className="btn" disabled={act.isPending} onClick={() => act.mutate({ path: 'access', body: { enabled: true } })}>Allow sign-in</button>}
       </div>
+      {reopensTrial && <p className="small muted">Reopening returns the account to its free trial, ending {fmt.date(s!.trialEndsOn!)}. Billing starts only if the customer adds billing details before then.</p>}
+      {trialOver && <p className="small muted">The free trial ended on {fmt.date(s!.trialEndsOn!)}. To reopen the account, extend the trial to a new date; the customer can also start paying from their Billing page.</p>}
+      <ErrorBox error={act.error} />
 
       <h3>Invoices</h3>
       {d.invoices.length === 0 ? <Empty>No invoices.</Empty> : <div className="table-wrap"><table><thead><tr><th>Number</th><th>Period</th><th>Due</th><th className="num">Total</th><th className="num">Paid</th><th>Status</th><th /></tr></thead>

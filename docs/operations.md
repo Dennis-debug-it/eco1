@@ -189,9 +189,9 @@ Payments are recorded by hand: M-Pesa or bank reconciliation is not automated ye
 
 From Customers → Manage:
 - **Change plan** (any plan, including private ones). The customer's usage must fit the new limits.
-- **Extend trial.**
+- **Extend trial.** Also reopens an account that was made read-only during its trial (trial ended, suspended by you, or cancelled by the customer), with the new end date.
 - **Make read-only.** For problems outside the normal cycle. Only you can lift this.
-- **Reactivate.**
+- **Reopen trial / Reactivate.** An account made read-only during its free trial goes back to that trial with its original end date ("Reopen trial"); billing starts only if the customer adds billing details before then. Once that date has passed there is no trial to return to, so use Extend trial instead. A paying account goes back to active ("Reactivate").
 - **Block sign-in.** The hard stop for abuse or a legal hold: nobody in the organisation can sign in.
 - **New customer.** Same as `provision-tenant`, optionally on a plan with or without a trial.
 
