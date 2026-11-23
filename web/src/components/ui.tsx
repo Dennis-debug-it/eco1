@@ -85,14 +85,24 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   return <label className="field">{label}{children}</label>
 }
 
-/** A password box with a Show/Hide button, so people can check what they typed. Starts hidden. */
+function EyeIcon({ crossed }: { crossed: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {crossed && <path d="M3 3l18 18" />}
+    </svg>
+  )
+}
+
+/** A password box with an eye button, so people can check what they typed. Starts hidden: crossed-out eye while hidden, open eye while shown. */
 export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
   const [shown, setShown] = useState(false)
   return (
     <span className="password-input">
       <input {...props} type={shown ? 'text' : 'password'} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
       <button type="button" className="password-toggle" aria-pressed={shown} aria-label={shown ? 'Hide password' : 'Show password'}
-        onClick={() => setShown(v => !v)}>{shown ? 'Hide' : 'Show'}</button>
+        title={shown ? 'Hide password' : 'Show password'} onClick={() => setShown(v => !v)}><EyeIcon crossed={!shown} /></button>
     </span>
   )
 }
