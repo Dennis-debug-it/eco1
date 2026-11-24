@@ -11,6 +11,8 @@ using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Security;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Ecosys.Payroll.Infrastructure.Services.Integration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -56,10 +58,17 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             ["Auth:PasswordResetRequestsPerHour"] = "100000",
             ["Careers:ApplicationsPerHour"] = CareersApplicationsPerHour.ToString(),
             ["Notifications:Enabled"] = "false", // tests drive the dispatcher explicitly
+            ["Integrations:WebhooksEnabled"] = "false", // and the webhook dispatcher
+            ["Payroll:PortalUrl"] = "https://payroll.test",
             ["Logging:LogLevel:Default"] = "Warning",
         }.Concat(ExtraSettings))
             builder.UseSetting(k, v);
+        // Webhooks are captured instead of sent over the network.
+        builder.ConfigureTestServices(s => s.AddSingleton<IWebhookSender>(Webhooks));
     }
+
+    /// <summary>Every webhook the dispatcher sends, and the answers the fake receivers give.</summary>
+    public RecordingWebhookSender Webhooks { get; } = new();
 
     public async Task InitializeAsync()
     {
@@ -117,6 +126,23 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
         var body = await res.Content.ReadFromJsonAsync<JsonObject>(Json);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", body!["token"]!.GetValue<string>());
         return client;
+    }
+}
+
+public sealed class RecordingWebhookSender : IWebhookSender
+{
+    public sealed record Sent(string Url, string Body, IReadOnlyDictionary<string, string> Headers);
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Sent> _sent = new();
+    /// <summary>Status code a URL answers with; any URL not listed answers 200.</summary>
+    public System.Collections.Concurrent.ConcurrentDictionary<string, int> Answers { get; } = new();
+
+    public IReadOnlyList<Sent> To(string url) => _sent.Where(s => s.Url == url).ToList();
+
+    public Task<WebhookResponse> SendAsync(string url, string body, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+    {
+        _sent.Enqueue(new Sent(url, body, headers));
+        var status = Answers.TryGetValue(url, out var s) ? s : 200;
+        return Task.FromResult(new WebhookResponse(status, status is >= 200 and < 300 ? null : $"The receiver answered {status}", 3));
     }
 }
 

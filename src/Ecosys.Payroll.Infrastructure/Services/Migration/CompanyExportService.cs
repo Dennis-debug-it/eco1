@@ -31,7 +31,7 @@ public sealed class CompanyExportService(PayrollDbContext db, ITenantContext ten
     private static readonly HashSet<string> SkippedTables = ["NotificationMessage"];
 
     /// <summary>Columns that are credentials, not data. Exporting them would hand out a way in.</summary>
-    private static readonly HashSet<string> SecretColumns = ["PasswordHash", "MfaSecret", "SecurityStamp", "EmailVerificationTokenHash", "PasswordResetTokenHash", "LastTotpStep"];
+    private static readonly HashSet<string> SecretColumns = ["PasswordHash", "MfaSecret", "SecurityStamp", "EmailVerificationTokenHash", "PasswordResetTokenHash", "LastTotpStep", "KeyHash", "Secret"];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly MethodInfo SetMethod = typeof(DbContext).GetMethods().Single(m => m.Name == nameof(DbContext.Set) && m.IsGenericMethodDefinition && m.GetParameters().Length == 0);

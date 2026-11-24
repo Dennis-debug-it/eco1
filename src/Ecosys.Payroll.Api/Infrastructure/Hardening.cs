@@ -69,6 +69,9 @@ public static class ProductionGuard
                 yield return "Self-service sign-up confirms email addresses, but Notifications:Provider is not Ecosys, so the emails would never be sent. Configure email delivery or set Saas:SignupEnabled=false.";
         }
 
+        if (config.GetValue("Integrations:AllowPrivateWebhookTargets", false))
+            yield return "Integrations:AllowPrivateWebhookTargets is on. Customers could point webhooks at this server's own network. Switch it off.";
+
         var cs = config.GetConnectionString("Payroll") ?? "";
         if (cs.Contains("Password=postgres", StringComparison.OrdinalIgnoreCase) || cs.Contains("Password=change-me", StringComparison.OrdinalIgnoreCase))
             yield return "The database password is a default. Set a strong POSTGRES_PASSWORD.";

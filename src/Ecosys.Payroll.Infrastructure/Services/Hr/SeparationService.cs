@@ -247,7 +247,7 @@ public sealed class SeparationService(PayrollDbContext db, ITenantContext tenant
             user.IsActive = user.Roles.Count > 0;
         }
         s.Status = SeparationStatus.Completed;
-        audit.Record("separation.completed", nameof(Separation), id, null, s.LegalEntityId);
+        audit.Record("separation.completed", nameof(Separation), id, new { employeeId = s.EmployeeId }, s.LegalEntityId);
         await db.SaveChangesAsync(ct);
         return s;
     }

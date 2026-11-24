@@ -63,6 +63,11 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - Anything new that pays, finalises or files calls `MigrationGuard.EnsureLiveAsync` first.
   - `CompanyExportService` exports every `TenantEntity` table automatically. Add any new credential column to its `SecretColumns`.
 - **Accounting exports** go through `JournalExportService`: check, then write the file, then stamp `ExternalReference` and audit `journal.exported`. A new format gets a writer, a check for what that system rejects, and a test that it balances.
+- **Integrations.** Other systems use API keys (`ApiKeyService`) and the published API in `PublicApiEndpoints` (`/api/v1`).
+  - A key holds only `ApiScopes.Grantable` permissions, and is limited to `/api/v1` by `ApiClientGateMiddleware`.
+  - `/api/v1` shapes are a contract: add fields, never rename or remove them. Reuse the screen endpoints' shared methods (`EmployeeEndpoints.CreateAsync` and the like) so both run the same checks.
+  - Webhook events come from audit actions (`IntegrationEventTypes.ForAuditAction`). Give a new event an audit action and a mapping there, and never put pay figures in a payload.
+  - Webhook addresses must pass `WebhookAddress`. Never allow private targets outside Development.
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout

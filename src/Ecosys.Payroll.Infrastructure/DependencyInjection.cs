@@ -52,6 +52,11 @@ public static class DependencyInjection
         services.AddScoped<Services.Returns.NssfReturnService>();
         services.AddScoped<Services.Returns.PayeReturnService>();
         services.AddScoped<Services.Accounting.JournalExportService>();
+        services.AddScoped<Services.Integration.ApiKeyService>();
+        services.AddScoped<Services.Integration.WebhookService>();
+        services.AddSingleton<Services.Integration.IWebhookSender, Services.Integration.HttpWebhookSender>();
+        services.AddSingleton<Services.Integration.WebhookDispatcher>();
+        if (config.GetValue("Integrations:WebhooksEnabled", true)) services.AddHostedService(sp => sp.GetRequiredService<Services.Integration.WebhookDispatcher>());
         services.AddScoped<Services.Migration.CompanyExportService>();
         services.AddScoped<Services.Migration.MigrationGuard>();
         services.AddScoped<Services.Migration.MigrationModeService>();

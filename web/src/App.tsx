@@ -33,6 +33,7 @@ import OrganogramPage from './pages/Organogram'
 import OfferResponsePage from './pages/OfferResponse'
 import PlatformPage from './pages/Platform'
 import MigrationPage, { type MigrationStatus } from './pages/Migration'
+import IntegrationsPage from './pages/Integrations'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordReset'
 import { useHrMe } from './lib/lookups'
@@ -102,6 +103,7 @@ export default function App() {
     { to: '/reports', label: 'Reports & audit', show: can(P.ReportsRead) || can(P.AuditRead) },
     { to: '/settings', label: 'Settings & security', show: true, section: 'Administration' },
     { to: '/data-protection', label: 'Data protection', show: can(P.OrganisationManage), section: 'Administration' },
+    { to: '/integrations', label: 'Integrations & API', show: can(P.IntegrationsManage), section: 'Administration' },
     { to: '/migration', label: 'Data migration', show: can(P.EmployeesWrite) || can(P.OrganisationManage), section: 'Administration' },
     { to: '/billing', label: 'Billing', show: !!b?.saas && !b.managed && can(P.BillingManage), section: 'Administration' },
     { to: '/operator', label: 'Operator console', show: platform, section: 'Platform' },
@@ -154,6 +156,7 @@ export default function App() {
           <Route path="/hr-analytics" element={<HrAnalyticsPage />} />
           <Route path="/data-protection" element={<DataProtectionPage />} />
           <Route path="/migration" element={<MigrationPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

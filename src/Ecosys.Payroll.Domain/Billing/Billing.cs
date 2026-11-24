@@ -7,8 +7,10 @@ public static class PlanFeatures
 {
     /// <summary>Talent modules: recruitment, performance, learning, cases, positions, benefits and assets.</summary>
     public const string HrSuite = "hr_suite";
+    /// <summary>API keys, the public API (<c>/api/v1</c>) and webhooks.</summary>
+    public const string Api = "api";
 
-    public static readonly string[] All = [HrSuite];
+    public static readonly string[] All = [HrSuite, Api];
 }
 
 /// <summary>

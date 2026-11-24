@@ -34,6 +34,9 @@ public sealed class SubscriptionGateMiddleware(RequestDelegate next, SaasOptions
     public static readonly string[] HrSuitePaths =
         ["/api/payroll/recruitment", "/api/payroll/performance", "/api/payroll/learning", "/api/payroll/cases", "/api/payroll/positions", "/api/payroll/benefits", "/api/payroll/assets"];
 
+    /// <summary>API areas that need <see cref="PlanFeatures.Api"/>: managing keys and webhooks, and the public API itself.</summary>
+    public static readonly string[] ApiPaths = ["/api/payroll/integrations", ApiClientGateMiddleware.ApiPrefix];
+
     /// <summary>Inside HR-suite areas but part of every plan: beneficiaries matter for final dues on death in service.</summary>
     private static readonly string[] CorePaths = ["/api/payroll/benefits/dependants"];
 
@@ -42,7 +45,8 @@ public sealed class SubscriptionGateMiddleware(RequestDelegate next, SaasOptions
 
     public async Task InvokeAsync(HttpContext http, ITenantContext ctx, EntitlementCache cache, SubscriptionService subscriptions)
     {
-        if (!options.Enabled || ctx.TenantId is not { } tenantId || !http.Request.Path.StartsWithSegments("/api/payroll"))
+        if (!options.Enabled || ctx.TenantId is not { } tenantId
+            || !(http.Request.Path.StartsWithSegments("/api/payroll") || http.Request.Path.StartsWithSegments(ApiClientGateMiddleware.ApiPrefix)))
         {
             await next(http);
             return;
@@ -54,6 +58,11 @@ public sealed class SubscriptionGateMiddleware(RequestDelegate next, SaasOptions
         if (!ent.Has(PlanFeatures.HrSuite) && HrSuitePaths.Any(p => path.StartsWithSegments(p)) && !CorePaths.Any(p => path.StartsWithSegments(p)))
         {
             await Refuse(http, "Not in your plan", "FEATURE_NOT_IN_PLAN", $"This module is not part of the {ent.PlanName} plan. An administrator can upgrade under Billing.");
+            return;
+        }
+        if (!ent.Has(PlanFeatures.Api) && ApiPaths.Any(p => path.StartsWithSegments(p)))
+        {
+            await Refuse(http, "Not in your plan", "FEATURE_NOT_IN_PLAN", $"Connecting other systems through the API is not part of the {ent.PlanName} plan. An administrator can upgrade under Billing.");
             return;
         }
         var writes = !(HttpMethods.IsGet(http.Request.Method) || HttpMethods.IsHead(http.Request.Method) || HttpMethods.IsOptions(http.Request.Method));

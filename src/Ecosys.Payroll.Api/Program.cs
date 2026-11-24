@@ -7,6 +7,7 @@ using Ecosys.Payroll.Api.Infrastructure;
 using Ecosys.Payroll.Infrastructure;
 using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Seed;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -36,6 +37,8 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SessionValidator>();
 builder.Services.AddSingleton<EntitlementCache>();
+builder.Services.AddSingleton<ApiKeyCache>();
+builder.Services.AddPublicApiDocument();
 
 // Sign-in throttling per client address, on top of per-account lockout.
 builder.Services.AddRateLimiter(o =>
@@ -73,7 +76,11 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
 
 // Authentication: shared Ecosys identity (OIDC authority) in production; a local HS256 issuer for development/tests.
 var auth = builder.Configuration.GetSection("Auth");
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
+// Programs sign in with an API key instead; the selector sends each request to the right handler by the credential's shape.
+builder.Services.AddAuthentication(o => { o.DefaultScheme = ApiKeyAuthenticationHandler.SelectorScheme; o.DefaultChallengeScheme = ApiKeyAuthenticationHandler.SelectorScheme; })
+    .AddPolicyScheme(ApiKeyAuthenticationHandler.SelectorScheme, "API key or token", o => o.ForwardDefaultSelector = ApiKeyAuthenticationHandler.SelectScheme)
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null)
+    .AddJwtBearer(o =>
 {
     o.MapInboundClaims = false; // keep JWT claim names (sub, role, amr, tenant_id) exactly as issued
     if (auth["Mode"] == "Ecosys")
@@ -107,7 +114,9 @@ app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<TenantContextMiddleware>();
+app.UseMiddleware<ApiClientGateMiddleware>();
 app.UseMiddleware<SubscriptionGateMiddleware>();
+app.UseMiddleware<IdempotencyMiddleware>();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Ecosys Payroll", version = "1.0.0" })).AllowAnonymous();
@@ -148,7 +157,9 @@ api.MapBilling();
 api.MapSignup();
 api.MapOffers();
 api.MapContracts();
+api.MapIntegrations();
 app.MapPlatform();
+app.MapPublicApi();
 
 // Static SPA (built React app copied into wwwroot in the container image).
 app.UseDefaultFiles();

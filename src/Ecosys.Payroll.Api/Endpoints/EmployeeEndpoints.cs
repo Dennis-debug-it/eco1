@@ -38,6 +38,79 @@ public static class EmployeeEndpoints
         if (e.HireDate == default) throw new DomainException("Hire date is required.", "VALIDATION");
     }
 
+    /// <summary>Adds an employee. Shared by the screens and the public API, so both apply the same checks.</summary>
+    internal static async Task<Employee> CreateAsync(Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct)
+    {
+        ctx.Require(Permissions.EmployeesWrite); ctx.RequireLegalEntity(body.LegalEntityId);
+        if (SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
+        if (string.IsNullOrWhiteSpace(body.EmployeeNumber) || string.IsNullOrWhiteSpace(body.FirstName) || string.IsNullOrWhiteSpace(body.LastName))
+            throw new DomainException("Employee number, first name and last name are required.", "VALIDATION");
+        if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
+            throw new DomainException($"Employee number {body.EmployeeNumber} already exists.", "DUPLICATE");
+        body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.UserId = null;
+        ValidateIdentifiers(body);
+        await ValidateReferencesAsync(body, db, ct);
+        db.Employees.Add(body);
+        db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = body.LegalEntityId, EmployeeId = body.Id, EffectiveFrom = body.HireDate, EmploymentType = body.EmploymentType, Status = body.Status, JobTitle = body.JobTitle, DepartmentId = body.DepartmentId, BranchId = body.BranchId, CostCentreId = body.CostCentreId, PayrollGroupId = body.PayrollGroupId, ChangeReason = "Hired" });
+        audit.Record("employee.created", nameof(Employee), body.Id, new { body.EmployeeNumber, body.FirstName, body.LastName }, body.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return body;
+    }
+
+    /// <summary>Replaces an employee's details, recording a new employment record when the job changes.</summary>
+    internal static async Task<Employee> UpdateAsync(Guid id, Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct)
+    {
+        ctx.Require(Permissions.EmployeesWrite);
+        var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
+        ctx.RequireLegalEntity(e.LegalEntityId);
+        // Returning a leaver to the books counts against the plan's employee limit.
+        if (!SubscriptionService.CountedStatuses.Contains(e.Status) && SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
+        var employmentChanged = e.EmploymentType != body.EmploymentType || e.Status != body.Status || e.JobTitle != body.JobTitle || e.DepartmentId != body.DepartmentId
+                                || e.BranchId != body.BranchId || e.CostCentreId != body.CostCentreId || e.PayrollGroupId != body.PayrollGroupId;
+        e.FirstName = body.FirstName; e.MiddleName = body.MiddleName; e.LastName = body.LastName; e.NationalId = body.NationalId; e.PassportNumber = body.PassportNumber;
+        e.DateOfBirth = body.DateOfBirth; e.Gender = body.Gender; e.Email = body.Email; e.Phone = body.Phone; e.PhysicalAddress = body.PhysicalAddress;
+        e.EmergencyContactName = body.EmergencyContactName; e.EmergencyContactPhone = body.EmergencyContactPhone;
+        e.EmploymentType = body.EmploymentType; e.Status = body.Status; e.HireDate = body.HireDate; e.ContractEndDate = body.ContractEndDate; e.TerminationDate = body.TerminationDate;
+        e.JobTitle = body.JobTitle; e.DepartmentId = body.DepartmentId; e.BranchId = body.BranchId; e.CostCentreId = body.CostCentreId; e.PayrollGroupId = body.PayrollGroupId;
+        e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
+        e.PositionId = body.PositionId; e.NoticePeriodDays = body.NoticePeriodDays; e.ProbationEndDate = body.ProbationEndDate;
+        if (e.ReportingManagerId == e.Id) throw new DomainException("An employee cannot report to themselves.", "VALIDATION");
+        ValidateIdentifiers(e);
+        await ValidateReferencesAsync(e, db, ct);
+        if (employmentChanged)
+        {
+            var today = BusinessClock.Today();
+            var open = await db.EmploymentRecords.Where(r => r.EmployeeId == id && r.EffectiveTo == null).ToListAsync(ct);
+            foreach (var r in open) r.EffectiveTo = today.AddDays(-1);
+            db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = e.LegalEntityId, EmployeeId = id, EffectiveFrom = today, EmploymentType = e.EmploymentType, Status = e.Status, JobTitle = e.JobTitle, DepartmentId = e.DepartmentId, BranchId = e.BranchId, CostCentreId = e.CostCentreId, PayrollGroupId = e.PayrollGroupId, ChangeReason = "Updated" });
+        }
+        audit.Record("employee.updated", nameof(Employee), id, new { e.EmployeeNumber, employmentChanged }, e.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return e;
+    }
+
+    /// <summary>Replaces an employee's statutory numbers and exemptions.</summary>
+    internal static async Task<EmployeeStatutoryDetails> SaveStatutoryAsync(Guid id, EmployeeStatutoryDetails body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct)
+    {
+        ctx.Require(Permissions.EmployeesWrite);
+        var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
+        ctx.RequireLegalEntity(e.LegalEntityId);
+        var s = await db.EmployeeStatutoryDetails.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
+        if (s is null) { s = new EmployeeStatutoryDetails { LegalEntityId = e.LegalEntityId, EmployeeId = id }; db.EmployeeStatutoryDetails.Add(s); }
+        ValidateStatutory(body);
+        if (body.KraPin is not null && await db.EmployeeStatutoryDetails.AnyAsync(x => x.EmployeeId != id && x.LegalEntityId == e.LegalEntityId && x.KraPin == body.KraPin, ct))
+            throw new DomainException("Another employee in this legal entity already has that KRA PIN.", "DUPLICATE");
+        s.KraPin = body.KraPin; s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
+        s.HasDisabilityExemption = body.HasDisabilityExemption; s.DisabilityExemptionCertificate = body.DisabilityExemptionCertificate; s.DisabilityExemptAmount = body.DisabilityExemptAmount;
+        s.DisabilityExemptionExpiry = body.DisabilityExemptionExpiry; s.StatutoryExemptions = body.StatutoryExemptions;
+        if (body.NssfOpeningBalance < 0) throw new DomainException("NSSF contributions before Ecosys cannot be negative.", "VALIDATION");
+        var openingChanged = s.NssfOpeningBalance != body.NssfOpeningBalance;
+        s.NssfOpeningBalance = body.NssfOpeningBalance;
+        audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions, nssfOpeningBalanceChanged = openingChanged }, e.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return s;
+    }
+
     public static void MapEmployees(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/employees").RequireAuthorization();
@@ -100,73 +173,15 @@ public static class EmployeeEndpoints
 
         g.MapPost("", async (Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct) =>
         {
-            ctx.Require(Permissions.EmployeesWrite); ctx.RequireLegalEntity(body.LegalEntityId);
-            if (SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
-            if (string.IsNullOrWhiteSpace(body.EmployeeNumber) || string.IsNullOrWhiteSpace(body.FirstName) || string.IsNullOrWhiteSpace(body.LastName))
-                throw new DomainException("Employee number, first name and last name are required.", "VALIDATION");
-            if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
-                throw new DomainException($"Employee number {body.EmployeeNumber} already exists.", "DUPLICATE");
-            body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.UserId = null;
-            ValidateIdentifiers(body);
-            await ValidateReferencesAsync(body, db, ct);
-            db.Employees.Add(body);
-            db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = body.LegalEntityId, EmployeeId = body.Id, EffectiveFrom = body.HireDate, EmploymentType = body.EmploymentType, Status = body.Status, JobTitle = body.JobTitle, DepartmentId = body.DepartmentId, BranchId = body.BranchId, CostCentreId = body.CostCentreId, PayrollGroupId = body.PayrollGroupId, ChangeReason = "Hired" });
-            audit.Record("employee.created", nameof(Employee), body.Id, new { body.EmployeeNumber, body.FirstName, body.LastName }, body.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Created($"/api/payroll/employees/{body.Id}", body);
+            var e = await CreateAsync(body, ctx, db, audit, plan, ct);
+            return Results.Created($"/api/payroll/employees/{e.Id}", e);
         });
 
         g.MapPut("/{id:guid}", async (Guid id, Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct) =>
-        {
-            ctx.Require(Permissions.EmployeesWrite);
-            var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
-            ctx.RequireLegalEntity(e.LegalEntityId);
-            // Returning a leaver to the books counts against the plan's employee limit.
-            if (!SubscriptionService.CountedStatuses.Contains(e.Status) && SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
-            var employmentChanged = e.EmploymentType != body.EmploymentType || e.Status != body.Status || e.JobTitle != body.JobTitle || e.DepartmentId != body.DepartmentId
-                                    || e.BranchId != body.BranchId || e.CostCentreId != body.CostCentreId || e.PayrollGroupId != body.PayrollGroupId;
-            e.FirstName = body.FirstName; e.MiddleName = body.MiddleName; e.LastName = body.LastName; e.NationalId = body.NationalId; e.PassportNumber = body.PassportNumber;
-            e.DateOfBirth = body.DateOfBirth; e.Gender = body.Gender; e.Email = body.Email; e.Phone = body.Phone; e.PhysicalAddress = body.PhysicalAddress;
-            e.EmergencyContactName = body.EmergencyContactName; e.EmergencyContactPhone = body.EmergencyContactPhone;
-            e.EmploymentType = body.EmploymentType; e.Status = body.Status; e.HireDate = body.HireDate; e.ContractEndDate = body.ContractEndDate; e.TerminationDate = body.TerminationDate;
-            e.JobTitle = body.JobTitle; e.DepartmentId = body.DepartmentId; e.BranchId = body.BranchId; e.CostCentreId = body.CostCentreId; e.PayrollGroupId = body.PayrollGroupId;
-            e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
-            e.PositionId = body.PositionId; e.NoticePeriodDays = body.NoticePeriodDays; e.ProbationEndDate = body.ProbationEndDate;
-            if (e.ReportingManagerId == e.Id) throw new DomainException("An employee cannot report to themselves.", "VALIDATION");
-            ValidateIdentifiers(e);
-            await ValidateReferencesAsync(e, db, ct);
-            if (employmentChanged)
-            {
-                var today = BusinessClock.Today();
-                var open = await db.EmploymentRecords.Where(r => r.EmployeeId == id && r.EffectiveTo == null).ToListAsync(ct);
-                foreach (var r in open) r.EffectiveTo = today.AddDays(-1);
-                db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = e.LegalEntityId, EmployeeId = id, EffectiveFrom = today, EmploymentType = e.EmploymentType, Status = e.Status, JobTitle = e.JobTitle, DepartmentId = e.DepartmentId, BranchId = e.BranchId, CostCentreId = e.CostCentreId, PayrollGroupId = e.PayrollGroupId, ChangeReason = "Updated" });
-            }
-            audit.Record("employee.updated", nameof(Employee), id, new { e.EmployeeNumber, employmentChanged }, e.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(e);
-        });
+            Results.Ok(await UpdateAsync(id, body, ctx, db, audit, plan, ct)));
 
         g.MapPut("/{id:guid}/statutory", async (Guid id, EmployeeStatutoryDetails body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
-        {
-            ctx.Require(Permissions.EmployeesWrite);
-            var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
-            ctx.RequireLegalEntity(e.LegalEntityId);
-            var s = await db.EmployeeStatutoryDetails.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
-            if (s is null) { s = new EmployeeStatutoryDetails { LegalEntityId = e.LegalEntityId, EmployeeId = id }; db.EmployeeStatutoryDetails.Add(s); }
-            ValidateStatutory(body);
-            if (body.KraPin is not null && await db.EmployeeStatutoryDetails.AnyAsync(x => x.EmployeeId != id && x.LegalEntityId == e.LegalEntityId && x.KraPin == body.KraPin, ct))
-                throw new DomainException("Another employee in this legal entity already has that KRA PIN.", "DUPLICATE");
-            s.KraPin = body.KraPin; s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
-            s.HasDisabilityExemption = body.HasDisabilityExemption; s.DisabilityExemptionCertificate = body.DisabilityExemptionCertificate; s.DisabilityExemptAmount = body.DisabilityExemptAmount;
-            s.DisabilityExemptionExpiry = body.DisabilityExemptionExpiry; s.StatutoryExemptions = body.StatutoryExemptions;
-            if (body.NssfOpeningBalance < 0) throw new DomainException("NSSF contributions before Ecosys cannot be negative.", "VALIDATION");
-            var openingChanged = s.NssfOpeningBalance != body.NssfOpeningBalance;
-            s.NssfOpeningBalance = body.NssfOpeningBalance;
-            audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions, nssfOpeningBalanceChanged = openingChanged }, e.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(s);
-        });
+            Results.Ok(await SaveStatutoryAsync(id, body, ctx, db, audit, ct)));
 
         // Maker-checker: a new account is never paid until a second person verifies it, and the employee is told
         // about every change through the contact details already on file.

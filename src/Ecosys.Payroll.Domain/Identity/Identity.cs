@@ -58,6 +58,8 @@ public static class Permissions
     public const string ExpensesFinance = "expenses.finance";
     /// <summary>Subscription, plan and invoices. Tenant administrators only: HR administrators manage the organisation but not the contract.</summary>
     public const string BillingManage = "billing.manage";
+    /// <summary>API keys and webhooks. Tenant administrators only: a key can read and change records without anyone signing in.</summary>
+    public const string IntegrationsManage = "integrations.manage";
 
     public static readonly string[] Hr = [HrPerformance, HrLearning, HrRecruitment, HrCases, HrDocuments, HrAssets, HrBenefits, HrSeparations];
 
@@ -72,7 +74,7 @@ public static class Permissions
                 case Roles.TenantAdministrator:
                     set.UnionWith([OrganisationManage, EmployeesRead, EmployeesWrite, SalaryRead, SalaryWrite, CompensationManage,
                         StatutoryManage, StatutoryApprove, PayrollPrepare, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse,
-                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService, ExpensesFinance, BillingManage, .. Hr]);
+                        PaymentsManage, JournalsRead, ReportsRead, AuditRead, LeaveApprove, SelfService, ExpensesFinance, BillingManage, IntegrationsManage, .. Hr]);
                     break;
                 case Roles.HrAdministrator:
                     set.UnionWith([EmployeesRead, EmployeesWrite, OrganisationManage, LeaveApprove, ReportsRead, SelfService, .. Hr]);

@@ -299,7 +299,9 @@ function PlanDialog({ plan, onClose }: { plan: PlanView | null; onClose: () => v
         </div>
         <Field label="Description"><input value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></Field>
         <div className="toolbar">
-          <label className="small"><input type="checkbox" checked={f.features.includes('hr_suite')} onChange={e => setF({ ...f, features: e.target.checked ? [...f.features, 'hr_suite'] : f.features.filter(x => x !== 'hr_suite') })} /> HR suite</label>
+          {Object.entries(featureLabel).map(([code, label]) => (
+            <label key={code} className="small" style={{ marginRight: 12 }}><input type="checkbox" checked={f.features.includes(code)} onChange={e => setF({ ...f, features: e.target.checked ? [...f.features, code] : f.features.filter(x => x !== code) })} /> {label}</label>
+          ))}
           <label className="small"><input type="checkbox" checked={f.isPublic} onChange={e => setF({ ...f, isPublic: e.target.checked })} /> Offered on sign-up</label>
           <label className="small"><input type="checkbox" checked={f.isActive} onChange={e => setF({ ...f, isActive: e.target.checked })} /> Available</label>
         </div>

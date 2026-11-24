@@ -56,6 +56,7 @@ Key decisions (PRD §19):
 | Sensitive data | AES-256-GCM on bank account numbers, KRA PINs, national IDs, MFA secrets and notification recipients; masked for readers without write access |
 | Auth | JWT. `Local` mode issues tokens itself (dev/standalone); `Ecosys` mode validates tokens from the shared Ecosys identity provider |
 | Accounting export | A run's journal, or a company's journals for a month, downloads as a QuickBooks Online journal CSV, a QuickBooks Desktop IIF, a Sage Pastel batch, a Sage Evolution journal CSV or a plain CSV. The file is checked first (balanced, every line has an account, account numbers valid for Pastel), and each journal remembers it was exported so importing twice is flagged |
+| Integrations API | Programs connect with API keys an administrator issues under Integrations: each key holds only the permissions and companies ticked, can't approve, finalise or reverse payroll, is stored as a hash and can be revoked at once. The published API (`/api/v1`, described at `/api/v1/openapi.json`) covers organisation, employees (with `updatedSince` sync), payroll runs, attendance, one-off pay items, leave, journals, an events feed and the audit log. Writes accept an `Idempotency-Key`; each key has its own requests-per-minute limit. Webhooks send signed (HMAC-SHA256) event notices to HTTPS addresses, retried for about eleven hours, never carrying pay figures |
 | Notifications | Transactional outbox + background dispatcher → Ecosys Notifications (email, WhatsApp). Messages never contain salary figures |
 
 ## Quick start
@@ -282,6 +283,8 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Sign-up (SaaS) | `GET /signup/options`, `GET /signup/slug`, `POST /signup`, `POST /signup/verify`, `POST /signup/resend` |
 | Billing (SaaS) | `GET /billing/status`, `GET /billing`, `POST /billing/{activate,plan,cancel,resume}`, `GET /billing/invoices/{id}/pdf` |
 | Operator (`/api/platform`) | `GET /overview`, `GET/POST /tenants`, `GET /tenants/{id}`, `POST /tenants/{id}/{subscription,plan,extend-trial,suspend,reactivate,access}`, `GET /invoices`, `POST /invoices/{id}/{payments,void}`, `GET /invoices/{id}/pdf`, `GET/POST/PUT /plans`, `POST /billing/run` |
+| Integrations | `GET /integrations/options`, `GET/POST /integrations/keys`, `POST /integrations/keys/{id}/revoke`, `GET/POST /integrations/webhooks`, `PUT/DELETE /integrations/webhooks/{id}`, `POST /integrations/webhooks/{id}/{rotate-secret,test}`, `GET /integrations/webhooks/{id}/deliveries`, `POST /integrations/deliveries/{id}/redeliver` |
+| Public API (`/api/v1`, API key) | `GET /me`, `/companies`, `/departments`, `/branches`, `/cost-centres`, `/payroll-periods`, `/pay-components`, `GET/POST /employees`, `GET/PATCH /employees/{id}`, `GET /payroll-runs[/{id}[/results]]`, `PUT /payroll-runs/{id}/attendance`, `POST /payroll-runs/{id}/variable-inputs`, `GET /leave-requests[/{id}]`, `GET /journals[/export]`, `GET /events`, `GET /audit-log`, `GET /openapi.json` (no sign-in) |
 | Reports | `GET /dashboard`, `/reports/{statutory,payroll-register,variance,annual,audit}?format=csv\|xlsx\|pdf`, `GET /reports/notifications` |
 
 ## Known limitations
@@ -305,4 +308,10 @@ These are the things to resolve before go-live, or to plan for in later phases:
    - **Integrations.** There are no job-board, e-signature or LMS integrations, and the medical scheme in the demo data is a sample.
    - **File storage.** Uploaded files are stored in PostgreSQL (`stored_files`). Move them to object storage if volumes grow.
 9. **Accounting systems.** Journals export as import files for QuickBooks and Sage; there is no live connection. The layouts follow each product's documented import format but haven't been through a real import, so do one test import per customer. GL mapping codes must be the account names or numbers in the customer's chart (QuickBooks matches accounts by name, or number when account numbering is on; Pastel needs numbers like `6100` or `6100/010`). A direct QuickBooks Online or Xero API connection would need an Intuit or Xero developer app.
-10. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.
+10. **Integrations API.** Things to know before giving customers keys:
+    - Salary changes, bank accounts and approvals are deliberately left out of `/api/v1`.
+    - A revoked key keeps working for up to 30 seconds on other server instances (cache).
+    - Per-key rate limits are counted on each instance separately.
+    - Webhook calls go out directly, not through an outbound proxy, unless `Integrations:WebhookUseProxy` is set.
+    - Events are kept indefinitely; add a retention clean-up if volumes grow.
+11. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.

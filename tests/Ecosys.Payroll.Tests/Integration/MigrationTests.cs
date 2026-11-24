@@ -284,6 +284,8 @@ public class MigrationTests(PayrollApiFixture app)
     {
         var c = await NewCompanyAsync();
         await Import(c, "employees", StaffCsv);
+        var key = (await c.Admin.PostJson($"{B}/integrations/keys", new { name = "Export check", permissions = new[] { "employees.read" } }, HttpStatusCode.Created))["key"]!.GetValue<string>();
+        var hookSecret = (await c.Admin.PostJson($"{B}/integrations/webhooks", new { name = "Export check", url = "https://hooks.example.com/x" }, HttpStatusCode.Created))["secret"]!.GetValue<string>();
         var res = await c.Admin.GetAsync($"{B}/export/company.zip");
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         using var zip = new ZipArchive(new MemoryStream(await res.Content.ReadAsByteArrayAsync()));
@@ -302,6 +304,9 @@ public class MigrationTests(PayrollApiFixture app)
         Assert.DoesNotContain("PasswordHash", users);
         Assert.DoesNotContain("MfaSecret", users);
         Assert.DoesNotContain("SecurityStamp", users);
+        Assert.DoesNotContain(Ecosys.Payroll.Infrastructure.Services.Integration.ApiKeyService.Hash(key), Read("data/api_clients.csv"));
+        Assert.Contains("Export check", Read("data/webhook_endpoints.csv"));
+        Assert.DoesNotContain(hookSecret, Read("data/webhook_endpoints.csv"));
         Assert.DoesNotContain(names, n => n.Contains("notification"));
         // Only this organisation: nothing from the demo company or the rival tenant.
         Assert.DoesNotContain(names.Where(n => n.EndsWith(".csv")).Select(Read), t => t.Contains("Secret") && t.Contains("Person") || t.Contains("demo.ecosys"));
