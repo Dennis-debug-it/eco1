@@ -500,6 +500,8 @@ public sealed class ContractTerms
     public string? EmploymentType { get; set; }
     public string? ReportsTo { get; set; }
     public decimal Basic { get; set; }
+    /// <summary>The daily wage, for a worker paid by the day; null for a monthly salary. Absent in terms stored before daily pay existed.</summary>
+    public decimal? DailyRate { get; set; }
     public string Currency { get; set; } = "KES";
     public List<ContractAllowance> Allowances { get; set; } = [];
     public int NoticeDays { get; set; }

@@ -29,7 +29,9 @@ public sealed record RunContext(
     PayrollGroup Group,
     IReadOnlyDictionary<Guid, AttendanceRecord> Attendance,
     IReadOnlyDictionary<Guid, List<ScheduledPayItem>> ScheduledItems,
-    IReadOnlyDictionary<Guid, List<(Guid? ComponentId, string Name, decimal MonthlyAmount)>> BenefitDeductions)
+    IReadOnlyDictionary<Guid, List<(Guid? ComponentId, string Name, decimal MonthlyAmount)>> BenefitDeductions,
+    /// <summary>Working days of approved paid leave in the period, for daily-paid workers only.</summary>
+    IReadOnlyDictionary<Guid, decimal>? PaidLeaveDays = null)
 {
     public PeriodFrequency Frequency => Group.Frequency switch
     {
@@ -134,7 +136,27 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
             .Where(x => x.Item.MonthlyAmount > 0)
             .GroupBy(x => x.EmployeeId).ToDictionary(g => g.Key, g => g.Select(x => x.Item).ToList());
 
-        return new RunContext(run, period, entity, components, structures, employees, assignments, statutory, variables, loans, unpaid, adjustments, previous, banks, group, attendance, scheduled, benefits);
+        // Daily-paid workers: days of approved paid leave in the period (to remind the preparer), and anyone entered as
+        // working no days and owed nothing else is left out of this run rather than paid nil.
+        var dailyIds = assignments.Values.Where(a => a.PayBasis == PayBasis.Daily).Select(a => a.EmployeeId).ToHashSet();
+        var paidLeave = new Dictionary<Guid, decimal>();
+        if (dailyIds.Count > 0)
+        {
+            var paidTypeIds = leaveTypes.Values.Where(t => t.IsPaid).Select(t => t.Id).ToList();
+            var periodHolidays = (await db.PublicHolidays.Where(h => h.LegalEntityId == run.LegalEntityId && h.ObservedDate >= period.PeriodStart && h.ObservedDate <= period.PeriodEnd)
+                .Select(h => h.ObservedDate).ToListAsync(ct)).ToHashSet();
+            foreach (var l in await db.LeaveRequests.Where(l => dailyIds.Contains(l.EmployeeId) && l.Status == LeaveRequestStatus.Approved && paidTypeIds.Contains(l.LeaveTypeId)
+                                                                  && l.StartDate <= period.PeriodEnd && l.EndDate >= period.PeriodStart).AsNoTracking().ToListAsync(ct))
+            {
+                var start = l.StartDate > period.PeriodStart ? l.StartDate : period.PeriodStart;
+                var end = l.EndDate < period.PeriodEnd ? l.EndDate : period.PeriodEnd;
+                paidLeave[l.EmployeeId] = paidLeave.GetValueOrDefault(l.EmployeeId) + Hr.WorkCalendar.WorkingDates(start, end, periodHolidays).Count();
+            }
+            employees = employees.Where(e => !(dailyIds.Contains(e.Id) && attendance.TryGetValue(e.Id, out var a) && a.DaysWorked == 0 && a.OvertimeHours == 0 && a.RestDayOvertimeHours == 0
+                                               && !scheduled.ContainsKey(e.Id) && !variables.ContainsKey(e.Id))).ToList();
+        }
+
+        return new RunContext(run, period, entity, components, structures, employees, assignments, statutory, variables, loans, unpaid, adjustments, previous, banks, group, attendance, scheduled, benefits, paidLeave);
     }
 
     /// <summary>
@@ -172,6 +194,7 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         var deductions = new List<DeductionInput>();
         var monthlyBasic = assignment.BasicSalary;
         var basic = Math.Round(monthlyBasic * ctx.PeriodFactor, 2);
+        ctx.Attendance.TryGetValue(emp.Id, out var att);
 
         // Days worked pro-rating for joiners/leavers inside the period.
         var daysInPeriod = ctx.Period.PeriodEnd.DayNumber - ctx.Period.PeriodStart.DayNumber + 1;
@@ -180,8 +203,24 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         var daysPaid = to.DayNumber - from.DayNumber + 1;
         var proration = daysPaid < daysInPeriod ? (decimal)daysPaid / daysInPeriod : 1m;
 
+        // Daily-paid: basic pay is the daily rate for each day actually worked, from the run's attendance. The days
+        // already reflect joining, leaving and absence, so there is no pro-rating and no deduction for days not worked.
+        var dailyRateOfPay = assignment.PayBasis == PayBasis.Daily ? assignment.DailyRate : null;
+        var basicName = (string?)null;
+        if (dailyRateOfPay is { } rate)
+        {
+            var worked = att?.DaysWorked ?? 0m;
+            if (att is null) issues.Add(new(ValidationSeverity.Error, "DAYS_REQUIRED", "Daily-paid: enter the days worked in this period under Attendance (0 if none)."));
+            else if (worked > daysPaid) issues.Add(new(ValidationSeverity.Error, "DAYS_TOO_MANY", $"Daily-paid: {worked:0.##} days worked is more than the {daysPaid} days employed in this period."));
+            if (ctx.PaidLeaveDays?.GetValueOrDefault(emp.Id) is > 0 and var leaveDays)
+                issues.Add(new(ValidationSeverity.Warning, "DAILY_PAID_LEAVE", $"Daily-paid: {leaveDays:0.##} day(s) of approved paid leave fall in this period. Include them in days worked if they're paid."));
+            basic = Math.Round(rate * worked, 2);
+            proration = 1m;
+            basicName = $" ({worked:0.##} days x {rate:N2})";
+        }
+
         var basicComponent = ctx.Components.Values.FirstOrDefault(c => c.IsBasic && c.IsActive);
-        earnings.Add(new EarningInput(basicComponent?.Code ?? "BASIC", basicComponent?.Name ?? "Basic salary", Math.Round(basic * proration, 2),
+        earnings.Add(new EarningInput(basicComponent?.Code ?? "BASIC", (basicComponent?.Name ?? "Basic salary") + basicName, Math.Round(basic * proration, 2),
             Taxable: basicComponent?.Taxable ?? true, Pensionable: basicComponent?.Pensionable ?? true, IsBasic: true,
             ComponentId: basicComponent?.Id, GlAccountCode: basicComponent?.GlAccountCode));
 
@@ -261,16 +300,16 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         var monthlyHours = settings.StandardMonthlyHours > 0 ? settings.StandardMonthlyHours : 195m;
         var otMultiplier = settings.OvertimeMultiplier > 0 ? settings.OvertimeMultiplier : 1.5m;
         var restMultiplier = settings.RestDayOvertimeMultiplier > 0 ? settings.RestDayOvertimeMultiplier : 2.0m;
-        var dailyRate = monthlyBasic / workingDays;
-        var unpaidDays = ctx.UnpaidLeaveDays.GetValueOrDefault(emp.Id);
-        if (ctx.Attendance.TryGetValue(emp.Id, out var att)) unpaidDays += att.AbsentDays;
+        var dailyRate = dailyRateOfPay ?? monthlyBasic / workingDays;
+        // Daily-paid workers are simply not paid for days they don't work, so absence and unpaid leave deduct nothing more.
+        var unpaidDays = dailyRateOfPay is null ? ctx.UnpaidLeaveDays.GetValueOrDefault(emp.Id) + (att?.AbsentDays ?? 0m) : 0m;
         var unpaidAmount = unpaidDays > 0 ? Math.Min(basic, Math.Round(dailyRate * unpaidDays, 2)) : 0m;
         if (unpaidDays > 0) issues.Add(new(ValidationSeverity.Warning, "UNPAID_DAYS", $"{unpaidDays:0.##} unpaid day(s) deducted at {dailyRate:N2}/day."));
 
-        // Overtime from attendance, valued at the hourly rate of monthly basic.
+        // Overtime from attendance, valued at the hourly rate: of monthly basic, or of the daily rate over a standard day.
         if (att is not null && (att.OvertimeHours > 0 || att.RestDayOvertimeHours > 0))
         {
-            var hourly = monthlyBasic / monthlyHours;
+            var hourly = dailyRateOfPay is { } dr ? dr / (monthlyHours / workingDays) : monthlyBasic / monthlyHours;
             var ot = ctx.Components.Values.FirstOrDefault(c => c.Code == "OT" && c.IsActive);
             void AddOt(decimal hours, decimal multiplier, string label)
             {
@@ -288,7 +327,7 @@ public sealed class PayrollInputAssembler(PayrollDbContext db)
         if (stat is null || string.IsNullOrWhiteSpace(stat.NssfNumber)) issues.Add(new(ValidationSeverity.Warning, "NO_NSSF", "NSSF number is missing."));
         if (stat is null || string.IsNullOrWhiteSpace(stat.ShifNumber)) issues.Add(new(ValidationSeverity.Warning, "NO_SHIF", "SHIF number is missing."));
         if (!ctx.PrimaryBankAccounts.ContainsKey(emp.Id)) issues.Add(new(ValidationSeverity.Error, "NO_BANK", "No verified bank account on file."));
-        if (proration < 1m) issues.Add(new(ValidationSeverity.Warning, "PRORATED", $"Pay pro-rated for {daysPaid} of {daysInPeriod} days."));
+        if (proration < 1m && dailyRateOfPay is null) issues.Add(new(ValidationSeverity.Warning, "PRORATED", $"Pay pro-rated for {daysPaid} of {daysInPeriod} days."));
 
         var exemptions = stat?.StatutoryExemptions ?? [];
         var disabilityValid = stat is { HasDisabilityExemption: true } && (stat.DisabilityExemptionExpiry is null || stat.DisabilityExemptionExpiry >= ctx.Period.PeriodEnd);

@@ -492,6 +492,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("currency_code");
 
+                    b.Property<decimal?>("DailyRate")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("daily_rate");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -515,6 +519,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("LegalEntityId")
                         .HasColumnType("uuid")
                         .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("PayBasis")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("pay_basis");
 
                     b.Property<Guid?>("SalaryStructureId")
                         .HasColumnType("uuid")

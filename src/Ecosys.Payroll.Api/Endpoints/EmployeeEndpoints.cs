@@ -17,7 +17,7 @@ public sealed record EmployeeDetail(Employee Employee, EmployeeStatutoryDetails?
 
 public sealed record BankAccountRequest(PaymentMethod Method, string? BankCode, string? BranchCode, string AccountName, string AccountNumber, bool IsPrimary = true, decimal SplitPercent = 100m);
 
-public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalaryStructureId, DateOnly EffectiveFrom, string? ChangeReason, List<EmployeeSalaryAssignmentLine>? Lines);
+public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalaryStructureId, DateOnly EffectiveFrom, string? ChangeReason, List<EmployeeSalaryAssignmentLine>? Lines, PayBasis PayBasis = PayBasis.Monthly, decimal? DailyRate = null);
 
 public static class EmployeeEndpoints
 {
@@ -221,7 +221,7 @@ public static class EmployeeEndpoints
             ctx.Require(Permissions.SalaryWrite);
             var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
             ctx.RequireLegalEntity(e.LegalEntityId);
-            if (req.BasicSalary < 0) throw new DomainException("Basic salary cannot be negative.", "VALIDATION");
+            var entity = await db.LegalEntities.FirstAsync(x => x.Id == e.LegalEntityId, ct);
             // Effective-dated: close the current assignment the day before the new one starts; reject backdating into a finalised period.
             var finalisedThrough = await db.PayrollRuns.Where(r => r.LegalEntityId == e.LegalEntityId && r.Status == Domain.Payroll.PayrollRunStatus.Finalised)
                 .Join(db.PayrollPeriods, r => r.PayrollPeriodId, p => p.Id, (r, p) => p.PeriodEnd).OrderByDescending(d => d).FirstOrDefaultAsync(ct);
@@ -233,10 +233,11 @@ public static class EmployeeEndpoints
                 if (c.EffectiveFrom >= req.EffectiveFrom) throw new InvalidStateException("A later or same-dated assignment already exists.");
                 c.EffectiveTo = req.EffectiveFrom.AddDays(-1);
             }
-            var a = new EmployeeSalaryAssignment { LegalEntityId = e.LegalEntityId, EmployeeId = id, BasicSalary = req.BasicSalary, SalaryStructureId = req.SalaryStructureId, EffectiveFrom = req.EffectiveFrom, ChangeReason = req.ChangeReason, ApprovedBy = ctx.UserId };
+            var a = new EmployeeSalaryAssignment { LegalEntityId = e.LegalEntityId, EmployeeId = id, SalaryStructureId = req.SalaryStructureId, EffectiveFrom = req.EffectiveFrom, ChangeReason = req.ChangeReason, ApprovedBy = ctx.UserId };
+            PayBasisRules.Apply(a, req.PayBasis, req.BasicSalary, req.DailyRate, entity);
             foreach (var l in req.Lines ?? []) a.Lines.Add(new EmployeeSalaryAssignmentLine { EmployeeSalaryAssignmentId = a.Id, SalaryComponentId = l.SalaryComponentId, Method = l.Method, Amount = l.Amount, Rate = l.Rate });
             db.EmployeeSalaryAssignments.Add(a);
-            audit.Record("employee.salary.assigned", nameof(EmployeeSalaryAssignment), a.Id, new { employeeId = id, previous = current.FirstOrDefault()?.BasicSalary, a.BasicSalary, a.EffectiveFrom, req.ChangeReason }, e.LegalEntityId);
+            audit.Record("employee.salary.assigned", nameof(EmployeeSalaryAssignment), a.Id, new { employeeId = id, previous = current.FirstOrDefault()?.BasicSalary, a.BasicSalary, payBasis = a.PayBasis.ToString(), a.DailyRate, a.EffectiveFrom, req.ChangeReason }, e.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/payroll/employees/{id}/salary/{a.Id}", a);
         });

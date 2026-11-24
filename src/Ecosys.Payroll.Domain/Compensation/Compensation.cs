@@ -16,6 +16,9 @@ public enum CalculationMethod
 
 public enum Recurrence { EveryPeriod, OneOff }
 
+/// <summary>How basic pay is earned: a monthly salary, or a daily wage paid for the days actually worked.</summary>
+public enum PayBasis { Monthly, Daily }
+
 /// <summary>Configurable earning or deduction definition (PRD §3.3).</summary>
 public class SalaryComponent : LegalEntityScopedEntity
 {
@@ -64,7 +67,15 @@ public class EmployeeSalaryAssignment : LegalEntityScopedEntity, IEffectiveDated
 {
     public Guid EmployeeId { get; set; }
     public Guid? SalaryStructureId { get; set; }
+    /// <summary>
+    /// Monthly basic salary. For a daily-paid worker this is the monthly equivalent (daily rate x the company's standard
+    /// working days), kept so notice pay, final dues, reviews and reports still have a monthly figure; the payroll run
+    /// pays the daily rate for the days worked instead.
+    /// </summary>
     public decimal BasicSalary { get; set; }
+    public PayBasis PayBasis { get; set; } = PayBasis.Monthly;
+    /// <summary>The daily wage, when <see cref="PayBasis"/> is Daily.</summary>
+    public decimal? DailyRate { get; set; }
     public string CurrencyCode { get; set; } = "KES";
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveTo { get; set; }

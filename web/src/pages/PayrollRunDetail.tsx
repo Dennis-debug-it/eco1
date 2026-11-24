@@ -210,7 +210,10 @@ function Attendance({ runId, editable, employees, onChange }: { runId: string; e
   const [err, setErr] = useState<unknown>(null)
   const [msg, setMsg] = useState('')
   const done = (n: number) => { setMsg(`${n} row(s) saved. Recalculate to apply.`); qc.invalidateQueries({ queryKey: ['attendance', runId] }); onChange() }
-  const save = useMutation({ mutationFn: () => api.put<{ saved: number }>(`/api/payroll/runs/${runId}/attendance`, [{ ...f, employeeNumber: f.employeeNumber || employees[0]?.employeeNumber }]), onSuccess: r => done(r.saved), onError: setErr, onMutate: () => setErr(null) })
+  // A daily-paid worker entered as 0 days drops out of the run but keeps an attendance row: keep them pickable to correct it.
+  const people = [...employees.map(e => ({ employeeId: e.employeeId, employeeNumber: e.employeeNumber, employeeName: e.employeeName })),
+    ...(q.data ?? []).filter(a => !employees.some(e => e.employeeId === a.employeeId)).map(a => ({ employeeId: a.employeeId, employeeNumber: a.employeeNumber, employeeName: a.employeeName }))]
+  const save = useMutation({ mutationFn: () => api.put<{ saved: number }>(`/api/payroll/runs/${runId}/attendance`, [{ ...f, employeeNumber: f.employeeNumber || people[0]?.employeeNumber }]), onSuccess: r => done(r.saved), onError: setErr, onMutate: () => setErr(null) })
   const upload = async (file: File) => {
     setErr(null); setMsg('')
     try {
@@ -224,12 +227,13 @@ function Attendance({ runId, editable, employees, onChange }: { runId: string; e
   return (
     <div className="card">
       <h2>Attendance</h2>
+      <p className="small"><b>Daily-paid workers are paid from Days worked.</b> Each needs a row for every run; enter 0 for anyone who didn't work, and they're left out of the run.</p>
       <p className="muted small">Absent days are deducted at the daily rate of basic pay; overtime is paid at the hourly rate × the legal entity's multipliers. Import a CSV from your time or biometric system with columns <span className="mono">EmployeeNumber, DaysWorked, AbsentDays, OvertimeHours, RestDayOvertimeHours, Note</span>.</p>
       <ErrorBox error={err} />{msg && <div className="alert ok">{msg}</div>}
       {editable && <>
         <div className="toolbar"><label className="btn">Import CSV<input type="file" accept=".csv,text/csv" className="sr-only" onChange={e => { const file = e.target.files?.[0]; if (file) upload(file); e.target.value = '' }} /></label></div>
-        {employees.length > 0 && <div className="toolbar">
-          <select value={f.employeeNumber || employees[0]?.employeeNumber} onChange={e => setF({ ...f, employeeNumber: e.target.value })} aria-label="Employee">{employees.map(e => <option key={e.employeeId} value={e.employeeNumber}>{e.employeeNumber} {e.employeeName}</option>)}</select>
+        {people.length > 0 && <div className="toolbar">
+          <select value={f.employeeNumber || people[0]?.employeeNumber} onChange={e => setF({ ...f, employeeNumber: e.target.value })} aria-label="Employee">{people.map(e => <option key={e.employeeId} value={e.employeeNumber}>{e.employeeNumber} {e.employeeName}</option>)}</select>
           <span className="small muted">Days</span>{num('daysWorked', 'Days worked', 64)}<span className="small muted">Absent</span>{num('absentDays', 'Absent days', 64)}<span className="small muted">OT h</span>{num('overtimeHours', 'Overtime hours', 64)}<span className="small muted">Rest-day OT h</span>{num('restDayOvertimeHours', 'Rest day overtime hours', 64)}
           <input placeholder="Note" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} aria-label="Note" />
           <button className="btn primary" onClick={() => save.mutate()} disabled={save.isPending}>Save</button>

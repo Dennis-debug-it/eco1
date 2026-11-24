@@ -49,6 +49,7 @@ Key decisions (PRD §19):
 | Money | `decimal` end to end, `numeric(18,4)` in PostgreSQL, per-rule rounding |
 | Statutory rules | Data, not code: effective-dated versions with approval workflow; every result line records the rule version that produced it, so historical payrolls reproduce exactly |
 | Pay frequency | Rules are monthly; weekly / semi-monthly periods scale every threshold (bands, reliefs, caps, LEL/UEL) |
+| Daily pay | A salary is monthly or a daily wage. Daily-paid workers earn the rate for the days worked entered in the run's attendance; a worker entered as 0 days is left out of that run. Their salary record keeps a monthly equivalent (rate x standard working days) for notice pay, final dues and reports |
 | Tenancy | Shared database, `tenant_id` on every row, EF global query filters, insert stamping, and a guard against cross-tenant foreign keys |
 | Workflow | Draft → Prepared → Calculated → Under review → Approved → Payment processing → Paid → Finalised (→ Reversed). Approved runs are immutable; corrections go through adjustments or reversal |
 | Controls | Maker-checker (preparer cannot approve), duplicate-run prevention, payment file reconciled to approved net, balanced journal enforced |

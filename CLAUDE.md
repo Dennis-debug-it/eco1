@@ -39,6 +39,7 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - `SaveChangesAsync` stamps inserts and rejects cross-tenant legal-entity references
   - validate other foreign IDs from request bodies against the caller's legal entity (see `EmployeeEndpoints.ValidateReferencesAsync`)
 - **Authorisation** goes in the service or endpoint via `ITenantContext.Require(Permissions.X)`. Keep salary data behind `salary.read`.
+- **Daily pay.** Set a salary's basis through `PayBasisRules.Apply`, never by hand. For a daily-paid worker, `BasicSalary` holds the monthly equivalent (daily rate × standard working days) so monthly consumers keep working; the run pays `DailyRate` × days worked from attendance, never `BasicSalary`.
 - **Approved runs are immutable.** Call `PayrollRun.EnsureEditable()` before any change. Use adjustments or reversal for corrections.
 - **Sensitive fields** use `FieldEncryptor` converters. Mask them (`FieldEncryptor.Mask`) in logs, audit details and read-only views.
 - **Audit** every state change or sensitive change with `AuditService.Record`, in the same unit of work.

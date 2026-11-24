@@ -58,6 +58,8 @@ public sealed class EmployeeImporter(PayrollDbContext db, BankDirectoryService b
         new("AccountName", "Name on the account (default the employee's name)", false, null, "BankAccountName", "AccName"),
         new("AccountNumber", "Bank account number, or M-Pesa number", false, "1234567890", "AccountNo", "AccNo", "AcNo", "BankAccount", "BankAccountNo", "BankAccountNumber", "MpesaNo", "MpesaNumber"),
         new("BasicSalary", "Monthly basic salary", false, "85000", "Basic", "BasicPay", "Salary", "MonthlySalary", "BasicSalaryKES"),
+        new("PayBasis", "Monthly or Daily (default Daily when a daily rate is given, otherwise Monthly)", false, "Monthly", "PayType", "WageBasis", "PaidBy", "SalaryType", "PayFrequency"),
+        new("DailyRate", "Daily wage, for workers paid by the day worked", false, null, "DayRate", "RatePerDay", "DailyWage", "WagePerDay", "Daily", "WageRate"),
         new("SalaryEffectiveFrom", "Date the salary applies from (default the hire date)", false, null, "EffectiveFrom", "EffectiveDate", "SalaryEffectiveDate"),
     ];
 
@@ -121,6 +123,7 @@ public sealed class EmployeeImporter(PayrollDbContext db, BankDirectoryService b
         var componentColumns = map.Extra.ToDictionary(x => x.Key, x => components.First(c => c.Id.ToString() == x.Value));
         if (componentColumns.Count > 0) plan.Notes.Add($"Pay component columns: {string.Join(", ", componentColumns.Select(x => $"{sheet.Headers[x.Key]} → {x.Value.Name}"))}.");
 
+        var entity = await db.LegalEntities.FirstAsync(x => x.Id == legalEntityId, ct);
         var groups = await db.PayrollGroups.Where(x => x.LegalEntityId == legalEntityId).ToListAsync(ct);
         var depts = await db.Departments.Where(x => x.LegalEntityId == legalEntityId).ToListAsync(ct);
         var branches = await db.Branches.Where(x => x.LegalEntityId == legalEntityId).ToListAsync(ct);
@@ -200,7 +203,7 @@ public sealed class EmployeeImporter(PayrollDbContext db, BankDirectoryService b
             }
 
             var bank = await BankAsync(r, e, directory, ct);
-            var salary = Salary(r, e, componentColumns, sheet, finalisedThrough);
+            var salary = Salary(r, e, componentColumns, sheet, finalisedThrough, entity);
             if (r.HasProblems) continue;
             plan.Rows.Add(new Planned(r.Number, e, new EmploymentRecord
             {
@@ -307,22 +310,32 @@ public sealed class EmployeeImporter(PayrollDbContext db, BankDirectoryService b
         return n;
     }
 
-    private static EmployeeSalaryAssignment? Salary(RowReader r, Employee e, Dictionary<int, SalaryComponent> componentColumns, Sheet sheet, DateOnly finalisedThrough)
+    private static readonly Dictionary<string, PayBasis> Bases = new()
+    {
+        ["monthly"] = PayBasis.Monthly, ["month"] = PayBasis.Monthly, ["salary"] = PayBasis.Monthly, ["salaried"] = PayBasis.Monthly,
+        ["daily"] = PayBasis.Daily, ["day"] = PayBasis.Daily, ["perday"] = PayBasis.Daily, ["dailypaid"] = PayBasis.Daily, ["casual"] = PayBasis.Daily,
+    };
+
+    private static EmployeeSalaryAssignment? Salary(RowReader r, Employee e, Dictionary<int, SalaryComponent> componentColumns, Sheet sheet, DateOnly finalisedThrough, Domain.Organisation.LegalEntity entity)
     {
         var basic = r.Money("BasicSalary");
+        var dailyRate = r.Money("DailyRate");
+        var basis = r.Choice("PayBasis", Bases, "Monthly, Daily") ?? (dailyRate is not null && basic is null ? PayBasis.Daily : PayBasis.Monthly);
         var lines = new List<EmployeeSalaryAssignmentLine>();
         foreach (var (index, component) in componentColumns)
             if (r.MoneyAt(index, sheet.Headers[index]) is { } amount && amount > 0)
                 lines.Add(new EmployeeSalaryAssignmentLine { SalaryComponentId = component.Id, Method = CalculationMethod.FixedAmount, Amount = amount });
-        if (basic is null && lines.Count == 0) return null;
-        if (basic is null) { r.Problem("BasicSalary", "Pay components are given but BasicSalary is missing."); return null; }
+        if (basic is null && dailyRate is null && lines.Count == 0) return null;
+        if (basis == PayBasis.Daily && dailyRate is not > 0) { r.Problem("DailyRate", "A daily-paid worker needs a daily rate above zero."); return null; }
+        if (basis == PayBasis.Monthly && basic is null) { r.Problem("BasicSalary", dailyRate is null ? "Pay components are given but BasicSalary is missing." : "A daily rate is given but PayBasis says Monthly. Set PayBasis to Daily, or give BasicSalary."); return null; }
         var from = r.Date("SalaryEffectiveFrom") ?? e.HireDate;
         if (finalisedThrough != default && from <= finalisedThrough)
         {
             r.Problem("SalaryEffectiveFrom", $"Payroll is finalised through {finalisedThrough:dd/MM/yyyy}; the salary must apply from a later date.");
             return null;
         }
-        var a = new EmployeeSalaryAssignment { LegalEntityId = e.LegalEntityId, EmployeeId = e.Id, BasicSalary = basic.Value, EffectiveFrom = from, ChangeReason = "Imported from previous payroll" };
+        var a = new EmployeeSalaryAssignment { LegalEntityId = e.LegalEntityId, EmployeeId = e.Id, EffectiveFrom = from, ChangeReason = "Imported from previous payroll" };
+        PayBasisRules.Apply(a, basis, basic ?? 0m, dailyRate, entity);
         foreach (var l in lines) { l.EmployeeSalaryAssignmentId = a.Id; a.Lines.Add(l); }
         return a;
     }

@@ -33,7 +33,7 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
         ("employee_address", "Employee's physical address"), ("job_title", "Job title"), ("department", "Department"), ("reports_to", "Line manager"),
         ("work_location", "Place of work"), ("employment_type", "Permanent, fixed term, …"), ("start_date", "Start date (variations: effective date)"),
         ("end_date", "End date (fixed-term)"), ("duration", "Length of a fixed term, e.g. 12 months"), ("probation_months", "Probation (months)"),
-        ("probation_end_date", "End of probation"), ("basic_salary", "Monthly basic salary"), ("allowances", "Fixed monthly allowances, one per line"),
+        ("probation_end_date", "End of probation"), ("basic_salary", "Monthly basic salary"), ("daily_rate", "Daily wage (daily-paid; otherwise monthly basic per working day)"), ("allowances", "Fixed monthly allowances, one per line"),
         ("gross_salary", "Basic plus fixed allowances"), ("currency", "Pay currency"), ("pay_day", "Monthly pay day"), ("annual_leave_days", "Annual leave (days)"),
         ("notice_period", "Notice after probation"), ("changes", "Variation letters: each change, from and to"), ("company_name", "Company name"),
         ("company_address", "Company address"), ("signatory_name", "Person signing for the company"), ("signatory_title", "Their title"),
@@ -110,7 +110,7 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
             - Casual employment is paid at the end of each day or as agreed. If the Employee works continuously for more than one month, or performs work that cannot reasonably be completed within three months, the terms convert to monthly employment under section 37 of the Employment Act.
 
             ## Pay
-            {currency} {basic_salary} per month (or the equivalent daily rate), before statutory deductions.
+            {currency} {daily_rate} for each day worked, before statutory deductions.
             """ + "\n\n" + Closing,
         ContractKind.InternshipContract => Parties + "\n\n" + """
             ## Internship
@@ -361,7 +361,8 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
         {
             JobTitle = emp.JobTitle, Department = await DepartmentAsync(emp.DepartmentId, ct), Location = await LocationAsync(emp.BranchId, emp.WorkLocation, emp.LegalEntityId, ct),
             EmploymentType = Words(emp.EmploymentType.ToString()), ReportsTo = await ManagerAsync(emp.ReportingManagerId, ct), NoticeDays = emp.NoticePeriodDays,
-            Basic = assignment?.BasicSalary ?? 0m, Currency = assignment?.CurrencyCode ?? "KES", Allowances = assignment is null ? [] : await AllowancesAsync(assignment, ct), EndDate = endDate,
+            Basic = assignment?.BasicSalary ?? 0m, DailyRate = assignment is { PayBasis: PayBasis.Daily } ? assignment.DailyRate : null,
+            Currency = assignment?.CurrencyCode ?? "KES", Allowances = assignment is null ? [] : await AllowancesAsync(assignment, ct), EndDate = endDate,
         };
     }
 
@@ -379,7 +380,7 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
             terms.JobTitle = prevRecord.JobTitle; terms.Department = await DepartmentAsync(prevRecord.DepartmentId, ct);
             terms.Location = await LocationAsync(prevRecord.BranchId, emp.WorkLocation, emp.LegalEntityId, ct); terms.EmploymentType = Words(prevRecord.EmploymentType.ToString());
         }
-        if (prevPay is not null) { terms.Basic = prevPay.BasicSalary; terms.Allowances = await AllowancesAsync(prevPay, ct); }
+        if (prevPay is not null) { terms.Basic = prevPay.BasicSalary; terms.DailyRate = prevPay.PayBasis == PayBasis.Daily ? prevPay.DailyRate : null; terms.Allowances = await AllowancesAsync(prevPay, ct); }
         var changedOn = new[] { records.FirstOrDefault()?.EffectiveFrom, pay.FirstOrDefault()?.EffectiveFrom }.Where(x => x is not null).Max();
         return (terms, changedOn);
     }
@@ -395,7 +396,10 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
         Add("Place of work", from.Location, to.Location);
         Add("Type of employment", from.EmploymentType, to.EmploymentType);
         Add("Reporting to", from.ReportsTo, to.ReportsTo);
-        if (from.Basic != to.Basic) list.Add($"Basic salary: from {to.Currency} {from.Basic:N2} to {to.Currency} {to.Basic:N2} a month");
+        // Daily-paid: the change that matters is the daily wage; its monthly equivalent would only repeat it.
+        if (from.DailyRate is { } fd && to.DailyRate is { } td) { if (fd != td) list.Add($"Daily wage: from {to.Currency} {fd:N2} to {to.Currency} {td:N2} a day"); }
+        else if (from.DailyRate != to.DailyRate) list.Add($"Pay: from {Pay(from)} to {Pay(to)}");
+        else if (from.Basic != to.Basic) list.Add($"Basic salary: from {to.Currency} {from.Basic:N2} to {to.Currency} {to.Basic:N2} a month");
         var names = from.Allowances.Select(a => a.Name).Union(to.Allowances.Select(a => a.Name));
         foreach (var n in names)
         {
@@ -433,6 +437,8 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
             ["duration"] = d.EndDate is { } end ? Duration(d.StartDate, end) : Need(null, "end date"),
             ["probation_months"] = probationMonths.ToString(CultureInfo.InvariantCulture), ["probation_end_date"] = Date(probationEnd),
             ["basic_salary"] = t.Basic > 0 ? t.Basic.ToString("N2", CultureInfo.InvariantCulture) : Need(null, "basic salary (set the employee's pay first)"),
+            ["daily_rate"] = t.DailyRate is { } dr ? dr.ToString("N2", CultureInfo.InvariantCulture)
+                : t.Basic > 0 ? Math.Round(t.Basic / 22m, 2).ToString("N2", CultureInfo.InvariantCulture) : Need(null, "daily wage (set the employee's pay first)"),
             ["allowances"] = allowanceLines, ["gross_salary"] = (t.Basic + t.Allowances.Sum(a => a.Amount)).ToString("N2", CultureInfo.InvariantCulture), ["currency"] = t.Currency,
             ["pay_day"] = payDay is { } pd ? Ordinal(pd) : "last working day", ["annual_leave_days"] = (leave ?? 21m).ToString("0.##", CultureInfo.InvariantCulture),
             ["notice_period"] = Possessive(Notice(t.NoticeDays)), ["changes"] = changes.Count == 0 ? $"- {DescribeChange}" : string.Join("\n", changes.Select(c => "- " + c + ".")),
@@ -509,6 +515,8 @@ public sealed partial class ContractService(PayrollDbContext db, ITenantContext 
             return string.IsNullOrWhiteSpace(br.Location) ? br.Name : $"{br.Name}, {br.Location}";
         return await db.LegalEntities.Where(e => e.Id == legalEntityId).Select(e => e.Address).FirstOrDefaultAsync(ct);
     }
+
+    private static string Pay(ContractTerms t) => t.DailyRate is { } d ? $"{t.Currency} {d:N2} a day" : $"{t.Currency} {t.Basic:N2} a month";
 
     private static ContractTerms Clone(ContractTerms t) => System.Text.Json.JsonSerializer.Deserialize<ContractTerms>(System.Text.Json.JsonSerializer.Serialize(t))!;
     private static string? Mask(string? id) => string.IsNullOrWhiteSpace(id) ? null : id.Length <= 4 ? id : new string('*', id.Length - 4) + id[^4..];

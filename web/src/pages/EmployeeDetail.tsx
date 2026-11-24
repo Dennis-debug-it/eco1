@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api, fmt, isoDate, nextMonthStart } from '../lib/api'
 import { P, useAuth } from '../lib/auth'
 import { byId, useBranches, useComponents, useDepartments, useLegalEntities, useStructures } from '../lib/lookups'
-import type { BankAccount, EmployeeDetail, Payslip, StatutoryDetails } from '../lib/types'
+import type { BankAccount, EmployeeDetail, Payslip, SalaryAssignment, StatutoryDetails } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
 import { BankPicker } from '../components/BankPicker'
 import { EmployeeForm } from './Employees'
@@ -68,12 +68,14 @@ export default function EmployeeDetailPage() {
         <>
           <div className="card">
             <div className="page-head" style={{ marginBottom: 8 }}><h2>Current remuneration</h2>{can(P.SalaryWrite) && <div className="actions"><button className="btn" onClick={() => setLoanModal(true)}>New loan / advance</button><button className="btn primary" onClick={() => setSalaryModal(true)}>New salary assignment</button></div>}</div>
-            {current ? <dl className="kv"><dt>Basic salary</dt><dd className="mono">{fmt.money(current.basicSalary, current.currencyCode)}</dd><dt>Structure</dt><dd><StructureName id={current.salaryStructureId} /></dd><dt>Effective</dt><dd>{fmt.date(current.effectiveFrom)}{current.effectiveTo ? ` – ${fmt.date(current.effectiveTo)}` : ' onwards'}</dd><dt>Reason</dt><dd>{current.changeReason ?? '—'}</dd></dl> : <Empty>No salary assignment. Payroll cannot run for this employee.</Empty>}
+            {current ? <dl className="kv">{current.payBasis === 'Daily'
+              ? <><dt>Daily wage</dt><dd className="mono">{fmt.money(current.dailyRate ?? 0, current.currencyCode)} a day <span className="muted small">(about {fmt.money(current.basicSalary, current.currencyCode)} a month; paid for days worked)</span></dd></>
+              : <><dt>Basic salary</dt><dd className="mono">{fmt.money(current.basicSalary, current.currencyCode)}</dd></>}<dt>Structure</dt><dd><StructureName id={current.salaryStructureId} /></dd><dt>Effective</dt><dd>{fmt.date(current.effectiveFrom)}{current.effectiveTo ? ` – ${fmt.date(current.effectiveTo)}` : ' onwards'}</dd><dt>Reason</dt><dd>{current.changeReason ?? '—'}</dd></dl> : <Empty>No salary assignment. Payroll cannot run for this employee.</Empty>}
             {current && current.lines.length > 0 && <div style={{ marginTop: 10 }}><h3>Employee-specific components</h3><AssignmentLines lines={current.lines} /></div>}
           </div>
           <div className="card"><h2>Salary history</h2>
             <table><thead><tr><th>Effective from</th><th>To</th><th className="num">Basic</th><th>Structure</th><th>Reason</th></tr></thead>
-              <tbody>{d.salaryAssignments.map(a => <tr key={a.id}><td>{fmt.date(a.effectiveFrom)}</td><td>{a.effectiveTo ? fmt.date(a.effectiveTo) : <Badge status="Active">Current</Badge>}</td><td className="num">{fmt.num(a.basicSalary)}</td><td><StructureName id={a.salaryStructureId} /></td><td>{a.changeReason}</td></tr>)}</tbody></table></div>
+              <tbody>{d.salaryAssignments.map(a => <tr key={a.id}><td>{fmt.date(a.effectiveFrom)}</td><td>{a.effectiveTo ? fmt.date(a.effectiveTo) : <Badge status="Active">Current</Badge>}</td><td className="num">{a.payBasis === 'Daily' ? `${fmt.num(a.dailyRate ?? 0)}/day` : fmt.num(a.basicSalary)}</td><td><StructureName id={a.salaryStructureId} /></td><td>{a.changeReason}</td></tr>)}</tbody></table></div>
           {d.loans && d.loans.length > 0 && <div className="card"><h2>Loans & advances</h2>
             <table><thead><tr><th>Reference</th><th className="num">Principal</th><th className="num">Balance</th><th className="num">Instalment</th><th>Start</th><th>Status</th></tr></thead>
               <tbody>{d.loans.map(l => <tr key={l.id}><td className="mono">{l.reference}</td><td className="num">{fmt.num(l.principal)}</td><td className="num">{fmt.num(l.balance)}</td><td className="num">{fmt.num(l.instalmentAmount)}</td><td>{fmt.date(l.startDate)}</td><td><Badge status={l.status} /></td></tr>)}</tbody></table></div>}
@@ -112,7 +114,7 @@ export default function EmployeeDetailPage() {
       )}
 
       {edit && <EmployeeForm initial={e} onClose={() => { setEdit(false); refresh() }} />}
-      {salaryModal && <SalaryModal employeeId={id} legalEntityId={e.legalEntityId} currentBasic={current?.basicSalary} onClose={() => { setSalaryModal(false); refresh() }} />}
+      {salaryModal && <SalaryModal employeeId={id} legalEntityId={e.legalEntityId} current={current} onClose={() => { setSalaryModal(false); refresh() }} />}
       {bankModal && <BankModal employeeId={id} onClose={() => { setBankModal(false); refresh() }} />}
       {statModal && <StatutoryModal employeeId={id} initial={d.statutory} onClose={() => { setStatModal(false); refresh() }} />}
       {loanModal && <LoanModal employeeId={id} legalEntityId={e.legalEntityId} onClose={() => { setLoanModal(false); refresh() }} />}
@@ -150,22 +152,30 @@ export function PayslipList({ employeeId }: { employeeId: string }) {
   )
 }
 
-function SalaryModal({ employeeId, legalEntityId, currentBasic, onClose }: { employeeId: string; legalEntityId: string; currentBasic?: number; onClose: () => void }) {
+function SalaryModal({ employeeId, legalEntityId, current, onClose }: { employeeId: string; legalEntityId: string; current?: SalaryAssignment; onClose: () => void }) {
   const structures = useStructures(legalEntityId)
-  const [basic, setBasic] = useState(currentBasic ?? 0)
+  const [basis, setBasis] = useState<'Monthly' | 'Daily'>(current?.payBasis ?? 'Monthly')
+  const [basic, setBasic] = useState(current?.payBasis === 'Daily' ? 0 : current?.basicSalary ?? 0)
+  const [daily, setDaily] = useState(current?.dailyRate ?? 0)
   const [structureId, setStructureId] = useState('')
   const [from, setFrom] = useState(nextMonthStart())
   const [reason, setReason] = useState('')
-  const m = useMutation({ mutationFn: () => api.post(`/api/payroll/employees/${employeeId}/salary`, { basicSalary: basic, salaryStructureId: structureId || null, effectiveFrom: from, changeReason: reason }), onSuccess: onClose })
+  const m = useMutation({ mutationFn: () => api.post(`/api/payroll/employees/${employeeId}/salary`, { basicSalary: basis === 'Monthly' ? basic : 0, payBasis: basis, dailyRate: basis === 'Daily' ? daily : null, salaryStructureId: structureId || null, effectiveFrom: from, changeReason: reason }), onSuccess: onClose })
   return (
     <Modal title="New salary assignment" onClose={onClose}>
       <ErrorBox error={m.error} />
       <p className="muted small">The current assignment is closed the day before the new effective date. Changes dated inside a finalised period are rejected — use an adjustment instead.</p>
-      <Field label="Basic salary (monthly)"><input type="number" min={0} step="0.01" value={basic} onChange={e => setBasic(Number(e.target.value))} /></Field>
+      <Field label="Paid"><select value={basis} onChange={e => setBasis(e.target.value as 'Monthly' | 'Daily')}><option value="Monthly">A monthly salary</option><option value="Daily">A daily wage, for the days worked</option></select></Field>
+      {basis === 'Monthly'
+        ? <Field label="Basic salary (monthly)"><input type="number" min={0} step="0.01" value={basic} onChange={e => setBasic(Number(e.target.value))} /></Field>
+        : <>
+          <Field label="Daily wage"><input type="number" min={0} step="0.01" value={daily} onChange={e => setDaily(Number(e.target.value))} /></Field>
+          <p className="muted small" style={{ marginTop: -6 }}>Each payroll pays this rate for the days worked entered under the run's Attendance. Approved paid leave isn't added automatically: include it in days worked if it's paid.</p>
+        </>}
       <Field label="Salary structure"><select value={structureId} onChange={e => setStructureId(e.target.value)}><option value="">None (basic only)</option>{structures.data?.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
       <Field label="Effective from"><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></Field>
       <Field label="Reason"><input value={reason} onChange={e => setReason(e.target.value)} placeholder="Annual review, promotion, …" /></Field>
-      <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={m.isPending} onClick={() => m.mutate()}>Save</button></div>
+      <div className="actions" style={{ justifyContent: 'flex-end' }}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={m.isPending || (basis === 'Daily' && !(daily > 0))} onClick={() => m.mutate()}>Save</button></div>
     </Modal>
   )
 }
