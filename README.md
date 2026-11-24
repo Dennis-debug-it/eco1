@@ -289,7 +289,7 @@ These are the things to resolve before go-live, or to plan for in later phases:
 
 1. **Statutory sign-off.** The parameters were cross-checked against secondary sources in November 2026, not against primary KRA/NSSF/SHA gazette text. A practitioner must confirm them and run the two parallel payrolls required by PRD §18.
 2. **Bank file layouts** (KCB, Equity, Co-op, M-PESA B2C) are representative. Confirm each against the bank's current bulk-upload specification before first use.
-3. **KRA iTax P10 and SHA submissions.** These returns export as CSV, Excel or PDF in our own layout; the exact iTax P10 and SHA upload templates are still to map. NSSF upload files follow NSSF's portal template and returns specification, but haven't yet been through a real portal upload. Direct submission is Phase 3 (PRD §15: only where official APIs exist).
+3. **Statutory filing files.** The P10 PAYE return is built per company and month, but its column order hasn't yet been checked against KRA's current template. NSSF files follow NSSF's portal template and returns specification. Neither has been through a real upload. The SHA return still exports in our own layout. Direct submission is Phase 3 (PRD §15: only where official APIs exist).
 4. **Ecosys platform contracts are assumed.** These are:
    - the Ecosys Notifications request shape (`POST v1/messages`)
    - the identity provider's claim names

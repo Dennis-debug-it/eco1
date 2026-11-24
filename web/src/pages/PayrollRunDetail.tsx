@@ -82,7 +82,7 @@ export default function PayrollRunDetailPage() {
               <tfoot><tr><td>Total employee deductions</td><td className="num">{fmt.num(r.totalEmployeeDeductions)}</td><td className="num">{fmt.num(r.totalEmployerContributions)}</td><td className="num">{fmt.num(r.totalEmployeeDeductions + r.totalEmployerContributions)}</td></tr></tfoot></table></div>
           <div className="card"><h2>Run details</h2>
             <dl className="kv"><dt>Period</dt><dd>{fmt.date(s.periodStart)} – {fmt.date(s.periodEnd)}</dd><dt>Pay date</dt><dd>{fmt.date(s.payDate)}</dd><dt>Prepared by</dt><dd>{s.preparedByName ?? '—'}</dd><dt>Calculated</dt><dd>{fmt.dateTime(r.calculatedAt)}</dd><dt>Approved by</dt><dd>{s.approvedByName ?? '—'} {r.approvedAt && <span className="muted">({fmt.dateTime(r.approvedAt)})</span>}</dd><dt>Finalised</dt><dd>{fmt.dateTime(r.finalisedAt)}</dd><dt>Taxable pay</dt><dd className="mono">{fmt.num(r.totalTaxable)}</dd><dt>Notes</dt><dd>{r.notes ?? '—'}</dd></dl>
-            {['Approved', 'PaymentProcessing', 'Paid', 'Finalised'].includes(r.status) && can(P.SalaryRead) && <NssfFiles runId={id!} />}
+            {['Approved', 'PaymentProcessing', 'Paid', 'Finalised'].includes(r.status) && can(P.SalaryRead) && <NssfFiles runId={id!} legalEntityId={r.legalEntityId} periodEnd={s.periodEnd} />}
             {r.status === 'Finalised' && <div className="actions" style={{ marginTop: 12 }}>
               <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=xlsx`)}>Payroll register (Excel)</button>
               <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=pdf`)}>Register (PDF)</button>
@@ -368,33 +368,45 @@ function ParallelRun({ runId }: { runId: string }) {
   )
 }
 
-type NssfCheck = { runReference: string; period: string; members: number; pensionable: number; member: number; employer: number; ready: boolean; problems: { employeeNumber: string; employeeName: string; message: string }[]; warnings: string[] }
+type FilingProblem = { employeeNumber: string; employeeName: string; message: string }
+type FilingCheck = { ready: boolean; problems: FilingProblem[]; warnings: string[]; summary: string }
+type NssfCheck = { runReference: string; period: string; members: number; pensionable: number; member: number; employer: number; ready: boolean; problems: FilingProblem[]; warnings: string[] }
+type P10Check = { company: string; period: string; runs: number; employees: number; taxablePay: number; paye: number; ready: boolean; problems: FilingProblem[]; warnings: string[] }
 
-/** NSSF upload files, checked first: problems are listed instead of a file that the portal would reject. */
-function NssfFiles({ runId }: { runId: string }) {
-  const [check, setCheck] = useState<NssfCheck | null>(null)
+/**
+ * Filing files for this run, each checked first: problems are listed instead of a file that the portal would reject.
+ * NSSF files cover this run; the P10 covers the whole month for this company (every approved run ending in it).
+ */
+function NssfFiles({ runId, legalEntityId, periodEnd }: { runId: string; legalEntityId: string; periodEnd: string }) {
+  const [check, setCheck] = useState<{ title: string; c: FilingCheck } | null>(null)
   const [err, setErr] = useState<unknown>(null)
-  const get = async (layout: 'portal' | 'returns') => {
+  const [year, month] = [Number(periodEnd.slice(0, 4)), Number(periodEnd.slice(5, 7))]
+  const run = async (checkUrl: string, fileUrl: string, describe: (raw: never) => FilingCheck, title: string) => {
     setErr(null)
     try {
-      const c = await api.get<NssfCheck>(`/api/payroll/reports/nssf-file/check?runId=${runId}`)
-      if (!c.ready || c.warnings.length > 0) setCheck(c)
-      if (c.ready) await api.download(`/api/payroll/reports/nssf-file?runId=${runId}&layout=${layout}`)
+      const c = describe(await api.get<never>(checkUrl))
+      if (!c.ready || c.warnings.length > 0) setCheck({ title: c.ready ? `${title} downloaded` : 'Fix these before filing', c })
+      if (c.ready) await api.download(fileUrl)
     } catch (e) { setErr(e) }
   }
+  const nssf = (layout: 'portal' | 'returns') => run(`/api/payroll/reports/nssf-file/check?runId=${runId}`, `/api/payroll/reports/nssf-file?runId=${runId}&layout=${layout}`,
+    (n: NssfCheck) => ({ ...n, summary: `${n.period} · ${n.members} members · member ${fmt.money(n.member)} · employer ${fmt.money(n.employer)}` }), 'NSSF file')
+  const p10 = () => run(`/api/payroll/reports/p10/check?legalEntityId=${legalEntityId}&year=${year}&month=${month}`, `/api/payroll/reports/p10?legalEntityId=${legalEntityId}&year=${year}&month=${month}`,
+    (p: P10Check) => ({ ...p, summary: `${p.company} · ${p.period} · ${p.runs} run(s) · ${p.employees} employees · taxable pay ${fmt.money(p.taxablePay)} · PAYE ${fmt.money(p.paye)}` }), 'P10 return')
   return (
     <div style={{ marginTop: 12 }}>
-      <div className="small muted" style={{ marginBottom: 6 }}>NSSF upload files</div>
+      <div className="small muted" style={{ marginBottom: 6 }}>Filing files</div>
       <div className="actions">
-        <button className="btn sm" onClick={() => get('portal')} title="The employer portal's payroll template: one row per member with pay; the portal works out contributions">NSSF portal file</button>
-        <button className="btn sm" onClick={() => get('returns')} title="The returns file: header totals, then Tier I and Tier II rows per member">NSSF returns file</button>
+        <button className="btn sm" onClick={p10} title="KRA monthly PAYE return for this company and month, across every approved run ending in it. Paste the rows into the P10 template's employee sheet and validate there">P10 PAYE return (month)</button>
+        <button className="btn sm" onClick={() => nssf('portal')} title="The employer portal's payroll template: one row per member with pay; the portal works out contributions">NSSF portal file</button>
+        <button className="btn sm" onClick={() => nssf('returns')} title="The returns file: header totals, then Tier I and Tier II rows per member">NSSF returns file</button>
       </div>
       <ErrorBox error={err} />
-      {check && <Modal title={check.ready ? 'NSSF file downloaded' : 'Fix these before filing'} onClose={() => setCheck(null)} width={720}>
-        <p className="small">{check.period} · {check.members} members · member {fmt.money(check.member)} · employer {fmt.money(check.employer)}</p>
-        {!check.ready && <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Problem</th></tr></thead>
-          <tbody>{check.problems.map((p, i) => <tr key={i}><td>{p.employeeNumber ? `${p.employeeNumber} ${p.employeeName}` : '—'}</td><td>{p.message}</td></tr>)}</tbody></table></div>}
-        {check.warnings.map((w, i) => <div key={i} className="alert warn">{w}</div>)}
+      {check && <Modal title={check.title} onClose={() => setCheck(null)} width={720}>
+        <p className="small">{check.c.summary}</p>
+        {!check.c.ready && <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Problem</th></tr></thead>
+          <tbody>{check.c.problems.map((p, i) => <tr key={i}><td>{p.employeeNumber ? `${p.employeeNumber} ${p.employeeName}` : '—'}</td><td>{p.message}</td></tr>)}</tbody></table></div>}
+        {check.c.warnings.map((w, i) => <div key={i} className="alert warn">{w}</div>)}
         <div className="actions"><button className="btn" onClick={() => setCheck(null)}>Close</button></div>
       </Modal>}
     </div>

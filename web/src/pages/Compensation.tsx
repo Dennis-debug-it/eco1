@@ -6,6 +6,13 @@ import { byId, useComponents, useLegalEntities, useStructures } from '../lib/loo
 import type { Component, Structure } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
 
+/** KRA P10 pay columns. Automatic follows the component code (BASIC, HOUSE, TRANSPORT, LEAVE_PAY, OT; notice pay and severance as lump sums). */
+const p10Columns: [string, string][] = [
+  ['Auto', 'Automatic (from the code; otherwise Other allowance)'], ['BasicSalary', 'Basic salary'], ['HousingAllowance', 'Housing allowance'], ['TransportAllowance', 'Transport allowance'],
+  ['LeavePay', 'Leave pay'], ['Overtime', 'Overtime allowance'], ['DirectorsFee', "Director's fee"], ['LumpSum', 'Lump sum payment'], ['OtherAllowance', 'Other allowance'],
+  ['CarBenefit', 'Value of car benefit'], ['OtherNonCashBenefit', 'Other non-cash benefit'],
+]
+
 const treatments = [['Ordinary', 'Ordinary (after tax)'], ['RegisteredPension', 'Registered pension (tax-deductible within cap)'], ['PostRetirementMedicalFund', 'Post-retirement medical fund'], ['MortgageInterest', 'Owner-occupier mortgage interest'], ['QualifyingInsurancePremium', 'Qualifying insurance premium (15% relief)']]
 
 export default function CompensationPage() {
@@ -56,6 +63,8 @@ function Components({ legalEntityId, canEdit }: { legalEntityId: string; canEdit
           <label className="field inline"><input type="checkbox" checked={!!edit.taxable} onChange={e => setEdit({ ...edit, taxable: e.target.checked })} /> Taxable (included in PAYE computation)</label>
           <label className="field inline"><input type="checkbox" checked={!!edit.pensionable} onChange={e => setEdit({ ...edit, pensionable: e.target.checked })} /> Pensionable (NSSF / pension base)</label>
           <label className="field inline"><input type="checkbox" checked={!!edit.isBasic} onChange={e => setEdit({ ...edit, isBasic: e.target.checked })} /> This is the basic-salary component</label>
+          {edit.taxable && <Field label="Column on the P10 PAYE return"><select value={edit.payeReturnCategory ?? 'Auto'} onChange={e => setEdit({ ...edit, payeReturnCategory: e.target.value })}>
+            {p10Columns.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>}
         </> : <>
           <Field label="Statutory treatment"><select value={edit.deductionTreatment} onChange={e => setEdit({ ...edit, deductionTreatment: e.target.value })}>{treatments.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
           <Field label="Employer matching rate (1 = 100% of employee amount)"><input type="number" step="0.01" value={edit.employerMatchRate ?? 0} onChange={e => setEdit({ ...edit, employerMatchRate: Number(e.target.value) })} /></Field>

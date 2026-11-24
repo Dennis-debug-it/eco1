@@ -36,6 +36,21 @@ public static class ReportEndpoints
             return await Export(file, audit, db, "report.statutory.exported", runId, ct);
         });
 
+        // KRA P10 (monthly PAYE return) for one company and month, across every approved run that month.
+        r.MapGet("/p10/check", async (Guid legalEntityId, int year, int month, PayeReturnService svc, CancellationToken ct) => Results.Ok(await svc.CheckAsync(legalEntityId, year, month, ct)));
+        r.MapGet("/p10", async (Guid legalEntityId, int year, int month, PayeReturnService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                var file = await svc.ExportAsync(legalEntityId, year, month, ct);
+                return Results.File(file.Content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.FileName);
+            }
+            catch (PayeReturnNotReadyException ex)
+            {
+                return Results.Json(new { title = "The return has problems", status = 422, code = ex.Code, detail = "Fix the employees listed, then export again.", check = ex.Check }, statusCode: 422);
+            }
+        });
+
         // NSSF upload files, laid out exactly as NSSF specifies. The check lists anything to fix; the file is only made when there is nothing.
         r.MapGet("/nssf-file/check", async (Guid runId, NssfReturnService svc, CancellationToken ct) => Results.Ok(await svc.CheckAsync(runId, ct)));
         r.MapGet("/nssf-file", async (Guid runId, string? layout, NssfReturnService svc, CancellationToken ct) =>

@@ -779,6 +779,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("PayeReturnCategory")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("paye_return_category");
+
                     b.Property<bool>("Pensionable")
                         .HasColumnType("boolean")
                         .HasColumnName("pensionable");
