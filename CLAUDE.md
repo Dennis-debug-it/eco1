@@ -62,6 +62,7 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
 - **Data migration** loads go through `MigrationImportService`: a dry run, then all-or-nothing as an `ImportBatch` that undo reverses. Keep importer validation on the shared `EmployeeRules`, and add header spellings to the importer's `Columns` aliases.
   - Anything new that pays, finalises or files calls `MigrationGuard.EnsureLiveAsync` first.
   - `CompanyExportService` exports every `TenantEntity` table automatically. Add any new credential column to its `SecretColumns`.
+- **Accounting exports** go through `JournalExportService`: check, then write the file, then stamp `ExternalReference` and audit `journal.exported`. A new format gets a writer, a check for what that system rejects, and a test that it balances.
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout

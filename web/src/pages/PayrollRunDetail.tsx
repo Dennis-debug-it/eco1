@@ -6,6 +6,7 @@ import { P, useAuth } from '../lib/auth'
 import { useComponents, usePayingAccounts } from '../lib/lookups'
 import type { Journal, Payment, RunEmployeeDetail, RunEmployeeRow, RunStatus, RunSummary } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
+import JournalExport from '../components/JournalExport'
 
 const flow: RunStatus[] = ['Draft', 'Prepared', 'Calculated', 'UnderReview', 'Approved', 'PaymentProcessing', 'Paid', 'Finalised']
 type Tab = 'summary' | 'employees' | 'exceptions' | 'inputs' | 'attendance' | 'payments' | 'journal' | 'parallel' | 'history'
@@ -267,7 +268,8 @@ function JournalView({ runId, has }: { runId: string; has: boolean }) {
   if (!can(P.JournalsRead)) return <div className="card"><Empty>Journals are visible to finance roles.</Empty></div>
   if (!has) return <div className="card"><Empty>The accounting journal is generated when the run is finalised.</Empty></div>
   if (q.isLoading) return <Loading />
-  return <>{q.data?.map(j => (
+  return <><div className="card"><h2>Export to your accounting system</h2><p className="small muted">An import file for QuickBooks or Sage with this run's journals. Account codes are written as mapped under Organisation, GL account mapping.</p><JournalExport query={`runId=${runId}`} /></div>
+    {q.data?.map(j => (
     <div className="card" key={j.id}><h2>{j.reference} <Badge status={j.status} /> <span className="muted small">posted {fmt.date(j.postingDate)}{j.reversalOfJournalId && ' · reversal'}</span></h2>
       <table><thead><tr><th>#</th><th>Account</th><th>Description</th><th>Cost centre</th><th className="num">Debit</th><th className="num">Credit</th></tr></thead>
         <tbody>{j.lines.map(l => <tr key={l.sequence}><td className="muted">{l.sequence}</td><td className="mono">{l.accountCode}</td><td>{l.description}</td><td>{l.costCentre}</td><td className="num">{l.debit ? fmt.num(l.debit) : ''}</td><td className="num">{l.credit ? fmt.num(l.credit) : ''}</td></tr>)}</tbody>

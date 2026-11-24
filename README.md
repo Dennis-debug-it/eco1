@@ -55,6 +55,7 @@ Key decisions (PRD §19):
 | Controls | Maker-checker (preparer cannot approve), duplicate-run prevention, payment file reconciled to approved net, balanced journal enforced |
 | Sensitive data | AES-256-GCM on bank account numbers, KRA PINs, national IDs, MFA secrets and notification recipients; masked for readers without write access |
 | Auth | JWT. `Local` mode issues tokens itself (dev/standalone); `Ecosys` mode validates tokens from the shared Ecosys identity provider |
+| Accounting export | A run's journal, or a company's journals for a month, downloads as a QuickBooks Online journal CSV, a QuickBooks Desktop IIF, a Sage Pastel batch, a Sage Evolution journal CSV or a plain CSV. The file is checked first (balanced, every line has an account, account numbers valid for Pastel), and each journal remembers it was exported so importing twice is flagged |
 | Notifications | Transactional outbox + background dispatcher → Ecosys Notifications (email, WhatsApp). Messages never contain salary figures |
 
 ## Quick start
@@ -269,7 +270,7 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Employees | `GET/POST /employees`, `GET/PUT /employees/{id}`, `PUT /employees/{id}/statutory`, `POST /employees/{id}/{bank-accounts,salary,loans}` |
 | Compensation | `/compensation/components`, `/compensation/salary-structures` |
 | Statutory | `GET /statutory-rules`, `GET /statutory-rules/effective`, `POST /statutory-rules`, `POST /statutory-rules/{id}/{submit,approve,reject}`, `POST /statutory-rules/simulate` |
-| Payroll runs | `GET/POST /runs`, `POST /runs/{id}/{prepare,calculate,validate,submit,approve,reject,finalise,reverse}`, `GET /runs/{id}/employees[/{employeeId}]`, `/runs/{id}/variable-inputs`, `/runs/{id}/attendance[/import]`, `POST /runs/{id}/payment-file`, `GET /runs/{id}/payments`, `POST /runs/{id}/payments/confirm`, `GET /runs/{id}/journal` |
+| Payroll runs | `GET/POST /runs`, `POST /runs/{id}/{prepare,calculate,validate,submit,approve,reject,finalise,reverse}`, `GET /runs/{id}/employees[/{employeeId}]`, `/runs/{id}/variable-inputs`, `/runs/{id}/attendance[/import]`, `POST /runs/{id}/payment-file`, `GET /runs/{id}/payments`, `POST /runs/{id}/payments/confirm`, `GET /runs/{id}/journal`, `GET /accounting/journals/{check,export}?format=quickbooks-online\|quickbooks-desktop\|sage-pastel\|sage-evolution\|csv&runId=…` (or `legalEntityId&from&to`) |
 | Adjustments | `GET/POST /adjustments`, `POST /adjustments/{id}/approve` |
 | Self-service | `GET /employees/{id}/payslips`, `GET /payslips/{id}[/pdf]`, `GET /hr/me` |
 | Leave | `/leave/{types,balances,requests,days,calendar,holidays,liability}`, `POST /leave/requests/{id}/{approve,reject,cancel,attachment}`, `POST /leave/holidays/generate`, `POST /leave/liability/post` |
@@ -303,4 +304,5 @@ These are the things to resolve before go-live, or to plan for in later phases:
    - **Ad hoc holidays.** Add holidays gazetted ad hoc by hand under Leave → Public holidays.
    - **Integrations.** There are no job-board, e-signature or LMS integrations, and the medical scheme in the demo data is a sample.
    - **File storage.** Uploaded files are stored in PostgreSQL (`stored_files`). Move them to object storage if volumes grow.
-9. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.
+9. **Accounting systems.** Journals export as import files for QuickBooks and Sage; there is no live connection. The layouts follow each product's documented import format but haven't been through a real import, so do one test import per customer. GL mapping codes must be the account names or numbers in the customer's chart (QuickBooks matches accounts by name, or number when account numbering is on; Pastel needs numbers like `6100` or `6100/010`). A direct QuickBooks Online or Xero API connection would need an Intuit or Xero developer app.
+10. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.

@@ -8,6 +8,7 @@ using Ecosys.Payroll.Infrastructure.Security;
 using Ecosys.Payroll.Infrastructure.Services;
 using Ecosys.Payroll.Infrastructure.Services.Migration;
 using Ecosys.Payroll.Infrastructure.Services.Returns;
+using Ecosys.Payroll.Infrastructure.Services.Accounting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Payroll.Api.Endpoints;
@@ -34,6 +35,23 @@ public static class ReportEndpoints
                 new("Gross Pay", x => x.Gross, true), new("Contribution Base", x => x.Base, true), new("Employee", x => x.Employee, true), new("Employer", x => x.Employer, true), new("Total", x => x.Total, true),
             ], ["Totals", null, null, null, report.Rows.Sum(x => x.Gross), null, report.TotalEmployee, report.TotalEmployer, report.TotalEmployee + report.TotalEmployer]);
             return await Export(file, audit, db, "report.statutory.exported", runId, ct);
+        });
+
+        // Journals as import files for QuickBooks or Sage: one run's journals, or every journal a company posted between two dates.
+        var acc = api.MapGroup("/accounting/journals").RequireAuthorization();
+        acc.MapGet("/check", async (string? format, Guid? runId, Guid? legalEntityId, DateOnly? from, DateOnly? to, JournalExportService svc, CancellationToken ct) =>
+            Results.Ok(await svc.CheckAsync(JournalExportService.Parse(format), runId, legalEntityId, from, to, ct)));
+        acc.MapGet("/export", async (string? format, Guid? runId, Guid? legalEntityId, DateOnly? from, DateOnly? to, JournalExportService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                var file = await svc.ExportAsync(JournalExportService.Parse(format), runId, legalEntityId, from, to, ct);
+                return Results.File(file.Content, file.ContentType, file.FileName);
+            }
+            catch (JournalExportNotReadyException ex)
+            {
+                return Results.Json(new { title = "The journals have problems", status = 422, code = ex.Code, detail = "Fix the items listed, then export again.", check = ex.Check }, statusCode: 422);
+            }
         });
 
         // KRA P10 (monthly PAYE return) for one company and month, across every approved run that month.

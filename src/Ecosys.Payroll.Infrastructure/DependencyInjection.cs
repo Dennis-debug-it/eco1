@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<Documents.PayslipPdfService>();
         services.AddScoped<Services.Returns.NssfReturnService>();
         services.AddScoped<Services.Returns.PayeReturnService>();
+        services.AddScoped<Services.Accounting.JournalExportService>();
         services.AddScoped<Services.Migration.CompanyExportService>();
         services.AddScoped<Services.Migration.MigrationGuard>();
         services.AddScoped<Services.Migration.MigrationModeService>();
