@@ -1,7 +1,7 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './lib/api'
-import { OperatorRoles, P, useAuth } from './lib/auth'
+import { OperatorRoles, P, PP, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
 import MfaEnrol from './components/MfaEnrol'
@@ -31,7 +31,12 @@ import BillingPage from './pages/Billing'
 import CareersPage from './pages/Careers'
 import OrganogramPage from './pages/Organogram'
 import OfferResponsePage from './pages/OfferResponse'
-import PlatformPage from './pages/Platform'
+import OperatorOverviewPage from './pages/operator/Overview'
+import OrganisationsPage from './pages/operator/Organisations'
+import OrganisationProfilePage from './pages/operator/OrganisationProfile'
+import SubscriptionsPage from './pages/operator/Subscriptions'
+import OperatorsPage from './pages/operator/Operators'
+import { roleLabel } from './pages/operator/shared'
 import MigrationPage, { type MigrationStatus } from './pages/Migration'
 import IntegrationsPage from './pages/Integrations'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
@@ -76,15 +81,22 @@ export default function App() {
     : <MfaEnrol gate />
 
   const employeeOnly = user.roles.length === 1 && user.roles[0] === 'Employee'
-  const platform = user.roles.some(r => OperatorRoles.includes(r))
-  // The operator's own organisation holds no payroll: show only the console and personal settings.
-  const operatorOnly = platform && user.roles.every(r => OperatorRoles.includes(r))
+  // Operators work in the platform organisation, which holds no payroll: they get the console's own menu.
+  const operatorOnly = user.roles.length > 0 && user.roles.every(r => OperatorRoles.includes(r))
   const b = billing.data
   const hrSuite = !b || b.managed || b.features.includes(Feature.HrSuite)
   const manager = (hrMe.data?.directReports ?? 0) > 0
   const staff = !!user.employeeId
   const count = (n?: number) => (n ? ` (${n})` : '')
-  const nav: { to: string; label: string; show: boolean; section?: string }[] = [
+  // Menu items follow permissions; the API enforces them either way.
+  const operatorNav: { to: string; label: string; show: boolean; section?: string }[] = [
+    { to: '/operator', label: 'Overview', show: can(PP.TenantsRead), section: 'Platform' },
+    { to: '/operator/organisations', label: 'Organisations', show: can(PP.TenantsRead), section: 'Platform' },
+    { to: '/operator/subscriptions', label: 'Plans & subscriptions', show: can(PP.BillingRead), section: 'Platform' },
+    { to: '/operator/operators', label: 'Operator accounts', show: can(PP.OperatorsManage), section: 'Platform' },
+    { to: '/settings', label: 'Settings & security', show: true, section: 'Me' },
+  ]
+  const nav: { to: string; label: string; show: boolean; section?: string }[] = operatorOnly ? operatorNav : [
     { to: '/', label: 'Dashboard', show: can(P.ReportsRead) },
     { to: '/self-service', label: 'My workspace', show: staff, section: 'Me' },
     { to: '/employees', label: 'Employees', show: can(P.EmployeesRead), section: 'People' },
@@ -108,8 +120,7 @@ export default function App() {
     { to: '/integrations', label: 'Integrations & API', show: can(P.IntegrationsManage), section: 'Administration' },
     { to: '/migration', label: 'Data migration', show: can(P.EmployeesWrite) || can(P.OrganisationManage), section: 'Administration' },
     { to: '/billing', label: 'Billing', show: !!b?.saas && !b.managed && can(P.BillingManage), section: 'Administration' },
-    { to: '/operator', label: 'Operator console', show: platform, section: 'Platform' },
-  ].filter(n => !operatorOnly || n.to === '/operator' || n.to === '/settings')
+  ]
 
   return (
     <div className={`shell${menu.docked ? '' : ' menu-hidden'}${menu.open ? ' menu-open' : ''}`}>
@@ -121,13 +132,13 @@ export default function App() {
           {nav.filter(n => n.show).map((n, i, arr) => (
             <div key={n.to}>
               {n.section && (i === 0 || arr[i - 1].section !== n.section) && <div className="section">{n.section}</div>}
-              <NavLink to={n.to} end={n.to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>{n.label}</NavLink>
+              <NavLink to={n.to} end={n.to === '/' || n.to === '/operator'} className={({ isActive }) => (isActive ? 'active' : '')}>{n.label}</NavLink>
             </div>
           ))}
         </nav>
         <div className="user">
           <b>{user.displayName}</b>
-          {user.roles.join(', ')}
+          {user.roles.map(r => roleLabel[r] ?? r).join(', ')}
           <div className="actions" style={{ marginTop: 8 }}>
             <button className="btn sm" onClick={logout}>Sign out</button>
             {menu.wide && <button className="btn sm" onClick={() => menu.setPinned(!menu.pinned)} title={menu.pinned ? 'Hide the menu until you point at the left edge or press ☰' : 'Show the menu all the time'}>{menu.pinned ? 'Auto-hide menu' : 'Keep menu open'}</button>}
@@ -145,7 +156,11 @@ export default function App() {
           <Route path="/" element={employeeOnly ? <Navigate to="/self-service" replace /> : operatorOnly ? <Navigate to="/operator" replace /> : <DashboardPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/organogram" element={<OrganogramPage />} />
-          <Route path="/operator" element={<PlatformPage />} />
+          <Route path="/operator" element={<OperatorOverviewPage />} />
+          <Route path="/operator/organisations" element={<OrganisationsPage />} />
+          <Route path="/operator/organisations/:id" element={<OrganisationProfilePage />} />
+          <Route path="/operator/subscriptions" element={<SubscriptionsPage />} />
+          <Route path="/operator/operators" element={<OperatorsPage />} />
           <Route path="/self-service" element={<SelfServicePage />} />
           <Route path="/employees" element={<EmployeesPage />} />
           <Route path="/employees/:id" element={<EmployeeDetailPage />} />

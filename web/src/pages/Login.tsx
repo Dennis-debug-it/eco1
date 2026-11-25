@@ -53,7 +53,7 @@ export default function LoginPage() {
         {needCode && <button type="button" className="btn" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }} onClick={() => { setNeedCode(false); setCode('') }}>Back</button>}
         {!needCode && signup && <p className="small" style={{ marginTop: 14, textAlign: 'center' }}>New to Ecosys Payroll? <Link to="/signup">Start a free trial</Link></p>}
         {!needCode && demo && <p className="muted small" style={{ marginTop: 14 }}>Demo accounts: admin@, payroll@, reviewer@, approver@, finance@, hr@, auditor@, brian.mwangi@ — all <span className="mono">@demo.ecosys</span>, password <span className="mono">Demo!2345</span>.</p>}
-        {!needCode && demoOperator && <p className="muted small" style={{ marginTop: 8 }}>Operator console (all customers, plans and invoices): organisation <span className="mono">platform</span>, <span className="mono">ops@platform.ecosys</span>, same password.{' '}
+        {!needCode && demoOperator && <p className="muted small" style={{ marginTop: 8 }}>Operator console: organisation <span className="mono">platform</span>, <span className="mono">ops@platform.ecosys</span> (administrator), same password. Also <span className="mono">support@</span> (operations) and <span className="mono">finance@</span> (finance) <span className="mono">@platform.ecosys</span>.{' '}
           <button type="button" className="btn sm" onClick={() => { setTenant('platform'); setEmail('ops@platform.ecosys') }}>Fill in</button></p>}
       </form>
     </div>

@@ -41,7 +41,7 @@ td.actions { display: table-cell; white-space: nowrap; } td.actions > * + * { ma
 /* Cards */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
 .card + .card { margin-top: 16px; }
-.grid { display: grid; gap: 16px; align-items: start; } .grid > * { min-width: 0; } .grid > .card + .card { margin-top: 0; } .grid.c2 { grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); } .grid.c4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.grid { display: grid; gap: 16px; align-items: start; } .grid > * { min-width: 0; } .grid > .card + .card { margin-top: 0; } .grid.c2 { grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); } .grid.c3 { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); } .grid.c4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .stat { padding: 14px 16px; } .stat .label { font-size: 12px; color: var(--muted); font-weight: 600; } .stat .value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; } .stat .hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
 /* Tables */
