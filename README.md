@@ -217,13 +217,21 @@ With `Saas:Enabled=true`, one installation serves many employers. It adds:
 - **Sign-up.** "Start a free trial" on the sign-in page creates the organisation, its first administrator and a trial. The email address is confirmed before the first sign-in, and an employer KRA PIN can only have one account.
 - **Plans.** A base fee covering some employees, a price per extra employee, employee and company limits, and the HR suite as a feature. Plans are data, edited in the operator console. The first start seeds placeholder prices.
 - **Billing.** Monthly invoices in arrears with VAT, as PDF and by email. Overdue accounts become past due, then read-only after a grace period. Read-only accounts can still sign in, view and export. Payments are recorded by the operator.
-- **Operator console.** For platform administrators (organisation code `platform`, created with `create-platform-admin`). Shows customers, usage, invoices and plans, and offers plan changes, trial extensions, suspension and sign-in blocking. It never shows employee or payroll records.
+- **Operator console.** For operators (organisation code `platform`). Shows customers, usage, invoices and plans, and offers plan changes, trial extensions, suspension and sign-in blocking. It never shows employee or payroll records. There are three operator roles, enforced by the API:
+
+  | Role | Can |
+  |---|---|
+  | Platform administrator | Everything, including prices, platform settings and other operator accounts |
+  | Platform operations | Create and manage organisations, and watch system health. No revenue, invoices or prices |
+  | Platform finance | Subscriptions, trials, invoices, payments and revenue. No account administration |
+
+  Operators hold no permission inside any organisation, so they can't open employee or payroll records. The first platform administrator is created with `create-platform-admin`; after that, administrators invite other operators from the console.
 
 Organisations without a subscription (licensed installs, contract customers) are *managed*: never billed or restricted. With SaaS mode off, the product behaves exactly as a single-employer install. Operating it is covered in [section 9 of docs/operations.md](docs/operations.md#9-running-as-a-saas-many-customers).
 
 "Start a free trial" on the sign-in page creates a new *customer* organisation, so it always leads to that customer's portal. The operator console needs a separate operator account in the `platform` organisation.
 
-In Development, the sign-up confirmation link is written to the API log, and the demo data includes an operator account: organisation `platform`, `ops@platform.ecosys`, password `Demo!2345` (the sign-in page shows it, with a button that fills it in). It is created only when the environment is Development. To create another operator account:
+In Development, the sign-up confirmation link is written to the API log, and the demo data includes one operator account per role in organisation `platform`, all with password `Demo!2345`: `ops@platform.ecosys` (administrator; the sign-in page shows it, with a button that fills it in), `support@platform.ecosys` (operations) and `finance@platform.ecosys` (finance). They are created only when the environment is Development. To create a platform administrator on a server:
 
 ```bash
 dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-platform-admin --email ops@example.com --name "Ops"

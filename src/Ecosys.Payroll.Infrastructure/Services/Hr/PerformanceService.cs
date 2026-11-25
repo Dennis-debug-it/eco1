@@ -259,7 +259,7 @@ public sealed class PerformanceService(PayrollDbContext db, ITenantContext tenan
         tenant.Require(Permissions.PayrollApprove);
         var cr = await LoadCompAsync(id, ct);
         if (cr.Status != CompensationReviewStatus.Submitted) throw new InvalidStateException("Only a submitted review can be approved.");
-        if (cr.PreparedBy == tenant.UserId && !tenant.IsPlatformAdministrator) throw new ForbiddenException("The preparer cannot approve the compensation review (separation of duties).");
+        if (cr.PreparedBy == tenant.UserId && !tenant.IsSystem) throw new ForbiddenException("The preparer cannot approve the compensation review (separation of duties).");
         var lines = cr.Lines.Where(l => !l.Excluded).ToList();
         var increase = lines.Sum(l => (l.NewBasic - l.CurrentBasic) * 12);
         if (cr.IncreaseBudget is { } ib && increase > ib) throw new InvalidStateException($"Annual increase cost {increase:N0} exceeds the budget {ib:N0}.");

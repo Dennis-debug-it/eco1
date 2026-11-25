@@ -176,6 +176,7 @@ public static class AuthEndpoints
             ctx.Require(Permissions.OrganisationManage);
             if (id == ctx.UserId) return Results.Problem("Use your own MFA settings to change your enrolment.", statusCode: 400);
             var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct) ?? throw new NotFoundException(nameof(User), id);
+            if (user.Roles.Any(Roles.IsPlatform)) return Results.Problem(OperatorRolesElsewhere, statusCode: 403);
             user.MfaEnabled = false; user.MfaSecret = null;
             audit.Record("auth.mfa.reset", nameof(User), id, new { by = ctx.UserName });
             await db.SaveChangesAsync(ct);
@@ -193,7 +194,7 @@ public static class AuthEndpoints
             ctx.Require(Permissions.OrganisationManage);
             var bad = req.Roles.Except(Roles.All).ToList();
             if (bad.Count > 0) return Results.Problem($"Unknown roles: {string.Join(", ", bad)}", statusCode: 400);
-            if (req.Roles.Contains(Roles.PlatformAdministrator) && !ctx.IsPlatformAdministrator) return Results.Problem("Cannot grant platform administrator.", statusCode: 403);
+            if (req.Roles.Any(Roles.IsPlatform)) return Results.Problem(OperatorRolesElsewhere, statusCode: 403);
             if (PasswordPolicy.Validate(req.Password, req.Email, req.DisplayName) is { } why) return Results.Problem(why, statusCode: 400, title: "Password not accepted");
             if (req.EmployeeId is { } emp && !await db.Employees.AnyAsync(e => e.Id == emp, ct)) return Results.Problem("Unknown employee.", statusCode: 400);
             if (await db.Users.AnyAsync(x => x.Email == req.Email.ToLowerInvariant(), ct)) return Results.Problem("A user with that email already exists.", statusCode: 409);
@@ -210,8 +211,8 @@ public static class AuthEndpoints
             var u = await db.Users.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(User), id);
             var bad = req.Roles.Except(Roles.All).ToList();
             if (bad.Count > 0) return Results.Problem($"Unknown roles: {string.Join(", ", bad)}", statusCode: 400);
-            var platformChange = req.Roles.Contains(Roles.PlatformAdministrator) != u.Roles.Contains(Roles.PlatformAdministrator);
-            if (platformChange && !ctx.IsPlatformAdministrator) return Results.Problem("Only a platform administrator can change platform administration.", statusCode: 403);
+            // Operator roles and operator accounts are managed only in the operator console.
+            if (u.Roles.Any(Roles.IsPlatform) || req.Roles.Any(Roles.IsPlatform)) return Results.Problem(OperatorRolesElsewhere, statusCode: 403);
             if (id == ctx.UserId && (!req.IsActive || !req.Roles.Contains(Roles.TenantAdministrator) && u.Roles.Contains(Roles.TenantAdministrator)))
                 return Results.Problem("You can't deactivate yourself or remove your own administrator role. Ask another administrator.", statusCode: 400);
             if (req.EmployeeId is { } emp && !await db.Employees.AnyAsync(e => e.Id == emp, ct)) return Results.Problem("Unknown employee.", statusCode: 400);
@@ -234,7 +235,7 @@ public static class AuthEndpoints
             ctx.Require(Permissions.OrganisationManage);
             if (id == ctx.UserId) return Results.Problem("Change your own password from your security settings.", statusCode: 400);
             var u = await db.Users.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(User), id);
-            if (u.Roles.Contains(Roles.PlatformAdministrator) && !ctx.IsPlatformAdministrator) return Results.Problem("Cannot reset a platform administrator.", statusCode: 403);
+            if (u.Roles.Any(Roles.IsPlatform)) return Results.Problem(OperatorRolesElsewhere, statusCode: 403);
             var password = string.IsNullOrWhiteSpace(body.NewPassword) ? TemporaryPassword() : body.NewPassword;
             if (PasswordPolicy.Validate(password, u.Email, u.DisplayName) is { } why) return Results.Problem(why, statusCode: 400, title: "Password not accepted");
             u.PasswordHash = PasswordHasher.Hash(password);
@@ -257,10 +258,12 @@ public static class AuthEndpoints
             return Results.NoContent();
         }).RequireAuthorization();
 
-        g.MapGet("/roles", () => Results.Ok(Roles.All.Select(r => new { role = r, permissions = Permissions.ForRoles([r]).Order() }))).RequireAuthorization();
+        g.MapGet("/roles", () => Results.Ok(Roles.Tenant.Select(r => new { role = r, permissions = Permissions.ForRoles([r]).Order() }))).RequireAuthorization();
     }
 
     public const string LoginRateLimit = "login";
+
+    private const string OperatorRolesElsewhere = "Operator accounts and roles are managed in the operator console.";
 
     private static string? Phone(string? raw) => string.IsNullOrWhiteSpace(raw) ? null
         : KenyaIdentifiers.NormalisePhone(raw) ?? throw new DomainException($"Mobile '{raw}' isn't a valid number. Use 07XX XXX XXX or +country code.", "VALIDATION");
@@ -270,7 +273,7 @@ public static class AuthEndpoints
             detail = $"Too many failed sign-in attempts. Try again in {Math.Max(1, (int)Math.Ceiling((until - now).TotalMinutes))} minute(s), or ask an administrator to unlock your account." }, statusCode: 429);
 
     /// <summary>Four random words from a short list plus digits: easy to read out over the phone, ~40 bits.</summary>
-    private static string TemporaryPassword()
+    internal static string TemporaryPassword()
     {
         string[] words = ["acacia", "baobab", "cheetah", "dhow", "eland", "flamingo", "gazelle", "hornbill", "impala", "jacaranda", "kudu", "lake", "mango", "nyati", "oryx", "pelican", "rhino", "savanna", "tusker", "umbrella", "valley", "weaver", "zebra", "kestrel"];
         var pick = () => words[System.Security.Cryptography.RandomNumberGenerator.GetInt32(words.Length)];

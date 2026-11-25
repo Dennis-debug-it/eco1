@@ -182,7 +182,8 @@ using (var scope = app.Services.CreateScope())
         await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoHrDataAsync();
     // The operator console sees every customer's account, so its published-password account exists only on a developer machine.
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && app.Environment.IsDevelopment() && await seeder.SeedDemoOperatorAsync())
-        app.Logger.LogInformation("Seeded operator account. Sign in with organisation '{Slug}', {Email} / {Password}", PlatformAdminProvisioner.PlatformSlug, DemoDataSeeder.DemoOperatorEmail, DemoDataSeeder.DemoPassword);
+        app.Logger.LogInformation("Seeded operator accounts. Sign in with organisation '{Slug}', {Emails} / {Password}", PlatformAdminProvisioner.PlatformSlug,
+            string.Join(", ", DemoDataSeeder.DemoOperators.Select(o => $"{o.Email} ({o.Role})")), DemoDataSeeder.DemoPassword);
 }
 
 // One-off command: create a customer organisation and its first administrator, then exit.

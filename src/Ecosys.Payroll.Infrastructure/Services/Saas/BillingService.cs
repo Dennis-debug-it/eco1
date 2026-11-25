@@ -343,7 +343,7 @@ public sealed class BillingJob(IServiceScopeFactory scopes, ILogger<BillingJob> 
             {
                 using var scope = scopes.CreateScope();
                 var ctx = scope.ServiceProvider.GetRequiredService<TenantContext>();
-                ctx.UserName = "billing"; ctx.IsPlatformAdministrator = true;
+                ctx.UserName = "billing"; ctx.IsSystem = true;
                 var r = await scope.ServiceProvider.GetRequiredService<BillingService>().RunCycleAsync(BusinessClock.Today(), stoppingToken);
                 if (r != new BillingCycleResult(0, 0, 0, 0, 0, 0, 0)) log.LogInformation("Billing cycle: {Result}", r);
             }

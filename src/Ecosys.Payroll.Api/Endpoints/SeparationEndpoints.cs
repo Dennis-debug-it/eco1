@@ -44,7 +44,7 @@ public static class SeparationEndpoints
             {
                 separation = s, duesHidden = !seePay, employee = new { e.Id, e.EmployeeNumber, name = e.FullName, e.JobTitle, e.HireDate, e.NoticePeriodDays, e.Status, e.TerminationDate },
                 payItems = seePay ? items.Select(i => new { i.Id, i.Description, i.Amount, i.Status, i.DueDate, i.ProcessedInRunId }).ToList<object>() : [],
-                canApprove = ctx.Has(Permissions.PayrollApprove) && (s.InitiatedBy != ctx.UserId || ctx.IsPlatformAdministrator || await svc.OnePersonPayrollAsync(s.LegalEntityId, ct)),
+                canApprove = ctx.Has(Permissions.PayrollApprove) && (s.InitiatedBy != ctx.UserId || ctx.IsSystem || await svc.OnePersonPayrollAsync(s.LegalEntityId, ct)),
             });
         });
 

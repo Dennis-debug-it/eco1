@@ -107,7 +107,7 @@ public sealed class DependantService(PayrollDbContext db, ITenantContext tenant,
         if (string.IsNullOrWhiteSpace(reason)) throw new DomainException("Say why, so the employee knows what to correct.", "VALIDATION");
         var d = await LoadAsync(id, ct);
         if (d.Status is not (DependantStatus.Submitted or DependantStatus.Verified)) throw new InvalidStateException("Only a record awaiting verification or approval can be rejected.");
-        if (access.IsSelf(d.EmployeeId) && !tenant.IsPlatformAdministrator) throw new ForbiddenException("You cannot decide on your own dependants.");
+        if (access.IsSelf(d.EmployeeId) && !tenant.IsSystem) throw new ForbiddenException("You cannot decide on your own dependants.");
         d.Status = DependantStatus.Rejected; d.RejectedBy = tenant.RequireUser(); d.RejectedAt = DateTimeOffset.UtcNow; d.RejectionReason = reason.Trim();
         audit.Record("benefits.dependant.rejected", nameof(Dependant), d.Id, new { reason = d.RejectionReason }, d.LegalEntityId);
         await NotifyEmployeeAsync(d, "rejected", $"Your {Kind(d)} for {d.FullName} was not approved: {d.RejectionReason}. You can submit it again with corrected details or documents.", ct);
@@ -144,7 +144,7 @@ public sealed class DependantService(PayrollDbContext db, ITenantContext tenant,
     private async Task<bool> CheckSeparationAsync(Dependant d, bool sameActor, string step, CancellationToken ct)
     {
         var ownFamily = access.IsSelf(d.EmployeeId);
-        if (!sameActor && !ownFamily || tenant.IsPlatformAdministrator) return false;
+        if (!sameActor && !ownFamily || tenant.IsSystem) return false;
         var onePerson = await db.LegalEntities.Where(e => e.Id == d.LegalEntityId).Select(e => e.Settings.AllowPreparerToApprove).FirstAsync(ct);
         if (onePerson) return true;
         throw new ForbiddenException(ownFamily

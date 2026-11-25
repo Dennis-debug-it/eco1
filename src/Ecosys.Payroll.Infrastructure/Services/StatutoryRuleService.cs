@@ -78,7 +78,7 @@ public sealed class StatutoryRuleService(PayrollDbContext db, ITenantContext ten
         tenant.Require(Permissions.StatutoryApprove);
         var r = await GetOwnedAsync(id, ct);
         if (r.ApprovalStatus != RuleApprovalStatus.PendingApproval) throw new InvalidStateException("Rule version is not pending approval.");
-        if (r.CreatedBy == tenant.UserId && !tenant.IsPlatformAdministrator)
+        if (r.CreatedBy == tenant.UserId && !tenant.IsSystem)
             throw new ForbiddenException("The author of a statutory rule version cannot approve it.");
 
         var overlapping = await db.StatutoryRuleVersions
@@ -126,8 +126,8 @@ public sealed class StatutoryRuleService(PayrollDbContext db, ITenantContext ten
     private async Task<StatutoryRuleVersionRecord> GetOwnedAsync(Guid id, CancellationToken ct)
     {
         var r = await db.StatutoryRuleVersions.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("StatutoryRuleVersion", id);
-        if (r.TenantId is null && !tenant.IsPlatformAdministrator)
-            throw new ForbiddenException("Platform statutory rules can only be changed by a platform administrator.");
+        if (r.TenantId is null && !tenant.IsSystem)
+            throw new ForbiddenException("Platform statutory rules come from the seeded rule set and cannot be changed here.");
         return r;
     }
 

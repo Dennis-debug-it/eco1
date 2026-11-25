@@ -97,7 +97,7 @@ public class PayrollApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     {
         using var scope = Services.CreateScope();
         var ctx = scope.ServiceProvider.GetRequiredService<TenantContext>();
-        ctx.TenantId = tenantId; ctx.IsPlatformAdministrator = true; ctx.UserName = "test";
+        ctx.TenantId = tenantId; ctx.IsSystem = true; ctx.UserName = "test";
         var db = scope.ServiceProvider.GetRequiredService<PayrollDbContext>();
         if (tenantId is null) db.IgnoreTenantFilter = true;
         return await work(db);

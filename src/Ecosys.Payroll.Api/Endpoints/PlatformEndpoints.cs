@@ -22,8 +22,9 @@ public sealed record PlanBody(string Code, string Name, string? Description, dec
     int? MaxEmployees, int? MaxLegalEntities, List<string>? Features, bool IsPublic, bool IsActive, int SortOrder, string? Currency);
 
 /// <summary>
-/// The operator console: customers, subscriptions, invoices, payments and the price list. Platform administrators only.
-/// Shows account and billing data, never payroll or employee records.
+/// The operator console: customers, subscriptions, invoices, payments and the price list. Operators only (see
+/// <see cref="Roles.Platform"/>), signed in to the platform organisation, and each endpoint checks its own
+/// <see cref="PlatformPermissions"/>. Shows account and billing data, never payroll or employee records.
 /// </summary>
 public static partial class PlatformEndpoints
 {
@@ -32,13 +33,25 @@ public static partial class PlatformEndpoints
         var g = app.MapGroup("/api/platform").RequireAuthorization().AddEndpointFilter(async (c, next) =>
         {
             var ctx = c.HttpContext.RequestServices.GetRequiredService<ITenantContext>();
-            if (!ctx.IsPlatformAdministrator) throw new ForbiddenException("Platform administrators only.");
-            c.HttpContext.RequestServices.GetRequiredService<PayrollDbContext>().IgnoreTenantFilter = true;
+            if (!ctx.IsOperator() || ctx.ApiClientId is not null) throw new ForbiddenException("Platform operators only.");
+            var db = c.HttpContext.RequestServices.GetRequiredService<PayrollDbContext>();
+            // Operator accounts live in the platform organisation; an operator role anywhere else grants nothing.
+            if (!await db.Tenants.AnyAsync(t => t.Id == ctx.TenantId && t.Slug == PlatformAdminProvisioner.PlatformSlug, c.HttpContext.RequestAborted))
+                throw new ForbiddenException("Platform operators only.");
+            db.IgnoreTenantFilter = true;
             return await next(c);
         });
 
-        g.MapGet("/overview", async (PayrollDbContext db, SaasOptions options, CancellationToken ct) =>
+        // What the signed-in operator may do, so the console shows only what the server will allow.
+        g.MapGet("/me", (ITenantContext ctx) => Results.Ok(new
         {
+            ctx.UserId, ctx.UserName, roles = ctx.Roles.Where(Roles.IsPlatform).Order(),
+            permissions = PlatformPermissions.All.Where(ctx.Has),
+        }));
+
+        g.MapGet("/overview", async (ITenantContext ctx, PayrollDbContext db, SaasOptions options, CancellationToken ct) =>
+        {
+            var money = ctx.Has(PlatformPermissions.BillingRead);
             var today = BusinessClock.Today();
             var subs = await db.Subscriptions.ToListAsync(ct);
             var plans = await db.Plans.IgnoreQueryFilters().ToDictionaryAsync(p => p.Id, ct);
@@ -52,18 +65,20 @@ public static partial class PlatformEndpoints
                 tenants = await db.Tenants.CountAsync(t => t.Slug != PlatformAdminProvisioner.PlatformSlug, ct),
                 managed = await db.Tenants.CountAsync(t => t.Slug != PlatformAdminProvisioner.PlatformSlug && !db.Subscriptions.Any(s => s.TenantId == t.Id), ct),
                 byStatus = subs.GroupBy(s => s.Status).ToDictionary(x => x.Key.ToString(), x => x.Count()),
-                mrrExVat = mrr,
+                // Revenue and balances need billing rights.
+                mrrExVat = money ? mrr : (decimal?)null,
                 currency = "KES",
-                openBalance = open.Sum(i => i.Total - i.AmountPaid),
-                overdueBalance = open.Where(i => i.DueOn < today).Sum(i => i.Total - i.AmountPaid),
+                openBalance = money ? open.Sum(i => i.Total - i.AmountPaid) : (decimal?)null,
+                overdueBalance = money ? open.Where(i => i.DueOn < today).Sum(i => i.Total - i.AmountPaid) : (decimal?)null,
                 trialsEndingThisWeek = subs.Count(s => s.Status == SubscriptionStatus.Trialing && s.TrialEndsOn <= today.AddDays(7)),
                 signupsLast30Days = subs.Count(s => s.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-30)),
                 employeesUnderManagement = headcounts.Values.Sum(),
             });
-        });
+        }).Need(PlatformPermissions.TenantsRead);
 
-        g.MapGet("/tenants", async (string? status, string? q, PayrollDbContext db, CancellationToken ct) =>
+        g.MapGet("/tenants", async (string? status, string? q, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
+            var money = ctx.Has(PlatformPermissions.BillingRead);
             // The operator's own organisation is not a customer.
             var tenants = await db.Tenants.Where(t => t.Slug != PlatformAdminProvisioner.PlatformSlug).OrderBy(t => t.Name).ToListAsync(ct);
             var subs = await db.Subscriptions.ToDictionaryAsync(s => s.TenantId, ct);
@@ -80,17 +95,18 @@ public static partial class PlatformEndpoints
                 return new
                 {
                     t.Id, t.Name, t.Slug, t.IsActive, t.CreatedAt, status = s?.Status.ToString() ?? "Managed", plan = p?.Name, planCode = p?.Code, trialEndsOn = s?.TrialEndsOn,
-                    employees = headcounts.GetValueOrDefault(t.Id), balance = balances.GetValueOrDefault(t.Id), lastLoginAt = lastLogin.GetValueOrDefault(t.Id),
+                    employees = headcounts.GetValueOrDefault(t.Id), balance = money ? balances.GetValueOrDefault(t.Id) : (decimal?)null, lastLoginAt = lastLogin.GetValueOrDefault(t.Id),
                     suspensionReason = s?.SuspensionReason, cancelAtPeriodEnd = s?.CancelAtPeriodEnd ?? false,
                 };
             });
             if (!string.IsNullOrWhiteSpace(status)) rows = rows.Where(r => r.status.Equals(status, StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(q)) rows = rows.Where(r => r.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || r.Slug.Contains(q, StringComparison.OrdinalIgnoreCase));
             return Results.Ok(rows.ToList());
-        });
+        }).Need(PlatformPermissions.TenantsRead);
 
-        g.MapGet("/tenants/{id:guid}", async (Guid id, PayrollDbContext db, CancellationToken ct) =>
+        g.MapGet("/tenants/{id:guid}", async (Guid id, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
+            var money = ctx.Has(PlatformPermissions.BillingRead);
             var t = await db.Tenants.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Tenant", id);
             var sub = await db.Subscriptions.FirstOrDefaultAsync(s => s.TenantId == id, ct);
             var plan = sub is null ? null : await db.Plans.IgnoreQueryFilters().FirstAsync(p => p.Id == sub.PlanId, ct);
@@ -100,7 +116,7 @@ public static partial class PlatformEndpoints
                 tenant = new { t.Id, t.Name, t.Slug, t.IsActive, t.CreatedAt },
                 // Where the customer is in moving off their previous payroll system. State only: no employee or payroll figures.
                 migration = new { inMigration = t.InMigration, t.MigrationStartedAt, t.GoLiveSignedAt, t.GoLiveSignedBy, t.GoLiveFrom },
-                subscription = sub, plan = plan is null ? null : BillingEndpoints.PlanView(plan),
+                subscription = sub, plan = plan is null ? null : money ? BillingEndpoints.PlanView(plan) : new { plan.Id, plan.Code, plan.Name },
                 usage = new
                 {
                     employees = await db.Employees.CountAsync(e => e.TenantId == id && SubscriptionService.CountedStatuses.Contains(e.Status), ct),
@@ -110,12 +126,13 @@ public static partial class PlatformEndpoints
                 },
                 // Contacts only: who to talk to about the account. No employee or payroll data.
                 administrators = users.Where(u => u.IsActive && u.Roles.Contains(Roles.TenantAdministrator)).Select(u => new { u.Email, u.DisplayName, u.LastLoginAt, u.MfaEnabled, emailVerified = u.EmailVerificationTokenHash == null }),
-                invoices = await db.SubscriptionInvoices.Where(i => i.TenantId == id).OrderByDescending(i => i.PeriodStart).ToListAsync(ct),
-                payments = await db.SubscriptionPayments.Where(p => p.TenantId == id).OrderByDescending(p => p.ReceivedAt).ToListAsync(ct),
-                history = await db.PayrollAuditLogs.Where(a => a.TenantId == id && (a.Action.StartsWith("billing.") || a.Action.StartsWith("tenant.")))
+                // Invoices, payments and billing history need billing rights.
+                invoices = money ? await db.SubscriptionInvoices.Where(i => i.TenantId == id).OrderByDescending(i => i.PeriodStart).ToListAsync(ct) : [],
+                payments = money ? await db.SubscriptionPayments.Where(p => p.TenantId == id).OrderByDescending(p => p.ReceivedAt).ToListAsync(ct) : [],
+                history = await db.PayrollAuditLogs.Where(a => a.TenantId == id && (money && a.Action.StartsWith("billing.") || a.Action.StartsWith("tenant.")))
                     .OrderByDescending(a => a.OccurredAt).Take(50).Select(a => new { a.Action, a.ActorName, a.OccurredAt, a.Details }).ToListAsync(ct),
             });
-        });
+        }).Need(PlatformPermissions.TenantsRead);
 
         g.MapPost("/tenants", async (PlatformProvisionRequest req, TenantProvisioner provisioner, BillingService billing, PayrollDbContext db, CancellationToken ct) =>
         {
@@ -130,18 +147,18 @@ public static partial class PlatformEndpoints
             }
             await tx.CommitAsync(ct);
             return Results.Ok(new { tenantId = r.TenantId, slug = r.Slug, adminEmail = r.AdminEmail, temporaryPassword = r.TemporaryPassword });
-        });
+        }).Need(PlatformPermissions.TenantsManage);
 
         g.MapPost("/tenants/{id:guid}/subscription", async (Guid id, PlanCodeBody b, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
-            Done(cache, id, await billing.StartSubscriptionAsync(id, b.PlanCode, BusinessClock.Today(), ct)));
+            Done(cache, id, await billing.StartSubscriptionAsync(id, b.PlanCode, BusinessClock.Today(), ct))).Need(PlatformPermissions.BillingManage);
         g.MapPost("/tenants/{id:guid}/plan", async (Guid id, PlanCodeBody b, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
-            Done(cache, id, await billing.AssignPlanAsync(id, b.PlanCode, ct)));
+            Done(cache, id, await billing.AssignPlanAsync(id, b.PlanCode, ct))).Need(PlatformPermissions.BillingManage);
         g.MapPost("/tenants/{id:guid}/extend-trial", async (Guid id, ExtendTrialBody b, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
-            Done(cache, id, await billing.ExtendTrialAsync(id, b.Until, BusinessClock.Today(), ct)));
+            Done(cache, id, await billing.ExtendTrialAsync(id, b.Until, BusinessClock.Today(), ct))).Need(PlatformPermissions.BillingManage);
         g.MapPost("/tenants/{id:guid}/suspend", async (Guid id, ReasonBody b, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
-            Done(cache, id, await billing.SuspendAsync(id, b.Reason, ct)));
+            Done(cache, id, await billing.SuspendAsync(id, b.Reason, ct))).Need(PlatformPermissions.BillingManage);
         g.MapPost("/tenants/{id:guid}/reactivate", async (Guid id, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
-            Done(cache, id, await billing.ReactivateAsync(id, BusinessClock.Today(), ct)));
+            Done(cache, id, await billing.ReactivateAsync(id, BusinessClock.Today(), ct))).Need(PlatformPermissions.BillingManage);
 
         // Blocks every sign-in to the organisation (abuse, legal hold). Billing suspension is the usual tool; this is the hard stop.
         g.MapPost("/tenants/{id:guid}/access", async (Guid id, AccessBody b, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
@@ -153,7 +170,7 @@ public static partial class PlatformEndpoints
             db.PayrollAuditLogs.Add(new PayrollAuditLog { TenantId = id, ActorId = ctx.UserId, ActorName = ctx.UserName, Action = b.Enabled ? "tenant.access.enabled" : "tenant.access.disabled", EntityType = "Tenant", EntityId = id, Details = System.Text.Json.JsonSerializer.Serialize(new { reason = b.Reason }), IpAddress = ctx.IpAddress });
             await db.SaveChangesAsync(ct);
             return Results.NoContent();
-        });
+        }).Need(PlatformPermissions.TenantsManage);
 
         g.MapGet("/invoices", async (string? status, PayrollDbContext db, CancellationToken ct) =>
         {
@@ -163,37 +180,38 @@ public static partial class PlatformEndpoints
             var rows = await q.OrderByDescending(i => i.IssuedOn).ThenByDescending(i => i.Number).Take(500)
                 .Join(db.Tenants, i => i.TenantId, t => t.Id, (i, t) => new { i, tenant = t.Name, t.Slug }).ToListAsync(ct);
             return Results.Ok(rows.Select(r => new { r.i.Id, r.i.TenantId, r.tenant, r.Slug, r.i.Number, r.i.PlanName, r.i.PeriodStart, r.i.PeriodEnd, r.i.IssuedOn, r.i.DueOn, r.i.Currency, r.i.Total, r.i.AmountPaid, r.i.Balance, r.i.Status, overdue = r.i.Status == InvoiceStatus.Open && r.i.DueOn < today }));
-        });
+        }).Need(PlatformPermissions.BillingRead);
 
         g.MapPost("/invoices/{id:guid}/payments", async (Guid id, RecordPaymentBody b, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
         {
             var inv = await billing.RecordPaymentAsync(id, b.Amount, b.Method, b.Reference, b.ReceivedAt, b.Notes, BusinessClock.Today(), ct);
             cache.Invalidate(inv.TenantId);
             return Results.Ok(new { inv.Id, inv.Number, inv.Status, inv.AmountPaid, inv.Balance });
-        });
+        }).Need(PlatformPermissions.BillingManage);
 
         g.MapPost("/invoices/{id:guid}/void", async (Guid id, ReasonBody b, BillingService billing, EntitlementCache cache, CancellationToken ct) =>
         {
             var inv = await billing.VoidInvoiceAsync(id, b.Reason, BusinessClock.Today(), ct);
             cache.Invalidate(inv.TenantId);
             return Results.Ok(new { inv.Id, inv.Number, inv.Status });
-        });
+        }).Need(PlatformPermissions.BillingManage);
 
         g.MapGet("/invoices/{id:guid}/pdf", async (Guid id, PayrollDbContext db, SaasOptions options, CancellationToken ct) =>
         {
             var inv = await db.SubscriptionInvoices.FirstOrDefaultAsync(i => i.Id == id, ct) ?? throw new NotFoundException(nameof(SubscriptionInvoice), id);
             var name = await db.Tenants.Where(t => t.Id == inv.TenantId).Select(t => t.Name).FirstAsync(ct);
             return Results.File(InvoiceRenderer.Render(inv, name, options), "application/pdf", $"{inv.Number}.pdf");
-        });
+        }).Need(PlatformPermissions.BillingRead);
 
         // Runs the billing cycle now (it also runs every few hours in the background).
-        g.MapPost("/billing/run", async (BillingService billing, CancellationToken ct) => Results.Ok(await billing.RunCycleAsync(BusinessClock.Today(), ct)));
+        g.MapPost("/billing/run", async (BillingService billing, CancellationToken ct) => Results.Ok(await billing.RunCycleAsync(BusinessClock.Today(), ct)))
+            .Need(PlatformPermissions.BillingManage);
 
         g.MapGet("/plans", async (PayrollDbContext db, CancellationToken ct) =>
         {
             var counts = await db.Subscriptions.GroupBy(s => s.PlanId).Select(x => new { x.Key, n = x.Count() }).ToDictionaryAsync(x => x.Key, x => x.n, ct);
             return Results.Ok((await db.Plans.OrderBy(p => p.SortOrder).ToListAsync(ct)).Select(p => new { plan = BillingEndpoints.PlanView(p), subscribers = counts.GetValueOrDefault(p.Id) }));
-        });
+        }).Need(PlatformPermissions.BillingRead, PlatformPermissions.TenantsManage);
 
         g.MapPost("/plans", async (PlanBody b, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
@@ -206,7 +224,7 @@ public static partial class PlatformEndpoints
             PlatformAudit(db, ctx, "platform.plan.created", p.Id, new { p.Code, p.MonthlyBaseFee, p.PricePerAdditionalEmployee });
             await db.SaveChangesAsync(ct);
             return Results.Ok(BillingEndpoints.PlanView(p));
-        });
+        }).Need(PlatformPermissions.PlansManage);
 
         g.MapPut("/plans/{id:guid}", async (Guid id, PlanBody b, ITenantContext ctx, PayrollDbContext db, CancellationToken ct) =>
         {
@@ -216,8 +234,18 @@ public static partial class PlatformEndpoints
             PlatformAudit(db, ctx, "platform.plan.updated", p.Id, new { before, after = BillingEndpoints.PlanView(p) });
             await db.SaveChangesAsync(ct);
             return Results.Ok(BillingEndpoints.PlanView(p));
-        });
+        }).Need(PlatformPermissions.PlansManage);
+
+        g.MapOperatorAccounts();
     }
+
+    /// <summary>Requires any one of <paramref name="permissions"/>. The group filter has already checked the caller is an operator.</summary>
+    public static RouteHandlerBuilder Need(this RouteHandlerBuilder b, params string[] permissions) => b.AddEndpointFilter(async (c, next) =>
+    {
+        var ctx = c.HttpContext.RequestServices.GetRequiredService<ITenantContext>();
+        if (!permissions.Any(ctx.Has)) throw new ForbiddenException($"Permission '{permissions[0]}' is required.");
+        return await next(c);
+    });
 
     public sealed record AccessBody(bool Enabled, string? Reason);
 

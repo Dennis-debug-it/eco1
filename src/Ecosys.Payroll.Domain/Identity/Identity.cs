@@ -5,7 +5,12 @@ namespace Ecosys.Payroll.Domain.Identity;
 /// <summary>Role names. Shared Ecosys identity issues these as role claims.</summary>
 public static class Roles
 {
+    /// <summary>Operator: runs the whole platform, including pricing, settings and other operator accounts.</summary>
     public const string PlatformAdministrator = "PlatformAdministrator";
+    /// <summary>Operator: onboards and supports organisations and watches system health. No billing or pricing.</summary>
+    public const string PlatformOperations = "PlatformOperations";
+    /// <summary>Operator: subscriptions, invoices, payments and revenue. No account administration.</summary>
+    public const string PlatformFinance = "PlatformFinance";
     public const string TenantAdministrator = "TenantAdministrator";
     public const string HrAdministrator = "HrAdministrator";
     public const string PayrollAdministrator = "PayrollAdministrator";
@@ -15,14 +20,73 @@ public static class Roles
     public const string Auditor = "Auditor";
     public const string Employee = "Employee";
 
-    /// <summary>Roles that must use multi-factor authentication.</summary>
-    public static readonly string[] Privileged = [PlatformAdministrator, TenantAdministrator, PayrollAdministrator, PayrollApprover, FinanceOfficer];
+    /// <summary>
+    /// Operator roles. They exist only in the platform organisation, carry only <see cref="PlatformPermissions"/>
+    /// (never a tenant permission), and are managed in the operator console, not by tenant administrators.
+    /// </summary>
+    public static readonly string[] Platform = [PlatformAdministrator, PlatformOperations, PlatformFinance];
 
-    public static readonly string[] All =
+    /// <summary>Roles an organisation's administrators can give their own users.</summary>
+    public static readonly string[] Tenant =
     [
-        PlatformAdministrator, TenantAdministrator, HrAdministrator, PayrollAdministrator, PayrollReviewer,
-        PayrollApprover, FinanceOfficer, Auditor, Employee,
+        TenantAdministrator, HrAdministrator, PayrollAdministrator, PayrollReviewer, PayrollApprover, FinanceOfficer, Auditor, Employee,
     ];
+
+    /// <summary>Roles that must use multi-factor authentication.</summary>
+    public static readonly string[] Privileged = [.. Platform, TenantAdministrator, PayrollAdministrator, PayrollApprover, FinanceOfficer];
+
+    public static readonly string[] All = [.. Platform, .. Tenant];
+
+    public static bool IsPlatform(string role) => Platform.Contains(role);
+}
+
+/// <summary>
+/// What operators may do in the operator console (<c>/api/platform</c>). Separate from tenant <see cref="Permissions"/>:
+/// no operator role holds a tenant permission, so an operator can't read or change an organisation's records.
+/// </summary>
+public static class PlatformPermissions
+{
+    /// <summary>The dashboard and the list and profile of organisations (account data and counts, never payroll).</summary>
+    public const string TenantsRead = "platform.tenants.read";
+    /// <summary>Create organisations, edit their details, block sign-in, manage their administrators.</summary>
+    public const string TenantsManage = "platform.tenants.manage";
+    /// <summary>Revenue, balances, invoices, payments and the price list.</summary>
+    public const string BillingRead = "platform.billing.read";
+    /// <summary>Start, change, suspend and reactivate subscriptions, extend trials, record payments, void invoices, run billing.</summary>
+    public const string BillingManage = "platform.billing.manage";
+    /// <summary>Create and change plans and prices.</summary>
+    public const string PlansManage = "platform.plans.manage";
+    /// <summary>Invite operators, change their roles, deactivate them, reset their sign-in.</summary>
+    public const string OperatorsManage = "platform.operators.manage";
+    /// <summary>Platform-wide settings and shared reference data such as the bank directory.</summary>
+    public const string ConfigManage = "platform.config.manage";
+    /// <summary>System health, background jobs and delivery failures.</summary>
+    public const string MonitorRead = "platform.monitor.read";
+    /// <summary>Operator activity, sign-in history and security events across the platform.</summary>
+    public const string AuditRead = "platform.audit.read";
+
+    public static readonly string[] All = [TenantsRead, TenantsManage, BillingRead, BillingManage, PlansManage, OperatorsManage, ConfigManage, MonitorRead, AuditRead];
+
+    public static IReadOnlySet<string> ForRoles(IEnumerable<string> roles)
+    {
+        var set = new HashSet<string>();
+        foreach (var r in roles)
+        {
+            switch (r)
+            {
+                case Roles.PlatformAdministrator:
+                    set.UnionWith(All);
+                    break;
+                case Roles.PlatformOperations:
+                    set.UnionWith([TenantsRead, TenantsManage, MonitorRead]);
+                    break;
+                case Roles.PlatformFinance:
+                    set.UnionWith([TenantsRead, BillingRead, BillingManage]);
+                    break;
+            }
+        }
+        return set;
+    }
 }
 
 /// <summary>Fine-grained permissions. Roles map to permission sets; salary visibility is independent.</summary>
@@ -63,14 +127,15 @@ public static class Permissions
 
     public static readonly string[] Hr = [HrPerformance, HrLearning, HrRecruitment, HrCases, HrDocuments, HrAssets, HrBenefits, HrSeparations];
 
+    /// <summary>Tenant permissions plus, for operators, <see cref="PlatformPermissions"/>.</summary>
     public static IReadOnlySet<string> ForRoles(IEnumerable<string> roles)
     {
-        var set = new HashSet<string>();
-        foreach (var r in roles)
+        var list = roles as ICollection<string> ?? roles.ToList();
+        var set = new HashSet<string>(PlatformPermissions.ForRoles(list));
+        foreach (var r in list)
         {
             switch (r)
             {
-                case Roles.PlatformAdministrator:
                 case Roles.TenantAdministrator:
                     set.UnionWith([OrganisationManage, EmployeesRead, EmployeesWrite, SalaryRead, SalaryWrite, CompensationManage,
                         StatutoryManage, StatutoryApprove, PayrollPrepare, PayrollReview, PayrollApprove, PayrollFinalise, PayrollReverse,

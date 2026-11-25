@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, fmt } from '../lib/api'
-import { P, useAuth } from '../lib/auth'
+import { P, PP, useAuth } from '../lib/auth'
 import { useBankBranches, useBanks, useBranches, useCostCentres, useDepartments, useLegalEntities, usePayingAccounts, usePayrollGroups } from '../lib/lookups'
 import type { LegalEntity, Lookup, PayingAccount, PayrollPeriod } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, Tabs } from '../components/ui'
@@ -12,7 +12,7 @@ import { BankPicker } from '../components/BankPicker'
 type Tab = 'entities' | 'branches' | 'departments' | 'cost-centres' | 'payroll-groups' | 'paying-accounts' | 'banks'
 
 export default function OrganisationPage() {
-  const { can, user } = useAuth()
+  const { can } = useAuth()
   const [tab, setTab] = useState<Tab>('entities')
   const les = useLegalEntities()
   const [le, setLe] = useState('')
@@ -28,7 +28,7 @@ export default function OrganisationPage() {
       {tab === 'cost-centres' && leId && <LookupTable path="cost-centres" title="Cost centres" legalEntityId={leId} extra={[['glSegment', 'GL segment']]} canEdit={can(P.OrganisationManage)} hook={useCostCentres} />}
       {tab === 'payroll-groups' && leId && <PayrollGroups legalEntityId={leId} canEdit={can(P.OrganisationManage)} />}
       {tab === 'paying-accounts' && leId && <PayingAccounts legalEntityId={leId} currency={les.data?.find(x => x.id === leId)?.currencyCode ?? 'KES'} canEdit={can(P.OrganisationManage)} />}
-      {tab === 'banks' && <BankDirectory canEdit={can(P.OrganisationManage)} isPlatformAdmin={!!user?.roles.includes('PlatformAdministrator')} />}
+      {tab === 'banks' && <BankDirectory canEdit={can(P.OrganisationManage)} isPlatformAdmin={can(PP.ConfigManage)} />}
     </>
   )
 }

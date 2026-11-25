@@ -45,7 +45,7 @@ public sealed class TenantProvisioner(PayrollDbContext db, TenantContext tenant,
 
         var t = new Tenant { Name = r.OrganisationName.Trim(), Slug = slug };
         db.Tenants.Add(t);
-        tenant.TenantId = t.Id; tenant.UserName = "provisioning"; tenant.IsPlatformAdministrator = true;
+        tenant.TenantId = t.Id; tenant.UserName = "provisioning"; tenant.IsSystem = true;
 
         var le = new LegalEntity
         {
@@ -144,7 +144,7 @@ public sealed class PlatformAdminProvisioner(PayrollDbContext db, TenantContext 
         var t = await db.Tenants.FirstOrDefaultAsync(x => x.Slug == PlatformSlug, ct);
         if (t is null) { t = new Tenant { Name = "Platform operations", Slug = PlatformSlug }; db.Tenants.Add(t); }
         if (await db.Users.AnyAsync(u => u.TenantId == t.Id && u.Email == email, ct)) throw new DomainException($"{email} is already a platform administrator.", "DUPLICATE");
-        tenant.TenantId = t.Id; tenant.UserName = "provisioning"; tenant.IsPlatformAdministrator = true;
+        tenant.TenantId = t.Id; tenant.UserName = "provisioning"; tenant.IsSystem = true;
         var password = string.Join("-", Enumerable.Range(0, 4).Select(_ => Convert.ToHexString(RandomNumberGenerator.GetBytes(2)).ToLowerInvariant())) + "-P";
         var user = new User { TenantId = t.Id, Email = email, DisplayName = name.Trim(), PasswordHash = PasswordHasher.Hash(password), Roles = [Roles.PlatformAdministrator], MustChangePassword = true };
         db.Users.Add(user);

@@ -20,7 +20,7 @@ public sealed partial class DemoDataSeeder
         var t = await db.Tenants.FirstOrDefaultAsync(x => x.Slug == DemoTenantSlug, ct);
         db.IgnoreTenantFilter = false;
         if (t is null) return;
-        tenant.TenantId = t.Id; tenant.UserName = "seed"; tenant.IsPlatformAdministrator = true;
+        tenant.TenantId = t.Id; tenant.UserName = "seed"; tenant.IsSystem = true;
         var le = await db.LegalEntities.FirstAsync(ct);
         var emps = await db.Employees.Where(e => e.LegalEntityId == le.Id).ToDictionaryAsync(e => e.EmployeeNumber, ct);
         Employee E(string no) => emps[no];

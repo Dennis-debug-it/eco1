@@ -64,7 +64,7 @@ public partial class SaasTests(SaasFixture app) : IClassFixture<SaasFixture>
         return client;
     }
 
-    private async Task<HttpClient> OperatorAsync()
+    private async Task<HttpClient> OperatorAsync(string role = Domain.Identity.Roles.PlatformAdministrator)
     {
         var email = $"ops{Guid.NewGuid():N}"[..12] + "@operator.example";
         using (var scope = app.Services.CreateScope())
@@ -72,7 +72,7 @@ public partial class SaasTests(SaasFixture app) : IClassFixture<SaasFixture>
         await app.WithDbAsync(null, async db =>
         {
             var u = await db.Users.FirstAsync(x => x.Email == email);
-            u.PasswordHash = PasswordHasher.Hash(StrongPassword); u.MustChangePassword = false;
+            u.PasswordHash = PasswordHasher.Hash(StrongPassword); u.MustChangePassword = false; u.Roles = [role];
             return await db.SaveChangesAsync();
         });
         return await LoginAsync(PlatformAdminProvisioner.PlatformSlug, email, StrongPassword);
@@ -82,7 +82,7 @@ public partial class SaasTests(SaasFixture app) : IClassFixture<SaasFixture>
     {
         using var scope = app.Services.CreateScope();
         var ctx = scope.ServiceProvider.GetRequiredService<TenantContext>();
-        ctx.UserName = "billing-test"; ctx.IsPlatformAdministrator = true;
+        ctx.UserName = "billing-test"; ctx.IsSystem = true;
         var result = await scope.ServiceProvider.GetRequiredService<BillingService>().RunCycleAsync(today);
         foreach (var id in tenantIds) app.Services.GetRequiredService<EntitlementCache>().Invalidate(id);
         return result;

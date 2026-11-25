@@ -83,10 +83,10 @@ public sealed class BankDirectoryService(PayrollDbContext db, ITenantContext ten
     public async Task<BankDirectoryBank?> FindBankAsync(string code, CancellationToken ct = default) =>
         Effective(await db.BankDirectoryBanks.Where(b => b.Code == code).ToListAsync(ct), b => b.Code).FirstOrDefault(b => b.IsActive);
 
-    /// <summary>Adds or renames a bank. Platform rows need a platform administrator; otherwise the row is the tenant's own.</summary>
+    /// <summary>Adds or renames a bank. Platform rows need platform configuration rights; otherwise the row is the tenant's own.</summary>
     public async Task<BankDirectoryBank> UpsertBankAsync(string code, string name, string? swiftCode, bool platform, CancellationToken ct = default)
     {
-        tenant.Require(Permissions.OrganisationManage);
+        if (!platform) tenant.Require(Permissions.OrganisationManage);
         code = code?.Trim() ?? "";
         if (code.Length is 0 or > 6 || !code.All(char.IsAsciiDigit)) throw new DomainException("Bank code should be 1–6 digits.", "VALIDATION");
         if (string.IsNullOrWhiteSpace(name)) throw new DomainException("Bank name is required.", "VALIDATION");
@@ -107,7 +107,7 @@ public sealed class BankDirectoryService(PayrollDbContext db, ITenantContext ten
     /// </summary>
     public async Task<BranchImportResult> ImportBranchesAsync(string csv, bool platform, CancellationToken ct = default)
     {
-        tenant.Require(Permissions.OrganisationManage);
+        if (!platform) tenant.Require(Permissions.OrganisationManage);
         var owner = Owner(platform);
         var banks = (await ListBanksAsync(ct)).Select(b => b.Code).ToHashSet();
         var existing = await db.BankDirectoryBranches.IgnoreQueryFilters().Where(b => b.TenantId == owner && !b.IsDeleted).ToDictionaryAsync(b => $"{b.BankCode}|{b.Code}", ct);
@@ -143,7 +143,7 @@ public sealed class BankDirectoryService(PayrollDbContext db, ITenantContext ten
     private Guid? Owner(bool platform)
     {
         if (!platform) return tenant.RequireTenant();
-        if (!tenant.IsPlatformAdministrator) throw new ForbiddenException("Only a platform administrator can change the shared bank directory.");
+        if (!tenant.Has(PlatformPermissions.ConfigManage)) throw new ForbiddenException("Only a platform administrator can change the shared bank directory.");
         return null;
     }
 

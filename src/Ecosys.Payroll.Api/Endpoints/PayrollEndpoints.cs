@@ -292,7 +292,7 @@ public static class PayrollEndpoints
             var a = await db.PayrollAdjustments.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(PayrollAdjustment), id);
             var settings = await db.LegalEntities.AsNoTracking().Where(e => e.Id == a.LegalEntityId).Select(e => e.Settings).FirstAsync(ct);
             var self = a.RequestedBy == ctx.UserId;
-            if (self && !ctx.IsPlatformAdministrator && !settings.AllowPreparerToApprove)
+            if (self && !ctx.IsSystem && !settings.AllowPreparerToApprove)
                 throw new ForbiddenException($"The requester cannot approve their own adjustment. {Ecosys.Payroll.Domain.Organisation.PayrollSettings.WhereToChange}");
             a.ApprovedBy = ctx.RequireUser();
             audit.Record(self ? "payroll.adjustment.self_approved" : "payroll.adjustment.approved", nameof(PayrollAdjustment), id, null, a.LegalEntityId);

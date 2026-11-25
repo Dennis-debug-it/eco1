@@ -187,7 +187,7 @@ public sealed class SeparationService(PayrollDbContext db, ITenantContext tenant
         var s = await LoadAsync(id, ct);
         if (s.Status != SeparationStatus.DuesCalculated || s.Dues is null) throw new InvalidStateException("Calculate final dues before approval.");
         var self = s.InitiatedBy == tenant.UserId;
-        if (self && !tenant.IsPlatformAdministrator && !await OnePersonPayrollAsync(s.LegalEntityId, ct))
+        if (self && !tenant.IsSystem && !await OnePersonPayrollAsync(s.LegalEntityId, ct))
             throw new ForbiddenException($"The person who initiated the exit cannot approve the final dues (separation of duties). {Domain.Organisation.PayrollSettings.WhereToChange}");
         if (self) audit.Record("separation.dues.self_approved", nameof(Separation), s.Id, null, s.LegalEntityId);
         // Recalculate at approval so the frozen figures reflect the latest balances.

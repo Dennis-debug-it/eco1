@@ -39,6 +39,7 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - `SaveChangesAsync` stamps inserts and rejects cross-tenant legal-entity references
   - validate other foreign IDs from request bodies against the caller's legal entity (see `EmployeeEndpoints.ValidateReferencesAsync`)
 - **Authorisation** goes in the service or endpoint via `ITenantContext.Require(Permissions.X)`. Keep salary data behind `salary.read`.
+  - Only `IsSystem` (seeders, provisioning, background jobs) passes every check and skips separation of duties. No role does, not even `PlatformAdministrator`.
 - **Daily pay.** Set a salary's basis through `PayBasisRules.Apply`, never by hand. For a daily-paid worker, `BasicSalary` holds the monthly equivalent (daily rate × standard working days) so monthly consumers keep working; the run pays `DailyRate` × days worked from attendance, never `BasicSalary`.
 - **Approved runs are immutable.** Call `PayrollRun.EnsureEditable()` before any change. Use adjustments or reversal for corrections.
 - **Sensitive fields** use `FieldEncryptor` converters. Mask them (`FieldEncryptor.Mask`) in logs, audit details and read-only views.
@@ -54,6 +55,8 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - Cross-tenant billing work belongs in `BillingService` (tenant filter off). Write its audit rows to the customer's tenant.
   - Call `EntitlementCache.Invalidate` after changing a subscription in a request.
   - The operator console (`/api/platform`) never returns employee or payroll data.
+  - Operator roles (`Roles.Platform`: administrator, operations, finance) hold only `PlatformPermissions`, and only when signed in to the `platform` organisation. Give every `/api/platform` endpoint `.Need(PlatformPermissions.X)`, and leave money (revenue, balances, invoices) out of responses for callers without `platform.billing.read`.
+  - Operator accounts are managed only under `/api/platform/operators`. Tenant user administration refuses operator roles.
 - **Payslips** carry balances captured at issue (`Payslip.NssfContributionsToDate`, `LeaveBalances`, from `PayslipFacts`) so reprints match. Never show the employer's total cost or medical premiums to employees.
 - **Dependants and beneficiaries** change only through `DependantService`: documents, then verify, then approve by a different person. Only approved records count (medical cover, death-in-service dues).
 - **Offer letters** go through `OfferLetterService`. They state the salary: drafting and sending need `salary.write`, reading needs `salary.read`, and emails to the candidate carry the link but never the figures. A sent letter is frozen; changing the offer needs the letter withdrawn.

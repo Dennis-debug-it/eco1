@@ -36,7 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const adopt = useCallback((token: string, u: Me) => { tokenStore.set(token); setUser(u) }, [])
 
   const logout = useCallback(() => { tokenStore.clear(); setUser(null) }, [])
-  const can = useCallback((p: string) => !!user && (user.roles.includes('PlatformAdministrator') || user.permissions.includes(p)), [user])
+  // Operators hold only platform.* permissions; nobody is granted everything by role.
+  const can = useCallback((p: string) => !!user && user.permissions.includes(p), [user])
 
   const value = useMemo(() => ({ user, loading, login, adopt, logout, can }), [user, loading, login, adopt, logout, can])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -56,4 +57,14 @@ export const P = {
   HrPerformance: 'hr.performance', HrLearning: 'hr.learning', HrRecruitment: 'hr.recruitment', HrCases: 'hr.cases', HrDocuments: 'hr.documents',
   HrAssets: 'hr.assets', HrBenefits: 'hr.benefits', HrSeparations: 'hr.separations', ExpensesFinance: 'expenses.finance', BillingManage: 'billing.manage',
   IntegrationsManage: 'integrations.manage',
+} as const
+
+/** Operator roles. They carry only the platform permissions below, never a tenant permission. */
+export const OperatorRoles: readonly string[] = ['PlatformAdministrator', 'PlatformOperations', 'PlatformFinance']
+
+/** Operator console permissions (see PlatformPermissions on the server, which enforces them). */
+export const PP = {
+  TenantsRead: 'platform.tenants.read', TenantsManage: 'platform.tenants.manage', BillingRead: 'platform.billing.read', BillingManage: 'platform.billing.manage',
+  PlansManage: 'platform.plans.manage', OperatorsManage: 'platform.operators.manage', ConfigManage: 'platform.config.manage', MonitorRead: 'platform.monitor.read',
+  AuditRead: 'platform.audit.read',
 } as const

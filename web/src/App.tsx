@@ -1,7 +1,7 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './lib/api'
-import { P, useAuth } from './lib/auth'
+import { OperatorRoles, P, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
 import MfaEnrol from './components/MfaEnrol'
@@ -76,9 +76,9 @@ export default function App() {
     : <MfaEnrol gate />
 
   const employeeOnly = user.roles.length === 1 && user.roles[0] === 'Employee'
-  const platform = user.roles.includes('PlatformAdministrator')
+  const platform = user.roles.some(r => OperatorRoles.includes(r))
   // The operator's own organisation holds no payroll: show only the console and personal settings.
-  const operatorOnly = platform && user.roles.length === 1
+  const operatorOnly = platform && user.roles.every(r => OperatorRoles.includes(r))
   const b = billing.data
   const hrSuite = !b || b.managed || b.features.includes(Feature.HrSuite)
   const manager = (hrMe.data?.directReports ?? 0) > 0

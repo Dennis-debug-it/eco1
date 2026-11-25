@@ -62,6 +62,14 @@ public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext te
 
     public const string DemoOperatorEmail = "ops@platform.ecosys";
 
+    /// <summary>One demo operator per role, so each console view can be tried.</summary>
+    public static readonly (string Email, string Name, string Role)[] DemoOperators =
+    [
+        (DemoOperatorEmail, "Demo Operator", Roles.PlatformAdministrator),
+        ("support@platform.ecosys", "Demo Operations Officer", Roles.PlatformOperations),
+        ("finance@platform.ecosys", "Demo Finance Officer", Roles.PlatformFinance),
+    ];
+
     /// <summary>
     /// Development only: an operator account (organisation code <c>platform</c>) with the demo password, so the operator
     /// console can be reached without running <c>create-platform-admin</c>. Idempotent; adds the account to an existing
@@ -73,12 +81,17 @@ public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext te
         try
         {
             var t = await db.Tenants.FirstOrDefaultAsync(x => x.Slug == PlatformAdminProvisioner.PlatformSlug, ct);
-            if (t is not null && await db.Users.AnyAsync(u => u.TenantId == t.Id && u.Email == DemoOperatorEmail, ct)) return false;
             if (t is null) { t = new Tenant { Name = "Platform operations", Slug = PlatformAdminProvisioner.PlatformSlug }; db.Tenants.Add(t); }
-            tenant.TenantId = t.Id; tenant.UserName = "seed"; tenant.IsPlatformAdministrator = true;
-            db.Users.Add(new User { TenantId = t.Id, Email = DemoOperatorEmail, DisplayName = "Demo Operator", PasswordHash = PasswordHasher.Hash(DemoPassword), Roles = [Roles.PlatformAdministrator] });
+            tenant.TenantId = t.Id; tenant.UserName = "seed"; tenant.IsSystem = true;
+            var existing = await db.Users.Where(u => u.TenantId == t.Id).Select(u => u.Email).ToListAsync(ct);
+            var added = false;
+            foreach (var (email, name, role) in DemoOperators.Where(o => !existing.Contains(o.Email)))
+            {
+                db.Users.Add(new User { TenantId = t.Id, Email = email, DisplayName = name, PasswordHash = PasswordHasher.Hash(DemoPassword), Roles = [role] });
+                added = true;
+            }
             await db.SaveChangesAsync(ct);
-            return true;
+            return added;
         }
         finally { db.IgnoreTenantFilter = false; }
     }
@@ -92,7 +105,7 @@ public sealed partial class DemoDataSeeder(PayrollDbContext db, TenantContext te
         db.Tenants.Add(t);
         tenant.TenantId = t.Id;
         tenant.UserName = "seed";
-        tenant.IsPlatformAdministrator = true;
+        tenant.IsSystem = true;
 
         var le = new LegalEntity
         {

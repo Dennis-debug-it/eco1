@@ -34,7 +34,7 @@ public sealed class HrAccess(PayrollDbContext db, ITenantContext tenant)
     /// <summary>Line manager or the given HR permission (not self).</summary>
     public async Task RequireManagerOrAsync(Guid employeeId, string permission, CancellationToken ct = default)
     {
-        if (IsSelf(employeeId) && !tenant.IsPlatformAdministrator) throw new ForbiddenException("You cannot approve or assess your own record.");
+        if (IsSelf(employeeId) && !tenant.IsSystem) throw new ForbiddenException("You cannot approve or assess your own record.");
         if (tenant.Has(permission) || await IsLineManagerOfAsync(employeeId, ct)) return;
         throw new ForbiddenException("Only the employee's line manager or HR can do this.");
     }
