@@ -77,7 +77,7 @@ export default function PayrollRunDetailPage() {
       {tab === 'summary' && (
         <div className="grid c2">
           <div className="card"><h2>Statutory summary</h2>
-            <table><thead><tr><th>Item</th><th className="num">Employee</th><th className="num">Employer</th><th className="num">Total</th></tr></thead><tbody>
+            <table className="wrap-first"><thead><tr><th>Item</th><th className="num">Employee</th><th className="num">Employer</th><th className="num">Total</th></tr></thead><tbody>
               <Row n="PAYE" a={r.totalPaye} /><Row n="NSSF" a={r.totalNssfEmployee} b={r.totalNssfEmployer} /><Row n="SHIF" a={r.totalShif} /><Row n="Affordable Housing Levy" a={r.totalHousingLevyEmployee} b={r.totalHousingLevyEmployer} /><Row n="NITA" b={r.totalNita} />
               <Row n="Other deductions" a={r.totalOtherDeductions} /></tbody>
               <tfoot><tr><td>Total employee deductions</td><td className="num">{fmt.num(r.totalEmployeeDeductions)}</td><td className="num">{fmt.num(r.totalEmployerContributions)}</td><td className="num">{fmt.num(r.totalEmployeeDeductions + r.totalEmployerContributions)}</td></tr></tfoot></table></div>
@@ -95,14 +95,8 @@ export default function PayrollRunDetailPage() {
 
       {tab === 'employees' && (
         <div className="card">
-          {!can(P.SalaryRead) ? <Empty>Salary visibility is restricted for your role.</Empty> : emps.isLoading ? <Loading /> : !emps.data?.length ? <Empty>Run has not been prepared yet.</Empty> : (
-            <div className="table-wrap"><table>
-              <thead><tr><th>No.</th><th>Employee</th><th>Department</th><th className="num">Basic</th><th className="num">Gross</th><th className="num">Taxable</th><th className="num">PAYE</th><th className="num">NSSF</th><th className="num">SHIF</th><th className="num">AHL</th><th className="num">Other</th><th className="num">Net</th><th className="num">Prev. net</th><th className="num">Employer cost</th><th /></tr></thead>
-              <tbody>{emps.data.map(e => <tr key={e.id} className="clickable" onClick={() => setDetail(e.employeeId)}>
-                <td className="mono">{e.employeeNumber}</td><td>{e.employeeName}</td><td>{e.department}</td><td className="num">{fmt.num(e.basicPay)}</td><td className="num">{fmt.num(e.grossPay)}</td><td className="num">{fmt.num(e.taxablePay)}</td><td className="num">{fmt.num(e.paye)}</td><td className="num">{fmt.num(e.nssf)}</td><td className="num">{fmt.num(e.shif)}</td><td className="num">{fmt.num(e.housingLevy)}</td><td className="num">{fmt.num(e.totalOtherDeductions)}</td><td className="num"><b>{fmt.num(e.netPay)}</b></td><td className="num muted">{fmt.num(e.previousNetPay)}</td><td className="num">{fmt.num(e.totalEmployerCost)}</td>
-                <td>{e.hasErrors ? <Badge status="Error">{e.issues.filter(i => i.severity === 'Error').length}</Badge> : e.issues.length > 0 ? <Badge status="Warning">{e.issues.length}</Badge> : null}</td></tr>)}</tbody>
-              <tfoot><tr><td colSpan={3}>Totals</td><td className="num">{fmt.num(emps.data.reduce((a, e) => a + e.basicPay, 0))}</td><td className="num">{fmt.num(r.totalGross)}</td><td className="num">{fmt.num(r.totalTaxable)}</td><td className="num">{fmt.num(r.totalPaye)}</td><td className="num">{fmt.num(r.totalNssfEmployee)}</td><td className="num">{fmt.num(r.totalShif)}</td><td className="num">{fmt.num(r.totalHousingLevyEmployee)}</td><td className="num">{fmt.num(r.totalOtherDeductions)}</td><td className="num">{fmt.num(r.totalNet)}</td><td /><td className="num">{fmt.num(r.totalEmployerCost)}</td><td /></tr></tfoot>
-            </table></div>)}
+          {!can(P.SalaryRead) ? <Empty>Salary visibility is restricted for your role.</Empty> : emps.isLoading ? <Loading /> : !emps.data?.length ? <Empty>Run has not been prepared yet.</Empty>
+            : <Register rows={emps.data} run={r} onOpen={setDetail} />}
         </div>
       )}
 
@@ -412,5 +406,58 @@ function NssfFiles({ runId, legalEntityId, periodEnd }: { runId: string; legalEn
         <div className="actions"><button className="btn" onClick={() => setCheck(null)}>Close</button></div>
       </Modal>}
     </div>
+  )
+}
+
+type RegisterColumn = { key: string; label: string; essential?: boolean; value: (e: RunEmployeeRow) => number | null | undefined; total?: number | null; strong?: boolean; muted?: boolean }
+const registerViewKey = 'ecosys.registerColumns'
+
+/**
+ * The payroll register. It scrolls inside its own box sized to the screen, so the sideways scrollbar is always in
+ * view; the header and totals stay put, and the employee column stays on the left while the figures scroll.
+ * "Key columns" keeps only what a reviewer checks first, so it fits a laptop or phone without scrolling.
+ */
+function Register({ rows, run, onOpen }: { rows: RunEmployeeRow[]; run: RunSummary['run']; onOpen: (employeeId: string) => void }) {
+  const [view, setView] = useState<'all' | 'key'>(() => {
+    try { const v = localStorage.getItem(registerViewKey); if (v === 'all' || v === 'key') return v } catch { /* storage unavailable */ }
+    return window.innerWidth < 1100 ? 'key' : 'all'
+  })
+  const choose = (v: 'all' | 'key') => { setView(v); try { localStorage.setItem(registerViewKey, v) } catch { /* storage unavailable */ } }
+  const allColumns: RegisterColumn[] = [
+    { key: 'basic', label: 'Basic', value: e => e.basicPay, total: rows.reduce((a, e) => a + e.basicPay, 0) },
+    { key: 'gross', label: 'Gross', essential: true, value: e => e.grossPay, total: run.totalGross },
+    { key: 'taxable', label: 'Taxable', value: e => e.taxablePay, total: run.totalTaxable },
+    { key: 'paye', label: 'PAYE', essential: true, value: e => e.paye, total: run.totalPaye },
+    { key: 'nssf', label: 'NSSF', essential: true, value: e => e.nssf, total: run.totalNssfEmployee },
+    { key: 'shif', label: 'SHIF', value: e => e.shif, total: run.totalShif },
+    { key: 'ahl', label: 'AHL', value: e => e.housingLevy, total: run.totalHousingLevyEmployee },
+    { key: 'other', label: 'Other', value: e => e.totalOtherDeductions, total: run.totalOtherDeductions },
+    { key: 'net', label: 'Net', essential: true, value: e => e.netPay, total: run.totalNet, strong: true },
+    { key: 'prev', label: 'Prev. net', value: e => e.previousNetPay, total: null, muted: true },
+    { key: 'cost', label: 'Employer cost', value: e => e.totalEmployerCost, total: run.totalEmployerCost },
+  ]
+  const columns = allColumns.filter(c => view === 'all' || c.essential)
+  const showDept = view === 'all'
+  return (
+    <>
+      <div className="toolbar" style={{ justifyContent: 'space-between' }}>
+        <div className="segmented" role="group" aria-label="Columns shown">
+          <button className={view === 'key' ? 'active' : ''} aria-pressed={view === 'key'} onClick={() => choose('key')}>Key columns</button>
+          <button className={view === 'all' ? 'active' : ''} aria-pressed={view === 'all'} onClick={() => choose('all')}>All columns</button>
+        </div>
+        <span className="small muted">{view === 'all' ? 'Scroll sideways for more columns. Click a row for the payslip breakdown.' : 'Click a row for the full breakdown.'}</span>
+      </div>
+      <div className="table-wrap register" tabIndex={0} aria-label="Payroll register">
+        <table>
+          <thead><tr><th className="pin">Employee</th>{showDept && <th>Department</th>}{columns.map(c => <th key={c.key} className="num">{c.label}</th>)}<th aria-label="Issues" /></tr></thead>
+          <tbody>{rows.map(e => <tr key={e.id} className="clickable" onClick={() => onOpen(e.employeeId)}>
+            <td className="pin"><span className="mono muted">{e.employeeNumber}</span> {e.employeeName}</td>
+            {showDept && <td>{e.department}</td>}
+            {columns.map(c => <td key={c.key} className={`num${c.muted ? ' muted' : ''}`}>{c.strong ? <b>{fmt.num(c.value(e))}</b> : fmt.num(c.value(e))}</td>)}
+            <td>{e.hasErrors ? <Badge status="Error">{e.issues.filter(i => i.severity === 'Error').length}</Badge> : e.issues.length > 0 ? <Badge status="Warning">{e.issues.length}</Badge> : null}</td></tr>)}</tbody>
+          <tfoot><tr><td className="pin">Totals ({rows.length})</td>{showDept && <td />}{columns.map(c => <td key={c.key} className="num">{c.total == null ? '' : fmt.num(c.total)}</td>)}<td /></tr></tfoot>
+        </table>
+      </div>
+    </>
   )
 }
