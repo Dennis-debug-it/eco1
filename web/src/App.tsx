@@ -37,11 +37,13 @@ import IntegrationsPage from './pages/Integrations'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
 import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordReset'
 import { useHrMe } from './lib/lookups'
+import { useAutoHideMenu } from './lib/menu'
 import { Feature, useBillingStatus, type BillingStatus } from './lib/billing'
 
 export default function App() {
   const { user, loading, logout, can } = useAuth()
   const location = useLocation()
+  const menu = useAutoHideMenu(location.pathname)
   const ready = !!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied)
   const hrMe = useHrMe(ready)
   const billing = useBillingStatus(ready)
@@ -110,8 +112,10 @@ export default function App() {
   ].filter(n => !operatorOnly || n.to === '/operator' || n.to === '/settings')
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
+    <div className={`shell${menu.docked ? '' : ' menu-hidden'}${menu.open ? ' menu-open' : ''}`}>
+      {!menu.docked && menu.wide && !menu.open && <div className="menu-edge" aria-hidden onMouseEnter={menu.edgeEnter} onMouseLeave={menu.edgeLeave} />}
+      {!menu.docked && menu.open && <div className="menu-backdrop" aria-hidden onClick={menu.close} onMouseEnter={() => { if (menu.byHover) menu.close() }} />}
+      <aside className="sidebar" id="main-menu" inert={!menu.docked && !menu.open} onMouseLeave={() => { if (menu.wide && !menu.docked) menu.close() }}>
         <div className="brand"><div className="logo" aria-hidden>E</div><div>Ecosys Payroll<small>{user.tenantName}</small></div></div>
         <nav className="nav" aria-label="Main">
           {nav.filter(n => n.show).map((n, i, arr) => (
@@ -124,10 +128,17 @@ export default function App() {
         <div className="user">
           <b>{user.displayName}</b>
           {user.roles.join(', ')}
-          <div style={{ marginTop: 8 }}><button className="btn sm" onClick={logout}>Sign out</button></div>
+          <div className="actions" style={{ marginTop: 8 }}>
+            <button className="btn sm" onClick={logout}>Sign out</button>
+            {menu.wide && <button className="btn sm" onClick={() => menu.setPinned(!menu.pinned)} title={menu.pinned ? 'Hide the menu until you point at the left edge or press ☰' : 'Show the menu all the time'}>{menu.pinned ? 'Auto-hide menu' : 'Keep menu open'}</button>}
+          </div>
         </div>
       </aside>
       <main className="main">
+        {!menu.docked && <header className="topbar">
+          <button className="menu-btn" aria-label="Menu" aria-expanded={menu.open} aria-controls="main-menu" onClick={menu.toggle}><span aria-hidden>☰</span></button>
+          <div className="brand"><div className="logo" aria-hidden>E</div><div>Ecosys Payroll<small>{user.tenantName}</small></div></div>
+        </header>}
         {b && <SubscriptionBanner status={b} admin={can(P.BillingManage)} />}
         {migration.data?.inMigration && <div className="alert info" role="status">Migration mode: payroll can be calculated and compared with the old system, but not approved, paid or filed until go-live is signed. <NavLink to="/migration">Data migration</NavLink></div>}
         <Routes>

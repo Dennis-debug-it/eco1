@@ -36,7 +36,7 @@ h1 { font-size: 20px; margin: 0; font-weight: 650; } h2 { font-size: 15px; margi
 .page-head .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 td.actions { display: table-cell; white-space: nowrap; } td.actions > * + * { margin-left: 6px; }
-@media (max-width: 900px) { .shell { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; } .sidebar .nav { display: flex; flex-wrap: wrap; gap: 2px 4px; } .sidebar .nav > div { display: contents; } .sidebar .nav .section { flex-basis: 100%; } .sidebar .user { margin: 0; border: 0; } .main { padding: 16px; min-width: 0; } .card { overflow-x: auto; } }
+@media (max-width: 900px) { .main { padding: 12px 16px 32px; } }
 
 /* Cards */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
@@ -83,7 +83,7 @@ label.field.inline { display: flex; align-items: center; gap: 8px; } label.field
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; } .kv dt { color: var(--muted); } .kv dd { margin: 0; font-weight: 500; }
 .steps { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0 16px; } .steps span { padding: 4px 10px; border-radius: 999px; font-size: 12px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
 .steps span.done { background: var(--ok-soft); color: var(--ok); border-color: transparent; } .steps span.current { background: var(--primary); color: var(--primary-contrast); border-color: transparent; font-weight: 600; }
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; overflow-x: auto; scrollbar-width: thin; } .tabs button { flex: none; white-space: nowrap; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; } .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 14px; } .tabs button { flex: none; white-space: nowrap; background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; } .tabs button.active { color: var(--primary); border-bottom-color: var(--primary); }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: grid; place-items: center; z-index: 50; padding: 16px; }
 .modal { background: var(--surface); border-radius: 10px; width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 20px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
 .modal h2 { margin-bottom: 14px; }
@@ -178,3 +178,33 @@ a.org-name:hover { color: var(--primary); }
 .checklist li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
 .checklist .tick { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--warn-soft); color: var(--warn); }
 .checklist li.done .tick { background: var(--ok-soft); color: var(--ok); }
+
+/* Wide tables scroll inside their card at every screen size, instead of being cut off. */
+.card { overflow-x: auto; }
+/* Payroll register: scrolls inside a box that fits the screen, so both scrollbars stay in view; header, totals and the employee column stay put. */
+.register { max-height: calc(100vh - 150px); min-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.register:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.register thead th { position: sticky; top: 0; z-index: 2; }
+.register tfoot td { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -1px 0 var(--border); }
+.register .pin { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--border); }
+.register thead .pin, .register tfoot .pin { z-index: 3; background: var(--surface-2); }
+.register tr.clickable:hover td.pin { background: var(--surface-2); }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.segmented button { background: var(--surface); border: 0; padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.segmented button + button { border-left: 1px solid var(--border); }
+.segmented button.active { background: var(--primary-soft); color: var(--primary); }
+.wrap-first td:first-child, .wrap-first th:first-child { white-space: normal; }
+@media (max-width: 600px) { .register .pin { white-space: normal; min-width: 110px; max-width: 130px; } .register td.pin .mono { display: block; font-size: 11px; } }
+
+/* Auto-hiding main menu: off to the left until the pointer rests at the edge or ☰ is pressed. */
+.shell.menu-hidden { grid-template-columns: 1fr; }
+.shell.menu-hidden .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 260px; max-width: 85vw; height: 100vh; z-index: 40; transform: translateX(-105%); transition: transform .18s ease; }
+.shell.menu-open .sidebar { transform: none; box-shadow: 4px 0 24px rgba(0, 0, 0, .18); }
+.menu-edge { position: fixed; top: 0; left: 0; bottom: 0; width: 10px; z-index: 30; }
+.menu-backdrop { position: fixed; inset: 0; background: rgba(15, 20, 25, .35); z-index: 35; }
+.topbar { display: flex; align-items: center; gap: 10px; margin: -6px 0 12px; }
+.topbar .brand { padding: 0; font-size: 14px; }
+.menu-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 18px; line-height: 1; cursor: pointer; }
+.menu-btn:hover { background: var(--surface-2); }
+@media (prefers-reduced-motion: reduce) { .shell.menu-hidden .sidebar { transition: none; } }
+@media print { .topbar, .menu-edge, .menu-backdrop { display: none !important; } }
