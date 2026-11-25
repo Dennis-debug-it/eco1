@@ -11,3 +11,7 @@ appsettings.*.local.json
 tsconfig.tsbuildinfo
 src/Ecosys.Payroll.Api/wwwroot/
 backups/
+
+# Build output written with Windows-style paths (a literal backslash in the folder name) by some tools on Linux.
+bin\\*
+obj\\*
