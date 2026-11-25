@@ -283,6 +283,9 @@ public sealed class PerformanceService(PayrollDbContext db, ITenantContext tenan
                 var next = new EmployeeSalaryAssignment
                 {
                     LegalEntityId = cr.LegalEntityId, EmployeeId = line.EmployeeId, SalaryStructureId = cur?.SalaryStructureId, BasicSalary = line.NewBasic,
+                    // A daily-paid worker's raise applies to the daily rate, in the same proportion as the monthly equivalent.
+                    PayBasis = cur?.PayBasis ?? PayBasis.Monthly,
+                    DailyRate = cur is { PayBasis: PayBasis.Daily, DailyRate: { } dr } && line.CurrentBasic > 0 ? Math.Round(dr * line.NewBasic / line.CurrentBasic, 2, MidpointRounding.AwayFromZero) : null,
                     EffectiveFrom = cr.EffectiveDate, ChangeReason = $"{cr.Name}: rating {line.Rating}, +{line.IncreasePercent:0.##}%", ApprovedBy = tenant.UserId,
                 };
                 foreach (var l in cur?.Lines ?? []) next.Lines.Add(new EmployeeSalaryAssignmentLine { TenantId = cr.TenantId, EmployeeSalaryAssignmentId = next.Id, SalaryComponentId = l.SalaryComponentId, Method = l.Method, Amount = l.Amount, Rate = l.Rate });

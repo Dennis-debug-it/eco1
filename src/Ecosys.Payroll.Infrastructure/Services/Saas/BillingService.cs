@@ -215,11 +215,14 @@ public sealed class BillingService(PayrollDbContext db, ITenantContext tenant, S
     {
         var sub = await RequireAsync(tenantId, ct);
         if (until <= today) throw new DomainException("Choose a date after today.", "VALIDATION");
-        if (sub.Status is not (SubscriptionStatus.Trialing or SubscriptionStatus.Suspended) || sub.Status == SubscriptionStatus.Suspended && sub.SuspensionReason != Subscription.TrialEndedReason)
-            throw new InvalidStateException("Only a trial, or an account suspended because its trial ended, can be extended.");
+        // A trial, or an account made read-only during its trial (trial ended, suspended by the operator, cancelled).
+        if (!sub.InTrialStage || sub.Status is not (SubscriptionStatus.Trialing or SubscriptionStatus.Suspended or SubscriptionStatus.Cancelled))
+            throw new InvalidStateException("Only an account that is still in its free trial, or was made read-only during it, can have its trial extended.");
         var before = sub.TrialEndsOn;
-        sub.Status = SubscriptionStatus.Trialing; sub.TrialEndsOn = until; sub.SuspendedAt = null; sub.SuspensionReason = null;
-        Audit(tenantId, "billing.trial.extended", sub.Id, new { before, until });
+        var status = sub.Status;
+        sub.Status = SubscriptionStatus.Trialing; sub.TrialEndsOn = until;
+        sub.SuspendedAt = null; sub.SuspensionReason = null; sub.CancelledAt = null; sub.CancellationReason = null; sub.CancelAtPeriodEnd = false;
+        Audit(tenantId, "billing.trial.extended", sub.Id, new { before, until, from = status.ToString() });
         await db.SaveChangesAsync(ct);
         return sub;
     }
@@ -241,10 +244,20 @@ public sealed class BillingService(PayrollDbContext db, ITenantContext tenant, S
         var sub = await RequireAsync(tenantId, ct);
         if (!sub.IsReadOnly && sub.Status != SubscriptionStatus.PastDue) throw new InvalidStateException("The account is already active.");
         var before = sub.Status;
+        if (sub.InTrialStage && sub.IsReadOnly)
+        {
+            // Back to the trial it was on, with the same end date. Billing starts only when that trial converts as usual.
+            if (sub.TrialEndsOn < today)
+                throw new InvalidStateException($"The free trial ended on {sub.TrialEndsOn:d MMM yyyy}, so there is no trial to return to. Use Extend trial to give it a new end date.");
+            sub.Status = SubscriptionStatus.Trialing; sub.SuspendedAt = null; sub.SuspensionReason = null; sub.CancelledAt = null; sub.CancellationReason = null; sub.CancelAtPeriodEnd = false;
+            Audit(tenantId, "billing.reactivated", sub.Id, new { before = before.ToString(), after = sub.Status.ToString(), sub.TrialEndsOn });
+            await db.SaveChangesAsync(ct);
+            return sub;
+        }
         sub.Status = SubscriptionStatus.Active; sub.SuspendedAt = null; sub.SuspensionReason = null; sub.CancelledAt = null; sub.CancelAtPeriodEnd = false;
         sub.ActivatedAt ??= DateTimeOffset.UtcNow;
         if (sub.CurrentPeriodEnd is null || sub.CurrentPeriodEnd < today) { sub.CurrentPeriodStart = today; sub.CurrentPeriodEnd = today.AddMonths(1).AddDays(-1); }
-        Audit(tenantId, "billing.reactivated", sub.Id, new { before = before.ToString() });
+        Audit(tenantId, "billing.reactivated", sub.Id, new { before = before.ToString(), after = sub.Status.ToString() });
         await db.SaveChangesAsync(ct);
         return sub;
     }

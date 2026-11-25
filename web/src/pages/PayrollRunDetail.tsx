@@ -6,6 +6,7 @@ import { P, useAuth } from '../lib/auth'
 import { useComponents, usePayingAccounts } from '../lib/lookups'
 import type { Journal, Payment, RunEmployeeDetail, RunEmployeeRow, RunStatus, RunSummary } from '../lib/types'
 import { Badge, Empty, ErrorBox, Field, Loading, Modal, PageHead, ReasonDialog, Tabs } from '../components/ui'
+import JournalExport from '../components/JournalExport'
 
 const flow: RunStatus[] = ['Draft', 'Prepared', 'Calculated', 'UnderReview', 'Approved', 'PaymentProcessing', 'Paid', 'Finalised']
 type Tab = 'summary' | 'employees' | 'exceptions' | 'inputs' | 'attendance' | 'payments' | 'journal' | 'parallel' | 'history'
@@ -82,6 +83,7 @@ export default function PayrollRunDetailPage() {
               <tfoot><tr><td>Total employee deductions</td><td className="num">{fmt.num(r.totalEmployeeDeductions)}</td><td className="num">{fmt.num(r.totalEmployerContributions)}</td><td className="num">{fmt.num(r.totalEmployeeDeductions + r.totalEmployerContributions)}</td></tr></tfoot></table></div>
           <div className="card"><h2>Run details</h2>
             <dl className="kv"><dt>Period</dt><dd>{fmt.date(s.periodStart)} – {fmt.date(s.periodEnd)}</dd><dt>Pay date</dt><dd>{fmt.date(s.payDate)}</dd><dt>Prepared by</dt><dd>{s.preparedByName ?? '—'}</dd><dt>Calculated</dt><dd>{fmt.dateTime(r.calculatedAt)}</dd><dt>Approved by</dt><dd>{s.approvedByName ?? '—'} {r.approvedAt && <span className="muted">({fmt.dateTime(r.approvedAt)})</span>}</dd><dt>Finalised</dt><dd>{fmt.dateTime(r.finalisedAt)}</dd><dt>Taxable pay</dt><dd className="mono">{fmt.num(r.totalTaxable)}</dd><dt>Notes</dt><dd>{r.notes ?? '—'}</dd></dl>
+            {['Approved', 'PaymentProcessing', 'Paid', 'Finalised'].includes(r.status) && can(P.SalaryRead) && <NssfFiles runId={id!} legalEntityId={r.legalEntityId} periodEnd={s.periodEnd} />}
             {r.status === 'Finalised' && <div className="actions" style={{ marginTop: 12 }}>
               <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=xlsx`)}>Payroll register (Excel)</button>
               <button className="btn sm" onClick={() => api.download(`/api/payroll/reports/payroll-register?runId=${id}&format=pdf`)}>Register (PDF)</button>
@@ -209,7 +211,10 @@ function Attendance({ runId, editable, employees, onChange }: { runId: string; e
   const [err, setErr] = useState<unknown>(null)
   const [msg, setMsg] = useState('')
   const done = (n: number) => { setMsg(`${n} row(s) saved. Recalculate to apply.`); qc.invalidateQueries({ queryKey: ['attendance', runId] }); onChange() }
-  const save = useMutation({ mutationFn: () => api.put<{ saved: number }>(`/api/payroll/runs/${runId}/attendance`, [{ ...f, employeeNumber: f.employeeNumber || employees[0]?.employeeNumber }]), onSuccess: r => done(r.saved), onError: setErr, onMutate: () => setErr(null) })
+  // A daily-paid worker entered as 0 days drops out of the run but keeps an attendance row: keep them pickable to correct it.
+  const people = [...employees.map(e => ({ employeeId: e.employeeId, employeeNumber: e.employeeNumber, employeeName: e.employeeName })),
+    ...(q.data ?? []).filter(a => !employees.some(e => e.employeeId === a.employeeId)).map(a => ({ employeeId: a.employeeId, employeeNumber: a.employeeNumber, employeeName: a.employeeName }))]
+  const save = useMutation({ mutationFn: () => api.put<{ saved: number }>(`/api/payroll/runs/${runId}/attendance`, [{ ...f, employeeNumber: f.employeeNumber || people[0]?.employeeNumber }]), onSuccess: r => done(r.saved), onError: setErr, onMutate: () => setErr(null) })
   const upload = async (file: File) => {
     setErr(null); setMsg('')
     try {
@@ -223,12 +228,13 @@ function Attendance({ runId, editable, employees, onChange }: { runId: string; e
   return (
     <div className="card">
       <h2>Attendance</h2>
+      <p className="small"><b>Daily-paid workers are paid from Days worked.</b> Each needs a row for every run; enter 0 for anyone who didn't work, and they're left out of the run.</p>
       <p className="muted small">Absent days are deducted at the daily rate of basic pay; overtime is paid at the hourly rate × the legal entity's multipliers. Import a CSV from your time or biometric system with columns <span className="mono">EmployeeNumber, DaysWorked, AbsentDays, OvertimeHours, RestDayOvertimeHours, Note</span>.</p>
       <ErrorBox error={err} />{msg && <div className="alert ok">{msg}</div>}
       {editable && <>
         <div className="toolbar"><label className="btn">Import CSV<input type="file" accept=".csv,text/csv" className="sr-only" onChange={e => { const file = e.target.files?.[0]; if (file) upload(file); e.target.value = '' }} /></label></div>
-        {employees.length > 0 && <div className="toolbar">
-          <select value={f.employeeNumber || employees[0]?.employeeNumber} onChange={e => setF({ ...f, employeeNumber: e.target.value })} aria-label="Employee">{employees.map(e => <option key={e.employeeId} value={e.employeeNumber}>{e.employeeNumber} {e.employeeName}</option>)}</select>
+        {people.length > 0 && <div className="toolbar">
+          <select value={f.employeeNumber || people[0]?.employeeNumber} onChange={e => setF({ ...f, employeeNumber: e.target.value })} aria-label="Employee">{people.map(e => <option key={e.employeeId} value={e.employeeNumber}>{e.employeeNumber} {e.employeeName}</option>)}</select>
           <span className="small muted">Days</span>{num('daysWorked', 'Days worked', 64)}<span className="small muted">Absent</span>{num('absentDays', 'Absent days', 64)}<span className="small muted">OT h</span>{num('overtimeHours', 'Overtime hours', 64)}<span className="small muted">Rest-day OT h</span>{num('restDayOvertimeHours', 'Rest day overtime hours', 64)}
           <input placeholder="Note" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} aria-label="Note" />
           <button className="btn primary" onClick={() => save.mutate()} disabled={save.isPending}>Save</button>
@@ -262,7 +268,8 @@ function JournalView({ runId, has }: { runId: string; has: boolean }) {
   if (!can(P.JournalsRead)) return <div className="card"><Empty>Journals are visible to finance roles.</Empty></div>
   if (!has) return <div className="card"><Empty>The accounting journal is generated when the run is finalised.</Empty></div>
   if (q.isLoading) return <Loading />
-  return <>{q.data?.map(j => (
+  return <><div className="card"><h2>Export to your accounting system</h2><p className="small muted">An import file for QuickBooks or Sage with this run's journals. Account codes are written as mapped under Organisation, GL account mapping.</p><JournalExport query={`runId=${runId}`} /></div>
+    {q.data?.map(j => (
     <div className="card" key={j.id}><h2>{j.reference} <Badge status={j.status} /> <span className="muted small">posted {fmt.date(j.postingDate)}{j.reversalOfJournalId && ' · reversal'}</span></h2>
       <table><thead><tr><th>#</th><th>Account</th><th>Description</th><th>Cost centre</th><th className="num">Debit</th><th className="num">Credit</th></tr></thead>
         <tbody>{j.lines.map(l => <tr key={l.sequence}><td className="muted">{l.sequence}</td><td className="mono">{l.accountCode}</td><td>{l.description}</td><td>{l.costCentre}</td><td className="num">{l.debit ? fmt.num(l.debit) : ''}</td><td className="num">{l.credit ? fmt.num(l.credit) : ''}</td></tr>)}</tbody>
@@ -359,6 +366,51 @@ function ParallelRun({ runId }: { runId: string }) {
             <td>{i === 0 && <Badge status={r.status === 'Matched' ? 'Active' : r.status === 'Different' ? 'Error' : 'Warning'}>{r.status === 'OnlyInEcosys' ? 'Only in Ecosys' : r.status === 'OnlyInLegacy' ? 'Only in outgoing' : r.status}</Badge>}</td>
             <td>{d ? fieldLabel[d.field] : ''}</td><td className="num">{d ? fmt.num(d.ecosys) : ''}</td><td className="num">{d ? fmt.num(d.legacy) : ''}</td><td className="num" style={{ color: 'var(--danger)' }}>{d ? fmt.num(d.difference) : ''}</td></tr>))}</tbody></table></div>}
       </>}
+    </div>
+  )
+}
+
+type FilingProblem = { employeeNumber: string; employeeName: string; message: string }
+type FilingCheck = { ready: boolean; problems: FilingProblem[]; warnings: string[]; summary: string }
+type NssfCheck = { runReference: string; period: string; members: number; pensionable: number; member: number; employer: number; ready: boolean; problems: FilingProblem[]; warnings: string[] }
+type P10Check = { company: string; period: string; runs: number; employees: number; taxablePay: number; paye: number; ready: boolean; problems: FilingProblem[]; warnings: string[] }
+
+/**
+ * Filing files for this run, each checked first: problems are listed instead of a file that the portal would reject.
+ * NSSF files cover this run; the P10 covers the whole month for this company (every approved run ending in it).
+ */
+function NssfFiles({ runId, legalEntityId, periodEnd }: { runId: string; legalEntityId: string; periodEnd: string }) {
+  const [check, setCheck] = useState<{ title: string; c: FilingCheck } | null>(null)
+  const [err, setErr] = useState<unknown>(null)
+  const [year, month] = [Number(periodEnd.slice(0, 4)), Number(periodEnd.slice(5, 7))]
+  const run = async (checkUrl: string, fileUrl: string, describe: (raw: never) => FilingCheck, title: string) => {
+    setErr(null)
+    try {
+      const c = describe(await api.get<never>(checkUrl))
+      if (!c.ready || c.warnings.length > 0) setCheck({ title: c.ready ? `${title} downloaded` : 'Fix these before filing', c })
+      if (c.ready) await api.download(fileUrl)
+    } catch (e) { setErr(e) }
+  }
+  const nssf = (layout: 'portal' | 'returns') => run(`/api/payroll/reports/nssf-file/check?runId=${runId}`, `/api/payroll/reports/nssf-file?runId=${runId}&layout=${layout}`,
+    (n: NssfCheck) => ({ ...n, summary: `${n.period} · ${n.members} members · member ${fmt.money(n.member)} · employer ${fmt.money(n.employer)}` }), 'NSSF file')
+  const p10 = () => run(`/api/payroll/reports/p10/check?legalEntityId=${legalEntityId}&year=${year}&month=${month}`, `/api/payroll/reports/p10?legalEntityId=${legalEntityId}&year=${year}&month=${month}`,
+    (p: P10Check) => ({ ...p, summary: `${p.company} · ${p.period} · ${p.runs} run(s) · ${p.employees} employees · taxable pay ${fmt.money(p.taxablePay)} · PAYE ${fmt.money(p.paye)}` }), 'P10 return')
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="small muted" style={{ marginBottom: 6 }}>Filing files</div>
+      <div className="actions">
+        <button className="btn sm" onClick={p10} title="KRA monthly PAYE return for this company and month, across every approved run ending in it. Paste the rows into the P10 template's employee sheet and validate there">P10 PAYE return (month)</button>
+        <button className="btn sm" onClick={() => nssf('portal')} title="The employer portal's payroll template: one row per member with pay; the portal works out contributions">NSSF portal file</button>
+        <button className="btn sm" onClick={() => nssf('returns')} title="The returns file: header totals, then Tier I and Tier II rows per member">NSSF returns file</button>
+      </div>
+      <ErrorBox error={err} />
+      {check && <Modal title={check.title} onClose={() => setCheck(null)} width={720}>
+        <p className="small">{check.c.summary}</p>
+        {!check.c.ready && <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Problem</th></tr></thead>
+          <tbody>{check.c.problems.map((p, i) => <tr key={i}><td>{p.employeeNumber ? `${p.employeeNumber} ${p.employeeName}` : '—'}</td><td>{p.message}</td></tr>)}</tbody></table></div>}
+        {check.c.warnings.map((w, i) => <div key={i} className="alert warn">{w}</div>)}
+        <div className="actions"><button className="btn" onClick={() => setCheck(null)}>Close</button></div>
+      </Modal>}
     </div>
   )
 }

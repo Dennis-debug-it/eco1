@@ -7,6 +7,7 @@ using Ecosys.Payroll.Api.Infrastructure;
 using Ecosys.Payroll.Infrastructure;
 using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Seed;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -36,6 +37,8 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SessionValidator>();
 builder.Services.AddSingleton<EntitlementCache>();
+builder.Services.AddSingleton<ApiKeyCache>();
+builder.Services.AddPublicApiDocument();
 
 // Sign-in throttling per client address, on top of per-account lockout.
 builder.Services.AddRateLimiter(o =>
@@ -49,6 +52,8 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:LoginAttemptsPerMinute", 10), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     o.AddPolicy(OfferEndpoints.OfferRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Recruitment:OfferRequestsPerMinute", 30), Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    o.AddPolicy(PasswordResetEndpoints.RateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Auth:PasswordResetRequestsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
     o.AddPolicy(SignupEndpoints.SignupRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = builder.Configuration.GetValue("Saas:SignupAttemptsPerHour", 10), Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
     // Anyone can apply on the public careers page, so applications per network address are capped.
@@ -71,7 +76,11 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
 
 // Authentication: shared Ecosys identity (OIDC authority) in production; a local HS256 issuer for development/tests.
 var auth = builder.Configuration.GetSection("Auth");
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
+// Programs sign in with an API key instead; the selector sends each request to the right handler by the credential's shape.
+builder.Services.AddAuthentication(o => { o.DefaultScheme = ApiKeyAuthenticationHandler.SelectorScheme; o.DefaultChallengeScheme = ApiKeyAuthenticationHandler.SelectorScheme; })
+    .AddPolicyScheme(ApiKeyAuthenticationHandler.SelectorScheme, "API key or token", o => o.ForwardDefaultSelector = ApiKeyAuthenticationHandler.SelectScheme)
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null)
+    .AddJwtBearer(o =>
 {
     o.MapInboundClaims = false; // keep JWT claim names (sub, role, amr, tenant_id) exactly as issued
     if (auth["Mode"] == "Ecosys")
@@ -105,7 +114,9 @@ app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<TenantContextMiddleware>();
+app.UseMiddleware<ApiClientGateMiddleware>();
 app.UseMiddleware<SubscriptionGateMiddleware>();
+app.UseMiddleware<IdempotencyMiddleware>();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", product = "Ecosys Payroll", version = "1.0.0" })).AllowAnonymous();
@@ -126,6 +137,7 @@ app.MapGet("/health/ready", async (PayrollDbContext db, CancellationToken ct) =>
 
 var api = app.MapGroup("/api/payroll");
 api.MapAuth();
+api.MapMigration();
 api.MapOrganisation();
 api.MapBanking();
 api.MapCareers();
@@ -145,7 +157,9 @@ api.MapBilling();
 api.MapSignup();
 api.MapOffers();
 api.MapContracts();
+api.MapIntegrations();
 app.MapPlatform();
+app.MapPublicApi();
 
 // Static SPA (built React app copied into wwwroot in the container image).
 app.UseDefaultFiles();
@@ -166,6 +180,9 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogInformation("Seeded demo tenant '{Slug}'. Sign in with admin@demo.ecosys / {Password}", DemoDataSeeder.DemoTenantSlug, DemoDataSeeder.DemoPassword);
     if (app.Configuration.GetValue("Payroll:SeedDemoData", false))
         await scope.ServiceProvider.GetRequiredService<DemoDataSeeder>().EnsureDemoHrDataAsync();
+    // The operator console sees every customer's account, so its published-password account exists only on a developer machine.
+    if (app.Configuration.GetValue("Payroll:SeedDemoData", false) && app.Environment.IsDevelopment() && await seeder.SeedDemoOperatorAsync())
+        app.Logger.LogInformation("Seeded operator account. Sign in with organisation '{Slug}', {Email} / {Password}", PlatformAdminProvisioner.PlatformSlug, DemoDataSeeder.DemoOperatorEmail, DemoDataSeeder.DemoPassword);
 }
 
 // One-off command: create a customer organisation and its first administrator, then exit.

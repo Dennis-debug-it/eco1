@@ -272,6 +272,8 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
         ConfigureHr(b);
         ConfigureLeaveAndJournals(b);
         ConfigureBilling(b);
+        ConfigureMigration(b);
+        ConfigureIntegration(b);
 
         // ---- Identity ---------------------------------------------------------------------
         TenantEntity<User>(b, e =>
@@ -281,6 +283,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
             e.Property(x => x.LegalEntityIds).HasColumnType("jsonb");
             e.Property(x => x.MfaSecret).HasConversion(encryptor.Converter());
             e.HasIndex(x => x.EmailVerificationTokenHash);
+            e.HasIndex(x => x.PasswordResetTokenHash);
         });
     }
 

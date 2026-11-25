@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { Me } from '../lib/types'
-import { ErrorBox, Field } from './ui'
+import { ErrorBox, Field, PasswordInput } from './ui'
 
 /** Change your own password. As a gate it is shown after an administrator issued or reset the password. */
 export default function ChangePassword({ gate }: { gate?: boolean }) {
@@ -23,9 +23,9 @@ export default function ChangePassword({ gate }: { gate?: boolean }) {
       <ErrorBox error={m.error} />
       <form onSubmit={e => { e.preventDefault(); m.mutate() }}>
         <div className="form-grid">
-          <Field label={gate ? 'Temporary password' : 'Current password'}><input type="password" autoComplete="current-password" value={f.current} onChange={e => setF({ ...f, current: e.target.value })} /></Field>
-          <Field label="New password"><input type="password" autoComplete="new-password" value={f.next} onChange={e => setF({ ...f, next: e.target.value })} /></Field>
-          <Field label="Confirm new password"><input type="password" autoComplete="new-password" value={f.confirm} onChange={e => setF({ ...f, confirm: e.target.value })} /></Field>
+          <Field label={gate ? 'Temporary password' : 'Current password'}><PasswordInput autoComplete="current-password" value={f.current} onChange={e => setF({ ...f, current: e.target.value })} /></Field>
+          <Field label="New password"><PasswordInput autoComplete="new-password" value={f.next} onChange={e => setF({ ...f, next: e.target.value })} /></Field>
+          <Field label="Confirm new password"><PasswordInput autoComplete="new-password" value={f.confirm} onChange={e => setF({ ...f, confirm: e.target.value })} /></Field>
         </div>
         {mismatch && <p className="small" style={{ color: 'var(--danger)' }}>The new passwords don't match.</p>}
         <div className="actions">

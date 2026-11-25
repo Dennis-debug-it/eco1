@@ -22,6 +22,7 @@ that feed payroll directly.
 - [Statutory rules](#statutory-rules)
 - [HR modules](#hr-modules)
 - [SaaS mode](#saas-mode)
+- [Moving in from another payroll system](#moving-in-from-another-payroll-system)
 - [Security model](#security-model)
 - [API overview](#api-overview)
 - [Known limitations](#known-limitations)
@@ -48,11 +49,14 @@ Key decisions (PRD §19):
 | Money | `decimal` end to end, `numeric(18,4)` in PostgreSQL, per-rule rounding |
 | Statutory rules | Data, not code: effective-dated versions with approval workflow; every result line records the rule version that produced it, so historical payrolls reproduce exactly |
 | Pay frequency | Rules are monthly; weekly / semi-monthly periods scale every threshold (bands, reliefs, caps, LEL/UEL) |
+| Daily pay | A salary is monthly or a daily wage. Daily-paid workers earn the rate for the days worked entered in the run's attendance; a worker entered as 0 days is left out of that run. Their salary record keeps a monthly equivalent (rate x standard working days) for notice pay, final dues and reports |
 | Tenancy | Shared database, `tenant_id` on every row, EF global query filters, insert stamping, and a guard against cross-tenant foreign keys |
 | Workflow | Draft → Prepared → Calculated → Under review → Approved → Payment processing → Paid → Finalised (→ Reversed). Approved runs are immutable; corrections go through adjustments or reversal |
 | Controls | Maker-checker (preparer cannot approve), duplicate-run prevention, payment file reconciled to approved net, balanced journal enforced |
 | Sensitive data | AES-256-GCM on bank account numbers, KRA PINs, national IDs, MFA secrets and notification recipients; masked for readers without write access |
 | Auth | JWT. `Local` mode issues tokens itself (dev/standalone); `Ecosys` mode validates tokens from the shared Ecosys identity provider |
+| Accounting export | A run's journal, or a company's journals for a month, downloads as a QuickBooks Online journal CSV, a QuickBooks Desktop IIF, a Sage Pastel batch, a Sage Evolution journal CSV or a plain CSV. The file is checked first (balanced, every line has an account, account numbers valid for Pastel), and each journal remembers it was exported so importing twice is flagged |
+| Integrations API | Programs connect with API keys an administrator issues under Integrations: each key holds only the permissions and companies ticked, can't approve, finalise or reverse payroll, is stored as a hash and can be revoked at once. The published API (`/api/v1`, described at `/api/v1/openapi.json`) covers organisation, employees (with `updatedSince` sync), payroll runs, attendance, one-off pay items, leave, journals, an events feed and the audit log. Writes accept an `Idempotency-Key`; each key has its own requests-per-minute limit. Webhooks send signed (HMAC-SHA256) event notices to HTTPS addresses, retried for about eleven hours, never carrying pay figures |
 | Notifications | Transactional outbox + background dispatcher → Ecosys Notifications (email, WhatsApp). Messages never contain salary figures |
 
 ## Quick start
@@ -217,11 +221,26 @@ With `Saas:Enabled=true`, one installation serves many employers. It adds:
 
 Organisations without a subscription (licensed installs, contract customers) are *managed*: never billed or restricted. With SaaS mode off, the product behaves exactly as a single-employer install. Operating it is covered in [docs/operations.md §9](docs/operations.md#9-running-as-a-saas-many-customers).
 
-In Development, the sign-up confirmation link is written to the API log, and you can create an operator account with:
+"Start a free trial" on the sign-in page creates a new *customer* organisation, so it always leads to that customer's portal. The operator console needs a separate operator account in the `platform` organisation.
+
+In Development, the sign-up confirmation link is written to the API log, and the demo data includes an operator account: organisation `platform`, `ops@platform.ecosys`, password `Demo!2345` (the sign-in page shows it, with a button that fills it in). It is created only when the environment is Development. To create another operator account:
 
 ```bash
 dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-platform-admin --email ops@example.com --name "Ops"
 ```
+
+## Moving in from another payroll system
+
+**Administration → Data migration** takes an organisation off its old payroll. The steps are in [docs/operations.md §10](docs/operations.md#10-moving-a-customer-in-from-another-payroll-system).
+
+- **Migration mode.** Runs calculate and can be reconciled against the old system's register (each run's Parallel run tab), but nothing can be approved, paid, finalised or exported for filing. Signing go-live switches it off for good, with a checklist: employees loaded, bank accounts verified, two parallel runs fully reconciled. Signing also discards the parallel runs.
+- **Imports.** Three kinds, each CSV or .xlsx:
+  - **Employees:** records, statutory numbers, a bank or M-Pesa account, and pay. Fixed components such as HOUSE or SACCO are columns named after them.
+  - **Opening balances:** leave, loans and advances, NSSF before Ecosys.
+  - **Pay to date:** months of this tax year the old system paid. These count in P9s and the annual summary.
+
+  Headers are matched against the names Sage, QuickBooks, bureau files and spreadsheets use. Every row is checked first with the same rules as the screens, and nothing is saved unless the whole file is clean. Each import can be undone, newest first, until payroll uses it. Imported bank accounts arrive unverified.
+- **Export everything.** One zip holds a CSV per table, uploaded documents and payslip PDFs, for a rollback after go-live or a customer leaving. Credentials are never included.
 
 ## Security model
 
@@ -230,6 +249,7 @@ dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-plat
 - **Separation of duties.** The preparer or submitter of a run cannot review or approve it. When the legal entity requires review, a reviewer signs off first. With `MinimumApprovals` above one, that many different approvers must approve. Rule authors cannot approve their own rules, and adjustment requesters cannot approve their own adjustments. A small employer with a single payroll officer can choose **One person runs payroll** (Organisation → Legal entities → Edit → Approval workflow). That person can then approve their own runs, adjustments and exit final dues, and every self-approval is flagged in the audit log.
 - **TOTP MFA** for privileged roles. A password-only token for such a user can only reach `/auth/*` endpoints. Codes can't be replayed.
 - **Sign-in protection.** Five failures lock an account for 15 minutes, with an email to the user. Each address is rate-limited. Passwords are checked against a common-password list, and administrator-issued passwords must be changed at first sign-in.
+- **Forgot password.** "Forgot password?" on the sign-in page emails a link that works once, for one hour. The request answers the same whether or not the account exists. Without an organisation code, each account with that email gets a link naming its organisation. If the account has an authenticator app, the reset also needs a current code, so the email alone can't change the password; wrong codes count towards the sign-in lockout, and someone who has lost the authenticator asks an administrator. A reset ends every session. Any other password change makes an outstanding link useless. It needs email delivery; in Development the link is written to the API log. Not offered when `Auth:Mode=Ecosys` (reset the password at the identity provider).
 - **Session revocation.** A password change, deactivation, role change or "Sign out everywhere" ends existing sessions within 30 seconds, through a per-user security stamp.
 - **Production guard.** The app refuses to start outside Development with demo data, development keys, MFA off or a default database password.
 - **Data protection (Kenya DPA 2019).** Subject-access export, retention-based anonymisation, applicant purge and a breach register with the 72-hour deadline. See Administration → Data protection.
@@ -251,7 +271,7 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Employees | `GET/POST /employees`, `GET/PUT /employees/{id}`, `PUT /employees/{id}/statutory`, `POST /employees/{id}/{bank-accounts,salary,loans}` |
 | Compensation | `/compensation/components`, `/compensation/salary-structures` |
 | Statutory | `GET /statutory-rules`, `GET /statutory-rules/effective`, `POST /statutory-rules`, `POST /statutory-rules/{id}/{submit,approve,reject}`, `POST /statutory-rules/simulate` |
-| Payroll runs | `GET/POST /runs`, `POST /runs/{id}/{prepare,calculate,validate,submit,approve,reject,finalise,reverse}`, `GET /runs/{id}/employees[/{employeeId}]`, `/runs/{id}/variable-inputs`, `/runs/{id}/attendance[/import]`, `POST /runs/{id}/payment-file`, `GET /runs/{id}/payments`, `POST /runs/{id}/payments/confirm`, `GET /runs/{id}/journal` |
+| Payroll runs | `GET/POST /runs`, `POST /runs/{id}/{prepare,calculate,validate,submit,approve,reject,finalise,reverse}`, `GET /runs/{id}/employees[/{employeeId}]`, `/runs/{id}/variable-inputs`, `/runs/{id}/attendance[/import]`, `POST /runs/{id}/payment-file`, `GET /runs/{id}/payments`, `POST /runs/{id}/payments/confirm`, `GET /runs/{id}/journal`, `GET /accounting/journals/{check,export}?format=quickbooks-online\|quickbooks-desktop\|sage-pastel\|sage-evolution\|csv&runId=…` (or `legalEntityId&from&to`) |
 | Adjustments | `GET/POST /adjustments`, `POST /adjustments/{id}/approve` |
 | Self-service | `GET /employees/{id}/payslips`, `GET /payslips/{id}[/pdf]`, `GET /hr/me` |
 | Leave | `/leave/{types,balances,requests,days,calendar,holidays,liability}`, `POST /leave/requests/{id}/{approve,reject,cancel,attachment}`, `POST /leave/holidays/generate`, `POST /leave/liability/post` |
@@ -263,6 +283,8 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 | Sign-up (SaaS) | `GET /signup/options`, `GET /signup/slug`, `POST /signup`, `POST /signup/verify`, `POST /signup/resend` |
 | Billing (SaaS) | `GET /billing/status`, `GET /billing`, `POST /billing/{activate,plan,cancel,resume}`, `GET /billing/invoices/{id}/pdf` |
 | Operator (`/api/platform`) | `GET /overview`, `GET/POST /tenants`, `GET /tenants/{id}`, `POST /tenants/{id}/{subscription,plan,extend-trial,suspend,reactivate,access}`, `GET /invoices`, `POST /invoices/{id}/{payments,void}`, `GET /invoices/{id}/pdf`, `GET/POST/PUT /plans`, `POST /billing/run` |
+| Integrations | `GET /integrations/options`, `GET/POST /integrations/keys`, `POST /integrations/keys/{id}/revoke`, `GET/POST /integrations/webhooks`, `PUT/DELETE /integrations/webhooks/{id}`, `POST /integrations/webhooks/{id}/{rotate-secret,test}`, `GET /integrations/webhooks/{id}/deliveries`, `POST /integrations/deliveries/{id}/redeliver` |
+| Public API (`/api/v1`, API key) | `GET /me`, `/companies`, `/departments`, `/branches`, `/cost-centres`, `/payroll-periods`, `/pay-components`, `GET/POST /employees`, `GET/PATCH /employees/{id}`, `GET /payroll-runs[/{id}[/results]]`, `PUT /payroll-runs/{id}/attendance`, `POST /payroll-runs/{id}/variable-inputs`, `GET /leave-requests[/{id}]`, `GET /journals[/export]`, `GET /events`, `GET /audit-log`, `GET /openapi.json` (no sign-in) |
 | Reports | `GET /dashboard`, `/reports/{statutory,payroll-register,variance,annual,audit}?format=csv\|xlsx\|pdf`, `GET /reports/notifications` |
 
 ## Known limitations
@@ -271,7 +293,7 @@ These are the things to resolve before go-live, or to plan for in later phases:
 
 1. **Statutory sign-off.** The parameters were cross-checked against secondary sources in November 2026, not against primary KRA/NSSF/SHA gazette text. A practitioner must confirm them and run the two parallel payrolls required by PRD §18.
 2. **Bank file layouts** (KCB, Equity, Co-op, M-PESA B2C) are representative. Confirm each against the bank's current bulk-upload specification before first use.
-3. **KRA iTax P10, NSSF and SHA submissions.** Returns export as CSV, Excel or PDF. Direct submission, and the exact iTax P10 upload template, are Phase 3 (PRD §15: only where official APIs exist).
+3. **Statutory filing files.** The P10 PAYE return is built per company and month, but its column order hasn't yet been checked against KRA's current template. NSSF files follow NSSF's portal template and returns specification. Neither has been through a real upload. The SHA return still exports in our own layout. Direct submission is Phase 3 (PRD §15: only where official APIs exist).
 4. **Ecosys platform contracts are assumed.** These are:
    - the Ecosys Notifications request shape (`POST v1/messages`)
    - the identity provider's claim names
@@ -285,4 +307,11 @@ These are the things to resolve before go-live, or to plan for in later phases:
    - **Ad hoc holidays.** Add holidays gazetted ad hoc by hand under Leave → Public holidays.
    - **Integrations.** There are no job-board, e-signature or LMS integrations, and the medical scheme in the demo data is a sample.
    - **File storage.** Uploaded files are stored in PostgreSQL (`stored_files`). Move them to object storage if volumes grow.
-9. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.
+9. **Accounting systems.** Journals export as import files for QuickBooks and Sage; there is no live connection. The layouts follow each product's documented import format but haven't been through a real import, so do one test import per customer. GL mapping codes must be the account names or numbers in the customer's chart (QuickBooks matches accounts by name, or number when account numbering is on; Pastel needs numbers like `6100` or `6100/010`). A direct QuickBooks Online or Xero API connection would need an Intuit or Xero developer app.
+10. **Integrations API.** Things to know before giving customers keys:
+    - Salary changes, bank accounts and approvals are deliberately left out of `/api/v1`.
+    - A revoked key keeps working for up to 30 seconds on other server instances (cache).
+    - Per-key rate limits are counted on each instance separately.
+    - Webhook calls go out directly, not through an outbound proxy, unless `Integrations:WebhookUseProxy` is set.
+    - Events are kept indefinitely; add a retention clean-up if volumes grow.
+11. **SaaS billing.** Payments are recorded by hand in the operator console; there is no M-Pesa (Daraja) or card integration yet. Invoices are not submitted to KRA eTIMS. The seeded plan prices are placeholders.

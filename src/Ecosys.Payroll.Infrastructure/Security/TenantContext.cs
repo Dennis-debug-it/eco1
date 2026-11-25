@@ -19,6 +19,8 @@ public interface ITenantContext
     IReadOnlySet<Guid> LegalEntityIds { get; }
     bool IsPlatformAdministrator { get; }
     string? IpAddress { get; }
+    /// <summary>Set when a program is calling with an API key; <see cref="UserId"/> is then the key's id, not a person.</summary>
+    Guid? ApiClientId => null;
 }
 
 public static class TenantContextExtensions
@@ -56,6 +58,7 @@ public sealed class TenantContext : ITenantContext
     public IReadOnlySet<Guid> LegalEntityIds { get; set; } = new HashSet<Guid>();
     public bool IsPlatformAdministrator { get; set; }
     public string? IpAddress { get; set; }
+    public Guid? ApiClientId { get; set; }
 
     public static TenantContext System(Guid tenantId) => new()
     {

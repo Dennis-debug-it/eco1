@@ -6,6 +6,9 @@ using Ecosys.Payroll.Infrastructure.Documents;
 using Ecosys.Payroll.Infrastructure.Persistence;
 using Ecosys.Payroll.Infrastructure.Security;
 using Ecosys.Payroll.Infrastructure.Services;
+using Ecosys.Payroll.Infrastructure.Services.Migration;
+using Ecosys.Payroll.Infrastructure.Services.Returns;
+using Ecosys.Payroll.Infrastructure.Services.Accounting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Payroll.Api.Endpoints;
@@ -21,16 +24,70 @@ public static class ReportEndpoints
 
         var r = api.MapGroup("/reports").RequireAuthorization();
 
-        r.MapGet("/statutory", async (Guid runId, string ruleCode, string? format, ReportingService svc, AuditService audit, PayrollDbContext db, CancellationToken ct) =>
+        r.MapGet("/statutory", async (Guid runId, string ruleCode, string? format, ReportingService svc, AuditService audit, PayrollDbContext db, MigrationGuard migration, CancellationToken ct) =>
         {
             var report = await svc.StatutoryAsync(runId, ruleCode, ct);
-            if (TabularExport.Parse(format) is not { } f) return Results.Ok(report);
+            if (TabularExport.Parse(format) is not { } f) return Results.Ok(report); // on screen: compare it with the old system's return
+            await migration.EnsureLiveAsync("export a statutory return for filing", ct);
             var file = TabularExport.Build(f, report.Title, $"{report.RunReference} · {report.Period}", $"{report.RunReference}-{ruleCode}", report.Rows,
             [
                 new("Employee No", x => x.EmployeeNumber), new("Employee Name", x => x.EmployeeName), new("PIN", x => x.Pin), new("Member No", x => x.MemberNumber),
                 new("Gross Pay", x => x.Gross, true), new("Contribution Base", x => x.Base, true), new("Employee", x => x.Employee, true), new("Employer", x => x.Employer, true), new("Total", x => x.Total, true),
             ], ["Totals", null, null, null, report.Rows.Sum(x => x.Gross), null, report.TotalEmployee, report.TotalEmployer, report.TotalEmployee + report.TotalEmployer]);
             return await Export(file, audit, db, "report.statutory.exported", runId, ct);
+        });
+
+        // Journals as import files for QuickBooks or Sage: one run's journals, or every journal a company posted between two dates.
+        var acc = api.MapGroup("/accounting/journals").RequireAuthorization();
+        acc.MapGet("/check", async (string? format, Guid? runId, Guid? legalEntityId, DateOnly? from, DateOnly? to, JournalExportService svc, CancellationToken ct) =>
+            Results.Ok(await svc.CheckAsync(JournalExportService.Parse(format), runId, legalEntityId, from, to, ct)));
+        acc.MapGet("/export", async (string? format, Guid? runId, Guid? legalEntityId, DateOnly? from, DateOnly? to, JournalExportService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                var file = await svc.ExportAsync(JournalExportService.Parse(format), runId, legalEntityId, from, to, ct);
+                return Results.File(file.Content, file.ContentType, file.FileName);
+            }
+            catch (JournalExportNotReadyException ex)
+            {
+                return Results.Json(new { title = "The journals have problems", status = 422, code = ex.Code, detail = "Fix the items listed, then export again.", check = ex.Check }, statusCode: 422);
+            }
+        });
+
+        // KRA P10 (monthly PAYE return) for one company and month, across every approved run that month.
+        r.MapGet("/p10/check", async (Guid legalEntityId, int year, int month, PayeReturnService svc, CancellationToken ct) => Results.Ok(await svc.CheckAsync(legalEntityId, year, month, ct)));
+        r.MapGet("/p10", async (Guid legalEntityId, int year, int month, PayeReturnService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                var file = await svc.ExportAsync(legalEntityId, year, month, ct);
+                return Results.File(file.Content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.FileName);
+            }
+            catch (PayeReturnNotReadyException ex)
+            {
+                return Results.Json(new { title = "The return has problems", status = 422, code = ex.Code, detail = "Fix the employees listed, then export again.", check = ex.Check }, statusCode: 422);
+            }
+        });
+
+        // NSSF upload files, laid out exactly as NSSF specifies. The check lists anything to fix; the file is only made when there is nothing.
+        r.MapGet("/nssf-file/check", async (Guid runId, NssfReturnService svc, CancellationToken ct) => Results.Ok(await svc.CheckAsync(runId, ct)));
+        r.MapGet("/nssf-file", async (Guid runId, string? layout, NssfReturnService svc, CancellationToken ct) =>
+        {
+            var l = (layout ?? "portal").ToLowerInvariant() switch
+            {
+                "portal" => NssfFileLayout.PortalTemplate,
+                "returns" => NssfFileLayout.Returns2014,
+                _ => throw new DomainException("Layout is 'portal' (the employer portal's payroll template) or 'returns' (the returns file).", "VALIDATION"),
+            };
+            try
+            {
+                var file = await svc.ExportAsync(runId, l, ct);
+                return Results.File(file.Content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file.FileName);
+            }
+            catch (ReturnNotReadyException ex)
+            {
+                return Results.Json(new { title = "The return has problems", status = 422, code = ex.Code, detail = "Fix the members listed, then export again.", check = ex.Check }, statusCode: 422);
+            }
         });
 
         r.MapGet("/payroll-register", async (Guid runId, string? format, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>

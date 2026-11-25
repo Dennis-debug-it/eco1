@@ -154,7 +154,7 @@ With `SAAS_ENABLED=false` (the default) none of this appears. That is the licens
 
 ### Before taking sign-ups
 
-1. Configure email delivery (`NOTIFICATIONS_PROVIDER=Ecosys`): sign-up confirmations and invoices go by email. The app refuses to start with sign-up on and no email delivery. To onboard customers only by hand, set `SAAS_SIGNUP_ENABLED=false` instead.
+1. Configure email delivery (`NOTIFICATIONS_PROVIDER=Ecosys`): sign-up confirmations, invoices and "Forgot password?" links go by email. The app refuses to start with sign-up on and no email delivery. To onboard customers only by hand, set `SAAS_SIGNUP_ENABLED=false` instead.
 2. Fill in `SAAS_SELLER_NAME`, `SAAS_SELLER_TAX_PIN`, `SAAS_SELLER_ADDRESS`, `SAAS_SUPPORT_EMAIL` and `SAAS_PAYMENT_INSTRUCTIONS`. They are printed on every invoice. If you are VAT-registered, have your accountant confirm the invoice layout meets KRA requirements (including eTIMS) before the first invoice goes out.
 3. Create your operator account:
 
@@ -163,6 +163,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm payroll
 ```
 
    Sign in with organisation code `platform` and the one-time password. You choose a password and enrol an authenticator app, then land in the **Operator console**.
+
+   This is the only way to get an operator account. "Start a free trial" on the sign-in page creates a *customer* organisation, and its administrator only ever sees that customer's portal. If you created your own account that way, it now shows up as a customer in the console; it does not give you the console.
 4. Open **Plans & prices**. The first start creates three placeholder plans (Starter, Growth, Enterprise). **Set your real prices before announcing sign-up.** Prices exclude VAT. A price change applies to each subscriber's next invoice; issued invoices keep their prices. Enterprise is private, so only you can assign it.
 
 ### How billing works
@@ -187,9 +189,9 @@ Payments are recorded by hand: M-Pesa or bank reconciliation is not automated ye
 
 From Customers → Manage:
 - **Change plan** (any plan, including private ones). The customer's usage must fit the new limits.
-- **Extend trial.**
+- **Extend trial.** Also reopens an account that was made read-only during its trial (trial ended, suspended by you, or cancelled by the customer), with the new end date.
 - **Make read-only.** For problems outside the normal cycle. Only you can lift this.
-- **Reactivate.**
+- **Reopen trial / Reactivate.** An account made read-only during its free trial goes back to that trial with its original end date ("Reopen trial"); billing starts only if the customer adds billing details before then. Once that date has passed there is no trial to return to, so use Extend trial instead. A paying account goes back to active ("Reactivate").
 - **Block sign-in.** The hard stop for abuse or a legal hold: nobody in the organisation can sign in.
 - **New customer.** Same as `provision-tenant`, optionally on a plan with or without a trial.
 
@@ -201,3 +203,20 @@ Every operator and billing action is written to the customer's own audit log, so
 
 Each server caches a customer's plan and status for up to 30 seconds, so a change made on one server reaches the others within that time. The billing cycle can run on several servers at once without double-billing (one invoice per subscription per period is enforced by the database). Running it on one server is enough: set `Saas__BillingJobEnabled=false` on the others.
 
+
+
+## 10. Moving a customer in from another payroll system
+
+Plan about four months: load in month M−3, run parallel payrolls in M−2 and M−1, go live in M, then watch closely for two months. January go-lives are simplest: every P9 for the year then comes from Ecosys.
+
+1. **Start migration mode** (Administration → Data migration). From now on Ecosys can't approve, pay, finalise or export a return for filing, so a parallel run can never be paid by mistake.
+2. **Set up the organisation:** companies, departments, branches, pay groups and pay components. Imports match departments and components by code or name and refuse ones that don't exist.
+3. **Import employees.** Download the template, or upload the old system's export as it is. Check the file and fix every row the check lists; nothing is saved until the whole file is clean. Then a second person verifies each bank account against the old system's last bank file. Payment files skip unverified accounts.
+4. **Import opening balances:** leave, loans and NSSF to date. For a switch after January, also import **pay to date** so P9s cover the whole year.
+5. **Run two parallel payrolls.** Calculate each month in Ecosys while the old system pays. Upload the old register on the run's Parallel run tab, and explain every difference.
+6. **Sign go-live** with the first pay period Ecosys pays. The parallel runs are discarded, because the old system paid those months.
+7. **Keep the old system licensed and up to date for two months.** To roll back after go-live, export the Ecosys payroll register for each live month (or **Export everything**) and key it into the old system.
+
+A wrong import is undone from the import history, newest first. Undo is refused once a payroll has been approved since the import, or once anything else has been recorded against the employees. After that, correct records one by one.
+
+**Export everything** holds salaries, account numbers and KRA PINs in full. Treat the file like the payroll itself.

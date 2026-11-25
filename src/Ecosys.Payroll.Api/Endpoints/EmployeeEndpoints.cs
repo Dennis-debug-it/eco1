@@ -17,44 +17,15 @@ public sealed record EmployeeDetail(Employee Employee, EmployeeStatutoryDetails?
 
 public sealed record BankAccountRequest(PaymentMethod Method, string? BankCode, string? BranchCode, string AccountName, string AccountNumber, bool IsPrimary = true, decimal SplitPercent = 100m);
 
-public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalaryStructureId, DateOnly EffectiveFrom, string? ChangeReason, List<EmployeeSalaryAssignmentLine>? Lines);
+public sealed record SalaryAssignmentRequest(decimal BasicSalary, Guid? SalaryStructureId, DateOnly EffectiveFrom, string? ChangeReason, List<EmployeeSalaryAssignmentLine>? Lines, PayBasis PayBasis = PayBasis.Monthly, decimal? DailyRate = null);
 
 public static class EmployeeEndpoints
 {
+    private static void ValidateIdentifiers(Employee e) => EmployeeRules.ThrowIfAny(EmployeeRules.IdentifierProblems(e));
+
+    private static void ValidateStatutory(EmployeeStatutoryDetails s) => EmployeeRules.ThrowIfAny(EmployeeRules.StatutoryProblems(s));
+
     /// <summary>Organisational references must exist within the employee's own legal entity (and therefore tenant).</summary>
-    /// <summary>Normalises Kenyan identifiers in place and rejects malformed ones, listing every problem at once.</summary>
-    private static void ValidateIdentifiers(Employee e)
-    {
-        var problems = new List<string>();
-        e.NationalId = KenyaIdentifiers.NormaliseNationalId(e.NationalId);
-        if (e.NationalId is not null && !KenyaIdentifiers.IsValidNationalId(e.NationalId)) problems.Add("National ID should be 6–9 digits. For non-citizens, leave it blank and enter the passport or alien ID number.");
-        e.PassportNumber = string.IsNullOrWhiteSpace(e.PassportNumber) ? null : e.PassportNumber.Trim().ToUpperInvariant();
-        foreach (var (label, value, set) in new (string, string?, Action<string?>)[] { ("Phone", e.Phone, v => e.Phone = v), ("Emergency contact phone", e.EmergencyContactPhone, v => e.EmergencyContactPhone = v) })
-        {
-            if (string.IsNullOrWhiteSpace(value)) { set(null); continue; }
-            var n = KenyaIdentifiers.NormalisePhone(value);
-            if (n is null) problems.Add($"{label} '{value}' isn't a valid number. Use 07XX XXX XXX, 01XX XXX XXX or +country code.");
-            else set(n);
-        }
-        e.Email = string.IsNullOrWhiteSpace(e.Email) ? null : e.Email.Trim().ToLowerInvariant();
-        if (e.Email is not null && (!e.Email.Contains('@') || e.Email.Contains(' '))) problems.Add($"Email '{e.Email}' isn't valid.");
-        if (problems.Count > 0) throw new DomainException(string.Join(" ", problems), "VALIDATION");
-    }
-
-    private static void ValidateStatutory(EmployeeStatutoryDetails s)
-    {
-        var problems = new List<string>();
-        s.KraPin = KenyaIdentifiers.NormalisePin(s.KraPin);
-        if (s.KraPin is not null && !KenyaIdentifiers.IsValidPin(s.KraPin))
-            problems.Add(s.KraPin.StartsWith('P') ? "KRA PIN starting with P belongs to a company. An employee's PIN starts with A." : "KRA PIN should be 11 characters: A, nine digits and a letter (e.g. A012345678Z).");
-        s.NssfNumber = KenyaIdentifiers.NormaliseMembership(s.NssfNumber);
-        if (s.NssfNumber is not null && !KenyaIdentifiers.IsPlausibleMembership(s.NssfNumber)) problems.Add("NSSF number should be 4–20 letters or digits.");
-        s.ShifNumber = KenyaIdentifiers.NormaliseMembership(s.ShifNumber);
-        if (s.ShifNumber is not null && !KenyaIdentifiers.IsPlausibleMembership(s.ShifNumber)) problems.Add("SHA (SHIF) number should be 4–20 letters or digits.");
-        s.NhifNumber = KenyaIdentifiers.NormaliseMembership(s.NhifNumber);
-        if (problems.Count > 0) throw new DomainException(string.Join(" ", problems), "VALIDATION");
-    }
-
     private static async Task ValidateReferencesAsync(Employee e, PayrollDbContext db, CancellationToken ct)
     {
         if (!await db.PayrollGroups.AnyAsync(x => x.Id == e.PayrollGroupId && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Payroll group is not valid for this legal entity.", "VALIDATION");
@@ -65,6 +36,79 @@ public static class EmployeeEndpoints
         if (e.PositionId is { } p && !await db.Positions.AnyAsync(x => x.Id == p && x.LegalEntityId == e.LegalEntityId, ct)) throw new DomainException("Position is not valid for this legal entity.", "VALIDATION");
         if (e.NoticePeriodDays < 0) throw new DomainException("Notice period cannot be negative.", "VALIDATION");
         if (e.HireDate == default) throw new DomainException("Hire date is required.", "VALIDATION");
+    }
+
+    /// <summary>Adds an employee. Shared by the screens and the public API, so both apply the same checks.</summary>
+    internal static async Task<Employee> CreateAsync(Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct)
+    {
+        ctx.Require(Permissions.EmployeesWrite); ctx.RequireLegalEntity(body.LegalEntityId);
+        if (SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
+        if (string.IsNullOrWhiteSpace(body.EmployeeNumber) || string.IsNullOrWhiteSpace(body.FirstName) || string.IsNullOrWhiteSpace(body.LastName))
+            throw new DomainException("Employee number, first name and last name are required.", "VALIDATION");
+        if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
+            throw new DomainException($"Employee number {body.EmployeeNumber} already exists.", "DUPLICATE");
+        body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.UserId = null;
+        ValidateIdentifiers(body);
+        await ValidateReferencesAsync(body, db, ct);
+        db.Employees.Add(body);
+        db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = body.LegalEntityId, EmployeeId = body.Id, EffectiveFrom = body.HireDate, EmploymentType = body.EmploymentType, Status = body.Status, JobTitle = body.JobTitle, DepartmentId = body.DepartmentId, BranchId = body.BranchId, CostCentreId = body.CostCentreId, PayrollGroupId = body.PayrollGroupId, ChangeReason = "Hired" });
+        audit.Record("employee.created", nameof(Employee), body.Id, new { body.EmployeeNumber, body.FirstName, body.LastName }, body.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return body;
+    }
+
+    /// <summary>Replaces an employee's details, recording a new employment record when the job changes.</summary>
+    internal static async Task<Employee> UpdateAsync(Guid id, Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct)
+    {
+        ctx.Require(Permissions.EmployeesWrite);
+        var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
+        ctx.RequireLegalEntity(e.LegalEntityId);
+        // Returning a leaver to the books counts against the plan's employee limit.
+        if (!SubscriptionService.CountedStatuses.Contains(e.Status) && SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
+        var employmentChanged = e.EmploymentType != body.EmploymentType || e.Status != body.Status || e.JobTitle != body.JobTitle || e.DepartmentId != body.DepartmentId
+                                || e.BranchId != body.BranchId || e.CostCentreId != body.CostCentreId || e.PayrollGroupId != body.PayrollGroupId;
+        e.FirstName = body.FirstName; e.MiddleName = body.MiddleName; e.LastName = body.LastName; e.NationalId = body.NationalId; e.PassportNumber = body.PassportNumber;
+        e.DateOfBirth = body.DateOfBirth; e.Gender = body.Gender; e.Email = body.Email; e.Phone = body.Phone; e.PhysicalAddress = body.PhysicalAddress;
+        e.EmergencyContactName = body.EmergencyContactName; e.EmergencyContactPhone = body.EmergencyContactPhone;
+        e.EmploymentType = body.EmploymentType; e.Status = body.Status; e.HireDate = body.HireDate; e.ContractEndDate = body.ContractEndDate; e.TerminationDate = body.TerminationDate;
+        e.JobTitle = body.JobTitle; e.DepartmentId = body.DepartmentId; e.BranchId = body.BranchId; e.CostCentreId = body.CostCentreId; e.PayrollGroupId = body.PayrollGroupId;
+        e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
+        e.PositionId = body.PositionId; e.NoticePeriodDays = body.NoticePeriodDays; e.ProbationEndDate = body.ProbationEndDate;
+        if (e.ReportingManagerId == e.Id) throw new DomainException("An employee cannot report to themselves.", "VALIDATION");
+        ValidateIdentifiers(e);
+        await ValidateReferencesAsync(e, db, ct);
+        if (employmentChanged)
+        {
+            var today = BusinessClock.Today();
+            var open = await db.EmploymentRecords.Where(r => r.EmployeeId == id && r.EffectiveTo == null).ToListAsync(ct);
+            foreach (var r in open) r.EffectiveTo = today.AddDays(-1);
+            db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = e.LegalEntityId, EmployeeId = id, EffectiveFrom = today, EmploymentType = e.EmploymentType, Status = e.Status, JobTitle = e.JobTitle, DepartmentId = e.DepartmentId, BranchId = e.BranchId, CostCentreId = e.CostCentreId, PayrollGroupId = e.PayrollGroupId, ChangeReason = "Updated" });
+        }
+        audit.Record("employee.updated", nameof(Employee), id, new { e.EmployeeNumber, employmentChanged }, e.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return e;
+    }
+
+    /// <summary>Replaces an employee's statutory numbers and exemptions.</summary>
+    internal static async Task<EmployeeStatutoryDetails> SaveStatutoryAsync(Guid id, EmployeeStatutoryDetails body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct)
+    {
+        ctx.Require(Permissions.EmployeesWrite);
+        var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
+        ctx.RequireLegalEntity(e.LegalEntityId);
+        var s = await db.EmployeeStatutoryDetails.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
+        if (s is null) { s = new EmployeeStatutoryDetails { LegalEntityId = e.LegalEntityId, EmployeeId = id }; db.EmployeeStatutoryDetails.Add(s); }
+        ValidateStatutory(body);
+        if (body.KraPin is not null && await db.EmployeeStatutoryDetails.AnyAsync(x => x.EmployeeId != id && x.LegalEntityId == e.LegalEntityId && x.KraPin == body.KraPin, ct))
+            throw new DomainException("Another employee in this legal entity already has that KRA PIN.", "DUPLICATE");
+        s.KraPin = body.KraPin; s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
+        s.HasDisabilityExemption = body.HasDisabilityExemption; s.DisabilityExemptionCertificate = body.DisabilityExemptionCertificate; s.DisabilityExemptAmount = body.DisabilityExemptAmount;
+        s.DisabilityExemptionExpiry = body.DisabilityExemptionExpiry; s.StatutoryExemptions = body.StatutoryExemptions;
+        if (body.NssfOpeningBalance < 0) throw new DomainException("NSSF contributions before Ecosys cannot be negative.", "VALIDATION");
+        var openingChanged = s.NssfOpeningBalance != body.NssfOpeningBalance;
+        s.NssfOpeningBalance = body.NssfOpeningBalance;
+        audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions, nssfOpeningBalanceChanged = openingChanged }, e.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return s;
     }
 
     public static void MapEmployees(this RouteGroupBuilder api)
@@ -129,73 +173,15 @@ public static class EmployeeEndpoints
 
         g.MapPost("", async (Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct) =>
         {
-            ctx.Require(Permissions.EmployeesWrite); ctx.RequireLegalEntity(body.LegalEntityId);
-            if (SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
-            if (string.IsNullOrWhiteSpace(body.EmployeeNumber) || string.IsNullOrWhiteSpace(body.FirstName) || string.IsNullOrWhiteSpace(body.LastName))
-                throw new DomainException("Employee number, first name and last name are required.", "VALIDATION");
-            if (await db.Employees.AnyAsync(e => e.LegalEntityId == body.LegalEntityId && e.EmployeeNumber == body.EmployeeNumber, ct))
-                throw new DomainException($"Employee number {body.EmployeeNumber} already exists.", "DUPLICATE");
-            body.Id = Guid.NewGuid(); body.TenantId = ctx.RequireTenant(); body.UserId = null;
-            ValidateIdentifiers(body);
-            await ValidateReferencesAsync(body, db, ct);
-            db.Employees.Add(body);
-            db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = body.LegalEntityId, EmployeeId = body.Id, EffectiveFrom = body.HireDate, EmploymentType = body.EmploymentType, Status = body.Status, JobTitle = body.JobTitle, DepartmentId = body.DepartmentId, BranchId = body.BranchId, CostCentreId = body.CostCentreId, PayrollGroupId = body.PayrollGroupId, ChangeReason = "Hired" });
-            audit.Record("employee.created", nameof(Employee), body.Id, new { body.EmployeeNumber, body.FirstName, body.LastName }, body.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Created($"/api/payroll/employees/{body.Id}", body);
+            var e = await CreateAsync(body, ctx, db, audit, plan, ct);
+            return Results.Created($"/api/payroll/employees/{e.Id}", e);
         });
 
         g.MapPut("/{id:guid}", async (Guid id, Employee body, ITenantContext ctx, PayrollDbContext db, AuditService audit, SubscriptionService plan, CancellationToken ct) =>
-        {
-            ctx.Require(Permissions.EmployeesWrite);
-            var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
-            ctx.RequireLegalEntity(e.LegalEntityId);
-            // Returning a leaver to the books counts against the plan's employee limit.
-            if (!SubscriptionService.CountedStatuses.Contains(e.Status) && SubscriptionService.CountedStatuses.Contains(body.Status)) await plan.EnsureCanAddEmployeesAsync(1, ct);
-            var employmentChanged = e.EmploymentType != body.EmploymentType || e.Status != body.Status || e.JobTitle != body.JobTitle || e.DepartmentId != body.DepartmentId
-                                    || e.BranchId != body.BranchId || e.CostCentreId != body.CostCentreId || e.PayrollGroupId != body.PayrollGroupId;
-            e.FirstName = body.FirstName; e.MiddleName = body.MiddleName; e.LastName = body.LastName; e.NationalId = body.NationalId; e.PassportNumber = body.PassportNumber;
-            e.DateOfBirth = body.DateOfBirth; e.Gender = body.Gender; e.Email = body.Email; e.Phone = body.Phone; e.PhysicalAddress = body.PhysicalAddress;
-            e.EmergencyContactName = body.EmergencyContactName; e.EmergencyContactPhone = body.EmergencyContactPhone;
-            e.EmploymentType = body.EmploymentType; e.Status = body.Status; e.HireDate = body.HireDate; e.ContractEndDate = body.ContractEndDate; e.TerminationDate = body.TerminationDate;
-            e.JobTitle = body.JobTitle; e.DepartmentId = body.DepartmentId; e.BranchId = body.BranchId; e.CostCentreId = body.CostCentreId; e.PayrollGroupId = body.PayrollGroupId;
-            e.ReportingManagerId = body.ReportingManagerId; e.WorkLocation = body.WorkLocation;
-            e.PositionId = body.PositionId; e.NoticePeriodDays = body.NoticePeriodDays; e.ProbationEndDate = body.ProbationEndDate;
-            if (e.ReportingManagerId == e.Id) throw new DomainException("An employee cannot report to themselves.", "VALIDATION");
-            ValidateIdentifiers(e);
-            await ValidateReferencesAsync(e, db, ct);
-            if (employmentChanged)
-            {
-                var today = BusinessClock.Today();
-                var open = await db.EmploymentRecords.Where(r => r.EmployeeId == id && r.EffectiveTo == null).ToListAsync(ct);
-                foreach (var r in open) r.EffectiveTo = today.AddDays(-1);
-                db.EmploymentRecords.Add(new EmploymentRecord { LegalEntityId = e.LegalEntityId, EmployeeId = id, EffectiveFrom = today, EmploymentType = e.EmploymentType, Status = e.Status, JobTitle = e.JobTitle, DepartmentId = e.DepartmentId, BranchId = e.BranchId, CostCentreId = e.CostCentreId, PayrollGroupId = e.PayrollGroupId, ChangeReason = "Updated" });
-            }
-            audit.Record("employee.updated", nameof(Employee), id, new { e.EmployeeNumber, employmentChanged }, e.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(e);
-        });
+            Results.Ok(await UpdateAsync(id, body, ctx, db, audit, plan, ct)));
 
         g.MapPut("/{id:guid}/statutory", async (Guid id, EmployeeStatutoryDetails body, ITenantContext ctx, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
-        {
-            ctx.Require(Permissions.EmployeesWrite);
-            var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
-            ctx.RequireLegalEntity(e.LegalEntityId);
-            var s = await db.EmployeeStatutoryDetails.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
-            if (s is null) { s = new EmployeeStatutoryDetails { LegalEntityId = e.LegalEntityId, EmployeeId = id }; db.EmployeeStatutoryDetails.Add(s); }
-            ValidateStatutory(body);
-            if (body.KraPin is not null && await db.EmployeeStatutoryDetails.AnyAsync(x => x.EmployeeId != id && x.LegalEntityId == e.LegalEntityId && x.KraPin == body.KraPin, ct))
-                throw new DomainException("Another employee in this legal entity already has that KRA PIN.", "DUPLICATE");
-            s.KraPin = body.KraPin; s.NssfNumber = body.NssfNumber; s.ShifNumber = body.ShifNumber; s.NhifNumber = body.NhifNumber;
-            s.HasDisabilityExemption = body.HasDisabilityExemption; s.DisabilityExemptionCertificate = body.DisabilityExemptionCertificate; s.DisabilityExemptAmount = body.DisabilityExemptAmount;
-            s.DisabilityExemptionExpiry = body.DisabilityExemptionExpiry; s.StatutoryExemptions = body.StatutoryExemptions;
-            if (body.NssfOpeningBalance < 0) throw new DomainException("NSSF contributions before Ecosys cannot be negative.", "VALIDATION");
-            var openingChanged = s.NssfOpeningBalance != body.NssfOpeningBalance;
-            s.NssfOpeningBalance = body.NssfOpeningBalance;
-            audit.Record("employee.statutory.updated", nameof(EmployeeStatutoryDetails), s.Id, new { employeeId = id, pin = FieldEncryptor.Mask(s.KraPin), s.StatutoryExemptions, nssfOpeningBalanceChanged = openingChanged }, e.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(s);
-        });
+            Results.Ok(await SaveStatutoryAsync(id, body, ctx, db, audit, ct)));
 
         // Maker-checker: a new account is never paid until a second person verifies it, and the employee is told
         // about every change through the contact details already on file.
@@ -250,7 +236,7 @@ public static class EmployeeEndpoints
             ctx.Require(Permissions.SalaryWrite);
             var e = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException(nameof(Employee), id);
             ctx.RequireLegalEntity(e.LegalEntityId);
-            if (req.BasicSalary < 0) throw new DomainException("Basic salary cannot be negative.", "VALIDATION");
+            var entity = await db.LegalEntities.FirstAsync(x => x.Id == e.LegalEntityId, ct);
             // Effective-dated: close the current assignment the day before the new one starts; reject backdating into a finalised period.
             var finalisedThrough = await db.PayrollRuns.Where(r => r.LegalEntityId == e.LegalEntityId && r.Status == Domain.Payroll.PayrollRunStatus.Finalised)
                 .Join(db.PayrollPeriods, r => r.PayrollPeriodId, p => p.Id, (r, p) => p.PeriodEnd).OrderByDescending(d => d).FirstOrDefaultAsync(ct);
@@ -262,10 +248,11 @@ public static class EmployeeEndpoints
                 if (c.EffectiveFrom >= req.EffectiveFrom) throw new InvalidStateException("A later or same-dated assignment already exists.");
                 c.EffectiveTo = req.EffectiveFrom.AddDays(-1);
             }
-            var a = new EmployeeSalaryAssignment { LegalEntityId = e.LegalEntityId, EmployeeId = id, BasicSalary = req.BasicSalary, SalaryStructureId = req.SalaryStructureId, EffectiveFrom = req.EffectiveFrom, ChangeReason = req.ChangeReason, ApprovedBy = ctx.UserId };
+            var a = new EmployeeSalaryAssignment { LegalEntityId = e.LegalEntityId, EmployeeId = id, SalaryStructureId = req.SalaryStructureId, EffectiveFrom = req.EffectiveFrom, ChangeReason = req.ChangeReason, ApprovedBy = ctx.UserId };
+            PayBasisRules.Apply(a, req.PayBasis, req.BasicSalary, req.DailyRate, entity);
             foreach (var l in req.Lines ?? []) a.Lines.Add(new EmployeeSalaryAssignmentLine { EmployeeSalaryAssignmentId = a.Id, SalaryComponentId = l.SalaryComponentId, Method = l.Method, Amount = l.Amount, Rate = l.Rate });
             db.EmployeeSalaryAssignments.Add(a);
-            audit.Record("employee.salary.assigned", nameof(EmployeeSalaryAssignment), a.Id, new { employeeId = id, previous = current.FirstOrDefault()?.BasicSalary, a.BasicSalary, a.EffectiveFrom, req.ChangeReason }, e.LegalEntityId);
+            audit.Record("employee.salary.assigned", nameof(EmployeeSalaryAssignment), a.Id, new { employeeId = id, previous = current.FirstOrDefault()?.BasicSalary, a.BasicSalary, payBasis = a.PayBasis.ToString(), a.DailyRate, a.EffectiveFrom, req.ChangeReason }, e.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/payroll/employees/{id}/salary/{a.Id}", a);
         });

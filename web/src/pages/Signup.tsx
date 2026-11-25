@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, ApiError } from '../lib/api'
 import { limitsLine, priceLine, type PlanView } from '../lib/billing'
-import { ErrorBox, Field, Loading } from '../components/ui'
+import { ErrorBox, Field, Loading, PasswordInput } from '../components/ui'
 
 type Options = { enabled: boolean; trialDays?: number; defaultPlan?: string; vatRate?: number; requireEmailVerification?: boolean; plans?: PlanView[] }
 type Created = { slug: string; email: string; verificationRequired: boolean; trialEndsOn: string }
@@ -89,7 +89,7 @@ export default function SignupPage() {
           <Field label="Full name"><input value={f.adminName} onChange={set('adminName')} autoComplete="name" required /></Field>
           <Field label="Work email"><input type="email" value={f.adminEmail} onChange={set('adminEmail')} autoComplete="email" required /></Field>
           <Field label="Mobile (optional)"><input type="tel" value={f.phone} onChange={set('phone')} autoComplete="tel" placeholder="07XX XXX XXX" /></Field>
-          <Field label="Password"><input type="password" value={f.password} onChange={set('password')} autoComplete="new-password" minLength={10} required /><div className="small muted" style={{ marginTop: 2 }}>At least 10 characters. A short phrase works well.</div></Field>
+          <Field label="Password"><PasswordInput value={f.password} onChange={set('password')} autoComplete="new-password" minLength={10} required /><div className="small muted" style={{ marginTop: 2 }}>At least 10 characters. A short phrase works well.</div></Field>
         </div>
 
         <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '8px 0 14px' }}>

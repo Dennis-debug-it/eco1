@@ -38,26 +38,11 @@ public static class SelfServiceEndpoints
             return Results.Ok(new { slip, result = node });
         }).RequireAuthorization();
 
-        api.MapGet("/payslips/{payslipId:guid}/pdf", async (Guid payslipId, ITenantContext ctx, PayrollDbContext db, AuditService audit, PayslipFacts facts, LetterheadService letterheads, CancellationToken ct) =>
+        api.MapGet("/payslips/{payslipId:guid}/pdf", async (Guid payslipId, ITenantContext ctx, PayrollDbContext db, AuditService audit, PayslipPdfService payslips, CancellationToken ct) =>
         {
             var slip = await db.Payslips.FirstOrDefaultAsync(p => p.Id == payslipId, ct) ?? throw new NotFoundException(nameof(Payslip), payslipId);
             RequireSelfOrSalaryRead(ctx, slip.EmployeeId);
-            var run = await db.PayrollRuns.FirstAsync(r => r.Id == slip.PayrollRunId, ct);
-            var result = await db.PayrollRunEmployees.Include(e => e.Lines).FirstAsync(e => e.Id == slip.PayrollRunEmployeeId, ct);
-            var employee = await db.Employees.FirstAsync(e => e.Id == slip.EmployeeId, ct);
-            var entity = await db.LegalEntities.FirstAsync(e => e.Id == run.LegalEntityId, ct);
-            var period = await db.PayrollPeriods.FirstAsync(p => p.Id == run.PayrollPeriodId, ct);
-            var bank = await db.EmployeeBankAccounts.Where(b => b.EmployeeId == slip.EmployeeId).OrderByDescending(b => b.IsPrimary).FirstOrDefaultAsync(ct);
-            var dept = employee.DepartmentId is { } d ? await db.Departments.Where(x => x.Id == d).Select(x => x.Name).FirstOrDefaultAsync(ct) : null;
-            var stat = await db.EmployeeStatutoryDetails.FirstOrDefaultAsync(s => s.EmployeeId == slip.EmployeeId, ct);
-
-            // Payslips issued before balances were recorded get them worked out now (and kept, so reprints match).
-            if (slip.NssfContributionsToDate is null && run.Status != PayrollRunStatus.Reversed)
-                slip.NssfContributionsToDate = await facts.NssfToDateAsync(slip.EmployeeId, slip.PeriodEnd, null, ct);
-            slip.LeaveBalances ??= await facts.LeaveRemainingAsync(slip.EmployeeId, slip.PeriodEnd, ct);
-            var pdf = PayslipRenderer.Render(entity, employee, result, run, period, slip, bank, dept, FieldEncryptor.Mask(stat?.KraPin), slip.NssfContributionsToDate, slip.LeaveBalances, await letterheads.BrandAsync(entity.Id, ct));
-            var hash = Convert.ToHexStringLower(SHA256.HashData(pdf));
-            slip.ContentHash ??= hash;
+            var pdf = await payslips.RenderAsync(slip, ct);
             if (ctx.EmployeeId == slip.EmployeeId) slip.FirstViewedAt ??= DateTimeOffset.UtcNow;
             audit.Record("payslip.downloaded", nameof(Payslip), slip.Id, new { slip.PayslipNumber, self = ctx.EmployeeId == slip.EmployeeId }, slip.LegalEntityId);
             await db.SaveChangesAsync(ct);

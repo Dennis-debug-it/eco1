@@ -39,6 +39,7 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
   - `SaveChangesAsync` stamps inserts and rejects cross-tenant legal-entity references
   - validate other foreign IDs from request bodies against the caller's legal entity (see `EmployeeEndpoints.ValidateReferencesAsync`)
 - **Authorisation** goes in the service or endpoint via `ITenantContext.Require(Permissions.X)`. Keep salary data behind `salary.read`.
+- **Daily pay.** Set a salary's basis through `PayBasisRules.Apply`, never by hand. For a daily-paid worker, `BasicSalary` holds the monthly equivalent (daily rate × standard working days) so monthly consumers keep working; the run pays `DailyRate` × days worked from attendance, never `BasicSalary`.
 - **Approved runs are immutable.** Call `PayrollRun.EnsureEditable()` before any change. Use adjustments or reversal for corrections.
 - **Sensitive fields** use `FieldEncryptor` converters. Mask them (`FieldEncryptor.Mask`) in logs, audit details and read-only views.
 - **Audit** every state change or sensitive change with `AuditService.Record`, in the same unit of work.
@@ -58,6 +59,15 @@ dotnet ef migrations add <Name> -p src/Ecosys.Payroll.Infrastructure -s src/Ecos
 - **Offer letters** go through `OfferLetterService`. They state the salary: drafting and sending need `salary.write`, reading needs `salary.read`, and emails to the candidate carry the link but never the figures. A sent letter is frozen; changing the offer needs the letter withdrawn.
 - **Contracts and variation letters** go through `ContractService` (templates, draft, issue, signed-copy upload). They state pay: access needs `salary.read` plus `hr.documents` or `salary.write`, and contract-category employee documents need `salary.read` unless the employee is viewing their own.
 - **Company documents** draw their header with `LetterheadService.BrandAsync(legalEntityId)` and `Brand.Draw`. Pass the brand to every renderer of a company document.
+- **Data migration** loads go through `MigrationImportService`: a dry run, then all-or-nothing as an `ImportBatch` that undo reverses. Keep importer validation on the shared `EmployeeRules`, and add header spellings to the importer's `Columns` aliases.
+  - Anything new that pays, finalises or files calls `MigrationGuard.EnsureLiveAsync` first.
+  - `CompanyExportService` exports every `TenantEntity` table automatically. Add any new credential column to its `SecretColumns`.
+- **Accounting exports** go through `JournalExportService`: check, then write the file, then stamp `ExternalReference` and audit `journal.exported`. A new format gets a writer, a check for what that system rejects, and a test that it balances.
+- **Integrations.** Other systems use API keys (`ApiKeyService`) and the published API in `PublicApiEndpoints` (`/api/v1`).
+  - A key holds only `ApiScopes.Grantable` permissions, and is limited to `/api/v1` by `ApiClientGateMiddleware`.
+  - `/api/v1` shapes are a contract: add fields, never rename or remove them. Reuse the screen endpoints' shared methods (`EmployeeEndpoints.CreateAsync` and the like) so both run the same checks.
+  - Webhook events come from audit actions (`IntegrationEventTypes.ForAuditAction`). Give a new event an audit action and a mapping there, and never put pay figures in a payload.
+  - Webhook addresses must pass `WebhookAddress`. Never allow private targets outside Development.
 - **Uploads** go through `FileStore`, never raw. Serve files only via `/files/{id}`, which re-checks access to the owning record.
 
 ## Layout

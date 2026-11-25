@@ -19,13 +19,13 @@ public static class PlanCatalogue
         };
         yield return new Plan
         {
-            Code = "growth", Name = "Growth", SortOrder = 2, Description = "Everything in Starter plus the HR suite: recruitment, performance, learning, cases, benefits and assets. Up to 3 companies.",
-            MonthlyBaseFee = 7_500m, IncludedEmployees = 25, PricePerAdditionalEmployee = 200m, MaxEmployees = 500, MaxLegalEntities = 3, Features = [PlanFeatures.HrSuite],
+            Code = "growth", Name = "Growth", SortOrder = 2, Description = "Everything in Starter plus the HR suite (recruitment, performance, learning, cases, benefits and assets) and the API for connecting other systems. Up to 3 companies.",
+            MonthlyBaseFee = 7_500m, IncludedEmployees = 25, PricePerAdditionalEmployee = 200m, MaxEmployees = 500, MaxLegalEntities = 3, Features = [PlanFeatures.HrSuite, PlanFeatures.Api],
         };
         yield return new Plan
         {
             Code = "enterprise", Name = "Enterprise", SortOrder = 3, IsPublic = false, Description = "Unlimited employees and companies, negotiated pricing. Assigned by the operator.",
-            MonthlyBaseFee = 0m, IncludedEmployees = 0, PricePerAdditionalEmployee = 0m, MaxEmployees = null, MaxLegalEntities = null, Features = [PlanFeatures.HrSuite],
+            MonthlyBaseFee = 0m, IncludedEmployees = 0, PricePerAdditionalEmployee = 0m, MaxEmployees = null, MaxLegalEntities = null, Features = [PlanFeatures.HrSuite, PlanFeatures.Api],
         };
     }
 

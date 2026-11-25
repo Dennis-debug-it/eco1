@@ -492,6 +492,10 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("currency_code");
 
+                    b.Property<decimal?>("DailyRate")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("daily_rate");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -515,6 +519,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("LegalEntityId")
                         .HasColumnType("uuid")
                         .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("PayBasis")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("pay_basis");
 
                     b.Property<Guid?>("SalaryStructureId")
                         .HasColumnType("uuid")
@@ -769,6 +778,11 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<string>("PayeReturnCategory")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("paye_return_category");
 
                     b.Property<bool>("Pensionable")
                         .HasColumnType("boolean")
@@ -5372,6 +5386,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
 
+                    b.Property<DateTimeOffset?>("PasswordResetExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("password_reset_expires_at");
+
+                    b.Property<string>("PasswordResetTokenHash")
+                        .HasColumnType("text")
+                        .HasColumnName("password_reset_token_hash");
+
                     b.Property<string>("Phone")
                         .HasColumnType("text")
                         .HasColumnName("phone");
@@ -5403,6 +5425,9 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.HasIndex("EmailVerificationTokenHash")
                         .HasDatabaseName("ix_users_email_verification_token_hash");
 
+                    b.HasIndex("PasswordResetTokenHash")
+                        .HasDatabaseName("ix_users_password_reset_token_hash");
+
                     b.HasIndex("TenantId")
                         .HasDatabaseName("ix_users_tenant_id");
 
@@ -5411,6 +5436,456 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_users_tenant_id_email");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Integration.ApiClient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by_name");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("key_hash");
+
+                    b.Property<string>("KeyPrefix")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("key_prefix");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<string>("LastUsedIp")
+                        .HasColumnType("text")
+                        .HasColumnName("last_used_ip");
+
+                    b.PrimitiveCollection<string>("LegalEntityIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("legal_entity_ids");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.PrimitiveCollection<string>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("permissions");
+
+                    b.Property<int>("RequestsPerMinute")
+                        .HasColumnType("integer")
+                        .HasColumnName("requests_per_minute");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("RevokedByName")
+                        .HasColumnType("text")
+                        .HasColumnName("revoked_by_name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_api_clients");
+
+                    b.HasIndex("KeyHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_api_clients_key_hash");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_api_clients_tenant_id");
+
+                    b.ToTable("api_clients", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Integration.IdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ApiClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("api_client_id");
+
+                    b.Property<string>("ContentType")
+                        .HasColumnType("text")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text")
+                        .HasColumnName("location");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("ResponseBody")
+                        .HasColumnType("text")
+                        .HasColumnName("response_body");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("status_code");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_idempotency_records");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_idempotency_records_expires_at");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_idempotency_records_tenant_id");
+
+                    b.HasIndex("ApiClientId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_idempotency_records_api_client_id_key");
+
+                    b.ToTable("idempotency_records", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Integration.IntegrationEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActorName")
+                        .HasColumnType("text")
+                        .HasColumnName("actor_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("entity_type");
+
+                    b.Property<bool>("FannedOut")
+                        .HasColumnType("boolean")
+                        .HasColumnName("fanned_out");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<long>("Sequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("sequence");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Sequence"));
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_integration_events");
+
+                    b.HasIndex("FannedOut")
+                        .HasDatabaseName("ix_integration_events_fanned_out")
+                        .HasFilter("fanned_out = false");
+
+                    b.HasIndex("Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_integration_events_sequence");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_integration_events_tenant_id");
+
+                    b.HasIndex("TenantId", "Sequence")
+                        .HasDatabaseName("ix_integration_events_tenant_id_sequence");
+
+                    b.ToTable("integration_events", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Integration.WebhookDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("event_type");
+
+                    b.Property<Guid?>("IntegrationEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("integration_event_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<int?>("LastStatusCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_status_code");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WebhookEndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("webhook_endpoint_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_webhook_deliveries");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_webhook_deliveries_tenant_id");
+
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_webhook_deliveries_status_next_attempt_at");
+
+                    b.HasIndex("WebhookEndpointId", "CreatedAt")
+                        .HasDatabaseName("ix_webhook_deliveries_webhook_endpoint_id_created_at");
+
+                    b.ToTable("webhook_deliveries", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Integration.WebhookEndpoint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer")
+                        .HasColumnName("consecutive_failures");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DisabledReason")
+                        .HasColumnType("text")
+                        .HasColumnName("disabled_reason");
+
+                    b.PrimitiveCollection<string>("Events")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("events");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<DateTimeOffset?>("LastFailureAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_failure_at");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Secret")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("secret");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_webhook_endpoints");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_webhook_endpoints_tenant_id");
+
+                    b.ToTable("webhook_endpoints", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.EmployeeLeaveBalance", b =>
@@ -5786,6 +6261,220 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_public_holidays_legal_entity_id_date");
 
                     b.ToTable("public_holidays", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.ImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AppliedByName")
+                        .HasColumnType("text")
+                        .HasColumnName("applied_by_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_name");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<string>("Records")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("records");
+
+                    b.Property<int>("RowCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("row_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UndoneAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("undone_at");
+
+                    b.Property<string>("UndoneByName")
+                        .HasColumnType("text")
+                        .HasColumnName("undone_by_name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_import_batches");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_import_batches_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_import_batches_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "CreatedAt")
+                        .HasDatabaseName("ix_import_batches_legal_entity_id_created_at");
+
+                    b.ToTable("import_batches", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.PayrollHistoryMonth", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("AllowableDeductions")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("allowable_deductions");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<decimal>("Gross")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("gross");
+
+                    b.Property<decimal>("GrossTax")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("gross_tax");
+
+                    b.Property<decimal>("HousingLevy")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("housing_levy");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("import_batch_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("LegalEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("legal_entity_id");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer")
+                        .HasColumnName("month");
+
+                    b.Property<decimal>("NetPay")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("net_pay");
+
+                    b.Property<decimal>("Nssf")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("nssf");
+
+                    b.Property<decimal>("Paye")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("paye");
+
+                    b.Property<decimal>("Reliefs")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("reliefs");
+
+                    b.Property<decimal>("Shif")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("shif");
+
+                    b.Property<decimal>("TaxableEarnings")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("taxable_earnings");
+
+                    b.Property<decimal>("TaxablePay")
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("taxable_pay");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id")
+                        .HasName("pk_payroll_history_months");
+
+                    b.HasIndex("ImportBatchId")
+                        .HasDatabaseName("ix_payroll_history_months_import_batch_id");
+
+                    b.HasIndex("LegalEntityId")
+                        .HasDatabaseName("ix_payroll_history_months_legal_entity_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_payroll_history_months_tenant_id");
+
+                    b.HasIndex("LegalEntityId", "Year")
+                        .HasDatabaseName("ix_payroll_history_months_legal_entity_id_year");
+
+                    b.HasIndex("EmployeeId", "Year", "Month")
+                        .IsUnique()
+                        .HasDatabaseName("ix_payroll_history_months_employee_id_year_month");
+
+                    b.ToTable("payroll_history_months", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.BankDirectoryBank", b =>
@@ -6733,6 +7422,18 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<DateOnly?>("GoLiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("go_live_from");
+
+                    b.Property<DateTimeOffset?>("GoLiveSignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("go_live_signed_at");
+
+                    b.Property<string>("GoLiveSignedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("go_live_signed_by");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
@@ -6740,6 +7441,14 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<DateTimeOffset?>("MigrationStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("migration_started_at");
+
+                    b.Property<string>("MigrationStartedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("migration_started_by");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -8788,6 +9497,16 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_training_sessions_training_courses_training_course_id");
                 });
 
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Integration.WebhookDelivery", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Integration.WebhookEndpoint", null)
+                        .WithMany()
+                        .HasForeignKey("WebhookEndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_webhook_deliveries_webhook_endpoints_webhook_endpoint_id");
+                });
+
             modelBuilder.Entity("Ecosys.Payroll.Domain.Leave.EmployeeLeaveBalance", b =>
                 {
                     b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
@@ -8826,6 +9545,40 @@ namespace Ecosys.Payroll.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_public_holidays_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.ImportBatch", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_import_batches_legal_entities_legal_entity_id");
+                });
+
+            modelBuilder.Entity("Ecosys.Payroll.Domain.Migration.PayrollHistoryMonth", b =>
+                {
+                    b.HasOne("Ecosys.Payroll.Domain.Employees.Employee", null)
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payroll_history_months_employees_employee_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Migration.ImportBatch", null)
+                        .WithMany()
+                        .HasForeignKey("ImportBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payroll_history_months_import_batches_import_batch_id");
+
+                    b.HasOne("Ecosys.Payroll.Domain.Organisation.LegalEntity", null)
+                        .WithMany()
+                        .HasForeignKey("LegalEntityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payroll_history_months_legal_entities_legal_entity_id");
                 });
 
             modelBuilder.Entity("Ecosys.Payroll.Domain.Organisation.Branch", b =>

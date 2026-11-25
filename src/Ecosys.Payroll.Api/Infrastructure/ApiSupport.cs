@@ -65,6 +65,12 @@ public sealed class TenantContextMiddleware(RequestDelegate next, IConfiguration
             ctx.Roles = roles;
             ctx.Permissions = Permissions.ForRoles(roles);
             ctx.IsPlatformAdministrator = roles.Contains(Roles.PlatformAdministrator);
+            // A program signed in with an API key holds exactly the key's permissions; it has no roles.
+            if (Guid.TryParse(user.FindFirstValue(ApiKeyAuthenticationHandler.ClientIdClaim), out var client))
+            {
+                ctx.ApiClientId = client;
+                ctx.Permissions = user.FindAll(ApiKeyAuthenticationHandler.PermissionClaim).Select(c => c.Value).ToHashSet();
+            }
             ctx.LegalEntityIds = user.FindAll(ClaimNames.LegalEntityIds).Select(c => c.Value).SelectMany(v => v.Split(',', StringSplitOptions.RemoveEmptyEntries))
                 .Select(v => Guid.TryParse(v, out var g) ? g : Guid.Empty).Where(g => g != Guid.Empty).ToHashSet();
         }
@@ -72,7 +78,7 @@ public sealed class TenantContextMiddleware(RequestDelegate next, IConfiguration
 
         // Locally issued tokens are checked against the user's security stamp (revocation). Tokens from the shared
         // Ecosys identity provider are governed by that provider's session lifetime instead.
-        if (user.Identity?.IsAuthenticated == true && config["Auth:Mode"] != "Ecosys" && ctx.UserId is { } sessionUser
+        if (user.Identity?.IsAuthenticated == true && config["Auth:Mode"] != "Ecosys" && ctx.ApiClientId is null && ctx.UserId is { } sessionUser
             && !await sessions.IsCurrentAsync(db, sessionUser, user.FindFirstValue(ClaimNames.SecurityStamp), http.RequestAborted))
         {
             http.Response.StatusCode = StatusCodes.Status401Unauthorized;

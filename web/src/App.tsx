@@ -1,4 +1,6 @@
 import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { api } from './lib/api'
 import { P, useAuth } from './lib/auth'
 import { Loading } from './components/ui'
 import LoginPage from './pages/Login'
@@ -30,7 +32,10 @@ import CareersPage from './pages/Careers'
 import OrganogramPage from './pages/Organogram'
 import OfferResponsePage from './pages/OfferResponse'
 import PlatformPage from './pages/Platform'
+import MigrationPage, { type MigrationStatus } from './pages/Migration'
+import IntegrationsPage from './pages/Integrations'
 import SignupPage, { VerifyEmailPage } from './pages/Signup'
+import { ForgotPasswordPage, ResetPasswordPage } from './pages/PasswordReset'
 import { useHrMe } from './lib/lookups'
 import { Feature, useBillingStatus, type BillingStatus } from './lib/billing'
 
@@ -40,8 +45,12 @@ export default function App() {
   const ready = !!user && !user.mustChangePassword && (!user.mfaRequired || user.mfaSatisfied)
   const hrMe = useHrMe(ready)
   const billing = useBillingStatus(ready)
+  // Everyone who works on payroll should see that nothing can be paid yet, not only whoever started the migration.
+  const migration = useQuery({ queryKey: ['migration'], queryFn: () => api.get<MigrationStatus>('/api/payroll/migration'), enabled: ready && !!user?.permissions.includes('employees.read') })
   // Public pages that work whether or not anyone is signed in on this browser:
   // a candidate's offer link, and the careers page (candidates never sign in).
+  // A reset link must work even if someone else is still signed in on this browser.
+  if (location.pathname === '/reset-password') return <ResetPasswordPage />
   if (location.pathname.startsWith('/offer/')) return <Routes><Route path="/offer/:token" element={<OfferResponsePage />} /></Routes>
   if (location.pathname.startsWith('/careers/')) return (
     <Routes>
@@ -55,6 +64,7 @@ export default function App() {
     <Routes>
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="*" element={<LoginPage />} />
     </Routes>
   )
@@ -93,6 +103,8 @@ export default function App() {
     { to: '/reports', label: 'Reports & audit', show: can(P.ReportsRead) || can(P.AuditRead) },
     { to: '/settings', label: 'Settings & security', show: true, section: 'Administration' },
     { to: '/data-protection', label: 'Data protection', show: can(P.OrganisationManage), section: 'Administration' },
+    { to: '/integrations', label: 'Integrations & API', show: can(P.IntegrationsManage), section: 'Administration' },
+    { to: '/migration', label: 'Data migration', show: can(P.EmployeesWrite) || can(P.OrganisationManage), section: 'Administration' },
     { to: '/billing', label: 'Billing', show: !!b?.saas && !b.managed && can(P.BillingManage), section: 'Administration' },
     { to: '/operator', label: 'Operator console', show: platform, section: 'Platform' },
   ].filter(n => !operatorOnly || n.to === '/operator' || n.to === '/settings')
@@ -117,6 +129,7 @@ export default function App() {
       </aside>
       <main className="main">
         {b && <SubscriptionBanner status={b} admin={can(P.BillingManage)} />}
+        {migration.data?.inMigration && <div className="alert info" role="status">Migration mode: payroll can be calculated and compared with the old system, but not approved, paid or filed until go-live is signed. <NavLink to="/migration">Data migration</NavLink></div>}
         <Routes>
           <Route path="/" element={employeeOnly ? <Navigate to="/self-service" replace /> : operatorOnly ? <Navigate to="/operator" replace /> : <DashboardPage />} />
           <Route path="/billing" element={<BillingPage />} />
@@ -142,6 +155,8 @@ export default function App() {
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/hr-analytics" element={<HrAnalyticsPage />} />
           <Route path="/data-protection" element={<DataProtectionPage />} />
+          <Route path="/migration" element={<MigrationPage />} />
+          <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

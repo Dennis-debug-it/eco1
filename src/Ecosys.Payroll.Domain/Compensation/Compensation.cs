@@ -16,6 +16,15 @@ public enum CalculationMethod
 
 public enum Recurrence { EveryPeriod, OneOff }
 
+/// <summary>
+/// The pay column of KRA's P10 PAYE return an earning is reported in. <see cref="Auto"/> decides by component code
+/// (BASIC, HOUSE, TRANSPORT, LEAVE_PAY, OT, NOTICE_PAY, SEVERANCE), and anything else taxable is "other allowance".
+/// </summary>
+public enum PayeReturnCategory { Auto, BasicSalary, HousingAllowance, TransportAllowance, LeavePay, Overtime, DirectorsFee, LumpSum, OtherAllowance, CarBenefit, OtherNonCashBenefit }
+
+/// <summary>How basic pay is earned: a monthly salary, or a daily wage paid for the days actually worked.</summary>
+public enum PayBasis { Monthly, Daily }
+
 /// <summary>Configurable earning or deduction definition (PRD §3.3).</summary>
 public class SalaryComponent : LegalEntityScopedEntity
 {
@@ -28,6 +37,8 @@ public class SalaryComponent : LegalEntityScopedEntity
     public bool Taxable { get; set; } = true;
     public bool Pensionable { get; set; }
     public bool IsBasic { get; set; }
+    /// <summary>Where this earning goes on the P10 PAYE return. Auto suits the standard components.</summary>
+    public PayeReturnCategory PayeReturnCategory { get; set; } = PayeReturnCategory.Auto;
     public DeductionTreatment DeductionTreatment { get; set; } = DeductionTreatment.Ordinary;
     /// <summary>Employer-side matching contribution rate for deductions (e.g. pension 1:1 = 1.0).</summary>
     public decimal EmployerMatchRate { get; set; }
@@ -64,7 +75,15 @@ public class EmployeeSalaryAssignment : LegalEntityScopedEntity, IEffectiveDated
 {
     public Guid EmployeeId { get; set; }
     public Guid? SalaryStructureId { get; set; }
+    /// <summary>
+    /// Monthly basic salary. For a daily-paid worker this is the monthly equivalent (daily rate x the company's standard
+    /// working days), kept so notice pay, final dues, reviews and reports still have a monthly figure; the payroll run
+    /// pays the daily rate for the days worked instead.
+    /// </summary>
     public decimal BasicSalary { get; set; }
+    public PayBasis PayBasis { get; set; } = PayBasis.Monthly;
+    /// <summary>The daily wage, when <see cref="PayBasis"/> is Daily.</summary>
+    public decimal? DailyRate { get; set; }
     public string CurrencyCode { get; set; } = "KES";
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveTo { get; set; }

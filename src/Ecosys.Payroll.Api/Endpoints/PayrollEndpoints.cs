@@ -29,7 +29,7 @@ public sealed record AttendanceRow(string EmployeeNumber, decimal DaysWorked, de
 
 public static class PayrollEndpoints
 {
-    private static async Task<object> SaveAttendanceAsync(Guid runId, List<AttendanceRow> rows, string source, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct)
+    internal static async Task<object> SaveAttendanceAsync(Guid runId, List<AttendanceRow> rows, string source, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct)
     {
         ctx.Require(Permissions.PayrollPrepare);
         var run = await svc.GetAsync(runId, includeEmployees: false, ct);
@@ -59,6 +59,30 @@ public static class PayrollEndpoints
         audit.Record("payroll.run.attendance", nameof(PayrollRun), runId, new { rows = rows.Count, source, overtimeHours = rows.Sum(r => r.OvertimeHours + r.RestDayOvertimeHours), absentDays = rows.Sum(r => r.AbsentDays) }, run.LegalEntityId);
         await db.SaveChangesAsync(ct);
         return new { saved = rows.Count };
+    }
+
+    /// <summary>Adds one-off pay items (overtime, bonuses, deductions) to a run that can still be changed.</summary>
+    internal static async Task<object> AddVariableInputsAsync(Guid id, List<VariableInputRequest> items, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct)
+    {
+        ctx.Require(Permissions.PayrollPrepare);
+        var run = await svc.GetAsync(id, includeEmployees: false, ct);
+        run.EnsureEditable();
+        var components = await db.SalaryComponents.Where(c => c.LegalEntityId == run.LegalEntityId).ToDictionaryAsync(c => c.Id, ct);
+        // Employee ids come from the request body: each must be in this run's company and payroll group.
+        var employeeIds = items.Select(i => i.EmployeeId).Distinct().ToList();
+        var known = await db.Employees.Where(e => employeeIds.Contains(e.Id) && e.LegalEntityId == run.LegalEntityId && e.PayrollGroupId == run.PayrollGroupId).Select(e => e.Id).ToListAsync(ct);
+        var missing = employeeIds.Except(known).ToList();
+        if (missing.Count > 0) throw new DomainException($"Employee {missing[0]} is not in this payroll run's company and payroll group.", "VALIDATION");
+        foreach (var i in items)
+        {
+            if (!components.TryGetValue(i.SalaryComponentId, out var c)) throw new NotFoundException(nameof(SalaryComponent), i.SalaryComponentId);
+            if (i.Amount <= 0) throw new DomainException($"Amount for {c.Code} must be positive.", "VALIDATION");
+            db.PayrollVariableInputs.Add(new PayrollVariableInput { LegalEntityId = run.LegalEntityId, PayrollRunId = id, EmployeeId = i.EmployeeId, SalaryComponentId = i.SalaryComponentId, Amount = i.Amount, Note = i.Note });
+        }
+        if (run.Status == PayrollRunStatus.Calculated) run.Transition(PayrollRunStatus.Prepared); // results are stale
+        audit.Record("payroll.run.variable_inputs", nameof(PayrollRun), id, new { count = items.Count, total = items.Sum(i => i.Amount) }, run.LegalEntityId);
+        await db.SaveChangesAsync(ct);
+        return new { added = items.Count };
     }
 
     public static void MapPayrollRuns(this RouteGroupBuilder api)
@@ -123,22 +147,7 @@ public static class PayrollEndpoints
             return Results.Ok(await db.PayrollVariableInputs.Where(v => v.PayrollRunId == id).OrderBy(v => v.CreatedAt).ToListAsync(ct));
         });
         g.MapPost("/{id:guid}/variable-inputs", async (Guid id, List<VariableInputRequest> items, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
-        {
-            ctx.Require(Permissions.PayrollPrepare);
-            var run = await svc.GetAsync(id, includeEmployees: false, ct);
-            run.EnsureEditable();
-            var components = await db.SalaryComponents.Where(c => c.LegalEntityId == run.LegalEntityId).ToDictionaryAsync(c => c.Id, ct);
-            foreach (var i in items)
-            {
-                if (!components.TryGetValue(i.SalaryComponentId, out var c)) throw new NotFoundException(nameof(SalaryComponent), i.SalaryComponentId);
-                if (i.Amount <= 0) throw new DomainException($"Amount for {c.Code} must be positive.", "VALIDATION");
-                db.PayrollVariableInputs.Add(new PayrollVariableInput { LegalEntityId = run.LegalEntityId, PayrollRunId = id, EmployeeId = i.EmployeeId, SalaryComponentId = i.SalaryComponentId, Amount = i.Amount, Note = i.Note });
-            }
-            if (run.Status == PayrollRunStatus.Calculated) run.Transition(PayrollRunStatus.Prepared); // results are stale
-            audit.Record("payroll.run.variable_inputs", nameof(PayrollRun), id, new { count = items.Count, total = items.Sum(i => i.Amount) }, run.LegalEntityId);
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(new { added = items.Count });
-        });
+            Results.Ok(await AddVariableInputsAsync(id, items, ctx, svc, db, audit, ct)));
         g.MapDelete("/{id:guid}/variable-inputs/{inputId:guid}", async (Guid id, Guid inputId, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, CancellationToken ct) =>
         {
             ctx.Require(Permissions.PayrollPrepare);

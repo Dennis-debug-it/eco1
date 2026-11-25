@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Ecosys.Payroll.Api.Infrastructure;
 using Ecosys.Payroll.Domain.Billing;
+using Ecosys.Payroll.Domain.Common;
 using Ecosys.Payroll.Infrastructure.Security;
 using Ecosys.Payroll.Infrastructure.Seed;
 using Ecosys.Payroll.Infrastructure.Services.Saas;
@@ -325,6 +326,77 @@ public partial class SaasTests(SaasFixture app) : IClassFixture<SaasFixture>
         // Provision from the console with a one-time password.
         var made = await ops.PostJson($"{P}/tenants", new { organisationName = "Console Made Ltd", slug = "console-made", kraPin = NextPin(), adminEmail = "boss@made.example", adminName = "Boss Person", planCode = "starter", trial = true });
         Assert.False(string.IsNullOrEmpty(made["temporaryPassword"].Str()));
+    }
+
+    [Fact]
+    public async Task Reopening_an_account_made_read_only_during_its_trial_returns_it_to_the_trial()
+    {
+        var ops = await OperatorAsync();
+        var (admin, _, tenantId) = await SignUpAsync("Paused Trial Ltd");
+        var trialEnd = (await SubscriptionAsync(tenantId)).TrialEndsOn!.Value;
+        void Refresh() => app.Services.GetRequiredService<EntitlementCache>().Invalidate(tenantId);
+
+        // Suspended by the operator, then reopened: back on the same trial, not a paid subscription.
+        await ops.PostJson($"{P}/tenants/{tenantId}/suspend", new { reason = "Checking identity" });
+        Assert.True((await SubscriptionAsync(tenantId)).InTrialStage);
+        var reopened = await ops.PostJson($"{P}/tenants/{tenantId}/reactivate");
+        Assert.Equal("Trialing", reopened["status"].Str());
+        var sub = await SubscriptionAsync(tenantId);
+        Assert.Equal(trialEnd, sub.TrialEndsOn);
+        Assert.Null(sub.ActivatedAt);
+        Assert.Null(sub.CurrentPeriodStart);
+        Assert.Null(sub.SuspensionReason);
+        Refresh();
+        Assert.Equal(HttpStatusCode.Created, (await AddEmployeeAsync(admin, "PT1")).StatusCode);
+
+        // The trial then runs its normal course: no billing details, so it lapses at the end date and nothing is invoiced.
+        await RunBillingAsync(trialEnd.AddDays(1), tenantId);
+        sub = await SubscriptionAsync(tenantId);
+        Assert.Equal(SubscriptionStatus.Suspended, sub.Status);
+        Assert.Equal(Subscription.TrialEndedReason, sub.SuspensionReason);
+        Assert.Equal(0, await app.WithDbAsync(tenantId, db => db.SubscriptionInvoices.CountAsync()));
+
+        // Once the end date has passed there is no trial to return to: reactivating is refused, extending reopens it.
+        // (The billing run above used a simulated date; the operator actions use today's, so end the trial yesterday.)
+        await app.WithDbAsync(tenantId, async db => { (await db.Subscriptions.FirstAsync()).TrialEndsOn = BusinessClock.Today().AddDays(-1); return await db.SaveChangesAsync(); });
+        var refused = await ops.PostAsJsonAsync($"{P}/tenants/{tenantId}/reactivate", new { });
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("Extend trial", await refused.Content.ReadAsStringAsync());
+        Assert.Equal(SubscriptionStatus.Suspended, (await SubscriptionAsync(tenantId)).Status);
+        var until = BusinessClock.Today().AddDays(10);
+        var extended = await ops.PostJson($"{P}/tenants/{tenantId}/extend-trial", new { until });
+        Assert.Equal("Trialing", extended["status"].Str());
+        Assert.Equal(until, (await SubscriptionAsync(tenantId)).TrialEndsOn);
+
+        // An operator suspension during the trial can be lifted by extending the trial too.
+        await ops.PostJson($"{P}/tenants/{tenantId}/suspend", new { reason = "Checking identity again" });
+        await ops.PostJson($"{P}/tenants/{tenantId}/extend-trial", new { until = until.AddDays(5) });
+        sub = await SubscriptionAsync(tenantId);
+        Assert.Equal(SubscriptionStatus.Trialing, sub.Status);
+        Assert.Null(sub.SuspensionReason);
+
+        // A trial the customer cancelled is reopened as a trial as well.
+        Refresh();
+        await admin.PostJson($"{B}/billing/cancel", new { reason = "Not now" });
+        Assert.Equal(SubscriptionStatus.Cancelled, (await SubscriptionAsync(tenantId)).Status);
+        Assert.Equal("Trialing", (await ops.PostJson($"{P}/tenants/{tenantId}/reactivate"))["status"].Str());
+        sub = await SubscriptionAsync(tenantId);
+        Assert.Null(sub.CancelledAt);
+        Assert.Null(sub.CancellationReason);
+
+        // A paying customer reopened by the operator stays a paying customer.
+        var (_, _, paidId) = await SignUpAsync("Paying Customer Ltd");
+        await app.WithDbAsync(paidId, async db =>
+        {
+            var p = await db.Subscriptions.FirstAsync();
+            p.Status = SubscriptionStatus.Active; p.ActivatedAt = DateTimeOffset.UtcNow;
+            p.CurrentPeriodStart = BusinessClock.Today(); p.CurrentPeriodEnd = BusinessClock.Today().AddMonths(1).AddDays(-1);
+            return await db.SaveChangesAsync();
+        });
+        await ops.PostJson($"{P}/tenants/{paidId}/suspend", new { reason = "Chargeback" });
+        Assert.Equal("Active", (await ops.PostJson($"{P}/tenants/{paidId}/reactivate"))["status"].Str());
+        var actions = await app.WithDbAsync(tenantId, db => db.PayrollAuditLogs.Where(a => a.Action == "billing.reactivated").Select(a => a.Details).ToListAsync());
+        Assert.All(actions, d => Assert.Contains("\"after\":\"Trialing\"", d));
     }
 
     [GeneratedRegex("token=([A-Za-z0-9_-]+)")] private static partial Regex TokenRx();

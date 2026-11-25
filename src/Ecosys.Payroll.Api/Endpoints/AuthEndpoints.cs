@@ -23,6 +23,7 @@ public static class AuthEndpoints
     public static void MapAuth(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/auth");
+        g.MapPasswordReset();
 
         // Local development identity. In Auth:Mode=Ecosys this endpoint is disabled and tokens come from the platform IdP.
         g.MapPost("/login", async (LoginRequest req, PayrollDbContext db, TokenService tokens, IConfiguration config, NotificationService notify, CancellationToken ct) =>
@@ -97,6 +98,7 @@ public static class AuthEndpoints
             user.PasswordHash = PasswordHasher.Hash(body.NewPassword);
             user.PasswordChangedAt = DateTimeOffset.UtcNow;
             user.MustChangePassword = false;
+            PasswordResetEndpoints.ClearResetToken(user);
             user.RotateSecurityStamp(); // signs out every other session
             audit.Record("auth.password.changed", nameof(User), user.Id);
             await db.SaveChangesAsync(ct);
@@ -118,9 +120,11 @@ public static class AuthEndpoints
         }).RequireAuthorization();
 
         // What the sign-in page may show before anyone is signed in. Demo hints only on servers that load demo data.
-        g.MapGet("/options", (IConfiguration config, Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions saas) => Results.Ok(new
+        g.MapGet("/options", (IConfiguration config, IHostEnvironment env, Ecosys.Payroll.Infrastructure.Services.Saas.SaasOptions saas) => Results.Ok(new
         {
             demo = config.GetValue("Payroll:SeedDemoData", false),
+            // Matches the seeding rule in Program.cs: the demo operator account exists only in Development.
+            demoOperator = config.GetValue("Payroll:SeedDemoData", false) && env.IsDevelopment(),
             localLogin = config["Auth:Mode"] != "Ecosys",
             signup = saas.Enabled && saas.SignupEnabled,
         })).AllowAnonymous();
@@ -235,6 +239,7 @@ public static class AuthEndpoints
             if (PasswordPolicy.Validate(password, u.Email, u.DisplayName) is { } why) return Results.Problem(why, statusCode: 400, title: "Password not accepted");
             u.PasswordHash = PasswordHasher.Hash(password);
             u.MustChangePassword = true; u.FailedLoginCount = 0; u.LockedUntil = null; u.PasswordChangedAt = DateTimeOffset.UtcNow;
+            PasswordResetEndpoints.ClearResetToken(u);
             u.RotateSecurityStamp();
             audit.Record("auth.password.reset", nameof(User), u.Id, new { by = ctx.UserName });
             await db.SaveChangesAsync(ct);

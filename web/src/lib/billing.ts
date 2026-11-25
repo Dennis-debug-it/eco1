@@ -12,9 +12,9 @@ export type BillingStatus = {
   usage?: { employees: number; maxEmployees?: number | null; legalEntities: number; maxLegalEntities?: number | null }
 }
 
-export const Feature = { HrSuite: 'hr_suite' } as const
+export const Feature = { HrSuite: 'hr_suite', Api: 'api' } as const
 
-export const featureLabel: Record<string, string> = { hr_suite: 'HR suite' }
+export const featureLabel: Record<string, string> = { hr_suite: 'HR suite', api: 'API & webhooks' }
 
 /** Subscription status for the signed-in organisation. Operator-managed organisations and licensed installs report managed: true. */
 export function useBillingStatus(enabled = true) {

@@ -98,6 +98,8 @@ public static partial class PlatformEndpoints
             return Results.Ok(new
             {
                 tenant = new { t.Id, t.Name, t.Slug, t.IsActive, t.CreatedAt },
+                // Where the customer is in moving off their previous payroll system. State only: no employee or payroll figures.
+                migration = new { inMigration = t.InMigration, t.MigrationStartedAt, t.GoLiveSignedAt, t.GoLiveSignedBy, t.GoLiveFrom },
                 subscription = sub, plan = plan is null ? null : BillingEndpoints.PlanView(plan),
                 usage = new
                 {

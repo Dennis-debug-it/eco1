@@ -41,8 +41,8 @@ public static class CompensationEndpoints
             ctx.RequireLegalEntity(c.LegalEntityId);
             c.Name = body.Name; c.Method = body.Method; c.DefaultAmount = body.DefaultAmount; c.DefaultRate = body.DefaultRate; c.Taxable = body.Taxable; c.Pensionable = body.Pensionable;
             c.DeductionTreatment = body.DeductionTreatment; c.EmployerMatchRate = body.EmployerMatchRate; c.Recurrence = body.Recurrence; c.GlAccountCode = body.GlAccountCode;
-            c.LiabilityGlAccountCode = body.LiabilityGlAccountCode; c.ShowOnPayslip = body.ShowOnPayslip; c.SortOrder = body.SortOrder; c.IsActive = body.IsActive;
-            audit.Record("component.updated", nameof(SalaryComponent), id, new { c.Code, c.Taxable, c.Pensionable, c.IsActive }, c.LegalEntityId);
+            c.LiabilityGlAccountCode = body.LiabilityGlAccountCode; c.ShowOnPayslip = body.ShowOnPayslip; c.SortOrder = body.SortOrder; c.IsActive = body.IsActive; c.PayeReturnCategory = body.PayeReturnCategory;
+            audit.Record("component.updated", nameof(SalaryComponent), id, new { c.Code, c.Taxable, c.Pensionable, c.IsActive, p10 = c.PayeReturnCategory.ToString() }, c.LegalEntityId);
             await db.SaveChangesAsync(ct);
             return Results.Ok(c);
         });

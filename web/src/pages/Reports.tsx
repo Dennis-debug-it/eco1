@@ -5,8 +5,9 @@ import { P, useAuth } from '../lib/auth'
 import { useLegalEntities } from '../lib/lookups'
 import type { AuditLog, Page, RunListItem } from '../lib/types'
 import { Badge, Empty, ErrorBox, Loading, PageHead, Tabs } from '../components/ui'
+import JournalExport from '../components/JournalExport'
 
-type Tab = 'statutory' | 'register' | 'variance' | 'annual' | 'audit'
+type Tab = 'statutory' | 'register' | 'variance' | 'annual' | 'journals' | 'audit'
 const statutoryCodes = [['KE.PAYE', 'PAYE (P10)'], ['KE.NSSF', 'NSSF'], ['KE.SHIF', 'SHIF'], ['KE.AHL', 'Housing Levy'], ['KE.NITA', 'NITA']]
 
 export default function ReportsPage() {
@@ -16,18 +17,19 @@ export default function ReportsPage() {
   const usable = runs.data?.items.filter(r => ['Calculated', 'UnderReview', 'Approved', 'PaymentProcessing', 'Paid', 'Finalised'].includes(r.status)) ?? []
   const [runId, setRunId] = useState('')
   const rid = runId || usable[0]?.id
-  const tabs: { id: Tab; label: string }[] = [...(can(P.ReportsRead) && can(P.SalaryRead) ? [{ id: 'statutory' as Tab, label: 'Statutory returns' }, { id: 'register' as Tab, label: 'Payroll register' }, { id: 'variance' as Tab, label: 'Variance' }, { id: 'annual' as Tab, label: 'Annual / P9' }] : []), ...(can(P.AuditRead) ? [{ id: 'audit' as Tab, label: 'Audit trail' }] : [])]
+  const tabs: { id: Tab; label: string }[] = [...(can(P.ReportsRead) && can(P.SalaryRead) ? [{ id: 'statutory' as Tab, label: 'Statutory returns' }, { id: 'register' as Tab, label: 'Payroll register' }, { id: 'variance' as Tab, label: 'Variance' }, { id: 'annual' as Tab, label: 'Annual / P9' }] : []), ...(can(P.JournalsRead) ? [{ id: 'journals' as Tab, label: 'Accounting journals' }] : []), ...(can(P.AuditRead) ? [{ id: 'audit' as Tab, label: 'Audit trail' }] : [])]
   return (
     <>
       <PageHead title="Reports & audit" sub="Statutory returns, gross-to-net register, period-on-period variance and the immutable audit trail" />
       <Tabs value={tab} onChange={setTab} tabs={tabs} />
-      {tab !== 'audit' && tab !== 'annual' && <div className="toolbar"><label className="muted small">Payroll run</label><select value={rid ?? ''} onChange={e => setRunId(e.target.value)} aria-label="Payroll run">{usable.map(r => <option key={r.id} value={r.id}>{r.reference} — {r.period} ({r.status})</option>)}</select></div>}
+      {tab !== 'audit' && tab !== 'annual' && tab !== 'journals' && <div className="toolbar"><label className="muted small">Payroll run</label><select value={rid ?? ''} onChange={e => setRunId(e.target.value)} aria-label="Payroll run">{usable.map(r => <option key={r.id} value={r.id}>{r.reference} — {r.period} ({r.status})</option>)}</select></div>}
       {tab === 'statutory' && rid && <Statutory runId={rid} />}
       {tab === 'register' && rid && <Register runId={rid} />}
       {tab === 'variance' && rid && <Variance runId={rid} />}
       {tab === 'annual' && <Annual />}
+      {tab === 'journals' && <Journals />}
       {tab === 'audit' && <Audit />}
-      {tab !== 'audit' && tab !== 'annual' && !rid && !runs.isLoading && <div className="card"><Empty>No calculated payroll runs yet.</Empty></div>}
+      {tab !== 'audit' && tab !== 'annual' && tab !== 'journals' && !rid && !runs.isLoading && <div className="card"><Empty>No calculated payroll runs yet.</Empty></div>}
     </>
   )
 }
@@ -123,6 +125,28 @@ function Annual() {
         {selected && <><h3 style={{ marginTop: 14 }}>{selected.employeeName} — monthly</h3><table><thead><tr><th>Month</th><th className="num">Gross</th><th className="num">Allowable</th><th className="num">Taxable</th><th className="num">Tax charged</th><th className="num">Reliefs</th><th className="num">PAYE</th></tr></thead>
           <tbody>{selected.months.filter(m => m.gross !== 0).map(m => <tr key={m.month}><td>{m.period}</td><td className="num">{fmt.num(m.gross)}</td><td className="num">{fmt.num(m.allowableDeductions)}</td><td className="num">{fmt.num(m.taxablePay)}</td><td className="num">{fmt.num(m.grossTax)}</td><td className="num">{fmt.num(m.reliefs)}</td><td className="num">{fmt.num(m.paye)}</td></tr>)}</tbody></table></>}
       </>}
+    </div>
+  )
+}
+
+/** A company's journals for a month (payroll, leave provision, training, expenses) as one import file for QuickBooks or Sage. */
+function Journals() {
+  const entities = useLegalEntities()
+  const [le, setLe] = useState('')
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const company = le || entities.data?.[0]?.id
+  const [y, m] = month.split('-').map(Number)
+  const from = `${month}-01`
+  const to = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
+  return (
+    <div className="card">
+      <h2>Accounting journals</h2>
+      <p className="small">Every journal posted in the month, payroll and otherwise, as one file to import into QuickBooks or Sage. Each journal is marked when it's exported, so an import is never doubled by accident.</p>
+      <div className="toolbar">
+        {(entities.data?.length ?? 0) > 1 && <select value={company ?? ''} onChange={e => setLe(e.target.value)} aria-label="Company">{entities.data!.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)} aria-label="Month" />
+      </div>
+      {company && <JournalExport query={`legalEntityId=${company}&from=${from}&to=${to}`} />}
     </div>
   )
 }

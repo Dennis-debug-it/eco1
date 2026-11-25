@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { api, ApiError, fmt } from '../lib/api'
 
 export function PageHead({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
@@ -18,7 +18,7 @@ const statusTone: Record<string, string> = {
   Draft: 'neutral', Prepared: 'neutral', Calculated: 'info', UnderReview: 'warn', Approved: 'ok', PaymentProcessing: 'info', Paid: 'ok', Finalised: 'ok', Reversed: 'danger', Rejected: 'danger',
   Pending: 'warn', PendingApproval: 'warn', Active: 'ok', Open: 'info', Closed: 'neutral', Confirmed: 'ok', Failed: 'danger', FileGenerated: 'info', Sent: 'info', Cancelled: 'neutral',
   Error: 'danger', Warning: 'warn', Posted: 'ok', Settled: 'neutral', Terminated: 'danger', Resigned: 'neutral', OnLeave: 'info', Suspended: 'warn', Probation: 'info',
-  Trialing: 'info', PastDue: 'warn', Void: 'neutral', Managed: 'neutral',
+  Trialing: 'info', PastDue: 'warn', Void: 'neutral', Managed: 'neutral', Applied: 'ok', Undone: 'neutral',
 }
 const statusLabel: Record<string, string> = { Trialing: 'Free trial', PastDue: 'Past due', UnderReview: 'Under review', PaymentProcessing: 'Payment processing', PendingApproval: 'Pending approval', FileGenerated: 'File generated', OnLeave: 'On leave' }
 
@@ -83,6 +83,28 @@ export function ReasonDialog({ title, label = 'Comment', required, confirmLabel 
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="field">{label}{children}</label>
+}
+
+function EyeIcon({ crossed }: { crossed: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+      {crossed && <path d="M3 3l18 18" />}
+    </svg>
+  )
+}
+
+/** A password box with an eye button, so people can check what they typed. Starts hidden: crossed-out eye while hidden, open eye while shown. */
+export function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [shown, setShown] = useState(false)
+  return (
+    <span className="password-input">
+      <input {...props} type={shown ? 'text' : 'password'} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+      <button type="button" className="password-toggle" aria-pressed={shown} aria-label={shown ? 'Hide password' : 'Show password'}
+        title={shown ? 'Hide password' : 'Show password'} onClick={() => setShown(v => !v)}><EyeIcon crossed={!shown} /></button>
+    </span>
+  )
 }
 
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; label: string }[]; value: T; onChange: (t: T) => void }) {

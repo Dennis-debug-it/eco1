@@ -9,6 +9,19 @@ public class Tenant : Entity
     public string DefaultCurrency { get; set; } = "KES";
     public string DefaultJurisdiction { get; set; } = "KE";
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// Set while the organisation is being moved from another payroll system. Runs can be calculated and reconciled
+    /// against the old system, but nothing is approved, paid, finalised or filed until someone signs go-live.
+    /// </summary>
+    public DateTimeOffset? MigrationStartedAt { get; set; }
+    public string? MigrationStartedBy { get; set; }
+    public DateTimeOffset? GoLiveSignedAt { get; set; }
+    public string? GoLiveSignedBy { get; set; }
+    /// <summary>The first pay period Ecosys pays, recorded when go-live is signed.</summary>
+    public DateOnly? GoLiveFrom { get; set; }
+
+    public bool InMigration => MigrationStartedAt is not null && GoLiveSignedAt is null;
 }
 
 public class LegalEntity : TenantEntity
