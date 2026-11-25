@@ -8,7 +8,7 @@ that feed payroll directly.
 
 > **Status:** Phase 1 (core payroll MVP), most of Phase 2 (leave, self-service, attendance, overtime, loans,
 > notifications, expanded reporting) and the HR modules described under [HR modules](#hr-modules). **Not production-ready** until the statutory parameters are signed off by a
-> qualified payroll/tax practitioner and a parallel run has been reconciled (PRD §18). See
+> qualified payroll/tax practitioner and a parallel run has been reconciled. See
 > [docs/statutory-verification.md](docs/statutory-verification.md).
 
 ---
@@ -42,7 +42,7 @@ tests/Ecosys.Payroll.Tests       Engine unit tests + HTTP integration tests agai
 web/                             React 19 + TypeScript + Vite admin console and employee portal.
 ```
 
-Key decisions (PRD §19):
+Key decisions:
 
 | Concern | Approach |
 |---|---|
@@ -146,7 +146,7 @@ dotnet test
 ```
 
 - **Engine tests**: hand-worked Kenyan examples with the arithmetic in the comments, so a payroll practitioner can check them independently: rule-version resolution, NSSF year 4, pay frequencies, leave accrual, and RFC 6238 TOTP vectors.
-- **Integration tests**: boot the real API against a throwaway PostgreSQL database (created and dropped per run). They cover the PRD §18 acceptance criteria:
+- **Integration tests**: boot the real API against a throwaway PostgreSQL database (created and dropped per run). They cover the acceptance criteria:
   - tenant isolation, including cross-tenant references
   - salary visibility
   - encryption at rest
@@ -219,7 +219,7 @@ With `Saas:Enabled=true`, one installation serves many employers. It adds:
 - **Billing.** Monthly invoices in arrears with VAT, as PDF and by email. Overdue accounts become past due, then read-only after a grace period. Read-only accounts can still sign in, view and export. Payments are recorded by the operator.
 - **Operator console.** For platform administrators (organisation code `platform`, created with `create-platform-admin`). Shows customers, usage, invoices and plans, and offers plan changes, trial extensions, suspension and sign-in blocking. It never shows employee or payroll records.
 
-Organisations without a subscription (licensed installs, contract customers) are *managed*: never billed or restricted. With SaaS mode off, the product behaves exactly as a single-employer install. Operating it is covered in [docs/operations.md §9](docs/operations.md#9-running-as-a-saas-many-customers).
+Organisations without a subscription (licensed installs, contract customers) are *managed*: never billed or restricted. With SaaS mode off, the product behaves exactly as a single-employer install. Operating it is covered in [section 9 of docs/operations.md](docs/operations.md#9-running-as-a-saas-many-customers).
 
 "Start a free trial" on the sign-in page creates a new *customer* organisation, so it always leads to that customer's portal. The operator console needs a separate operator account in the `platform` organisation.
 
@@ -231,7 +231,7 @@ dotnet run --project src/Ecosys.Payroll.Api --launch-profile http -- create-plat
 
 ## Moving in from another payroll system
 
-**Administration → Data migration** takes an organisation off its old payroll. The steps are in [docs/operations.md §10](docs/operations.md#10-moving-a-customer-in-from-another-payroll-system).
+**Administration → Data migration** takes an organisation off its old payroll. The steps are in [section 10 of docs/operations.md](docs/operations.md#10-moving-a-customer-in-from-another-payroll-system).
 
 - **Migration mode.** Runs calculate and can be reconciled against the old system's register (each run's Parallel run tab), but nothing can be approved, paid, finalised or exported for filing. Signing go-live switches it off for good, with a checklist: employees loaded, bank accounts verified, two parallel runs fully reconciled. Signing also discards the parallel runs.
 - **Imports.** Three kinds, each CSV or .xlsx:
@@ -291,9 +291,9 @@ All endpoints are under `/api/payroll` and require a bearer token, except `/auth
 
 These are the things to resolve before go-live, or to plan for in later phases:
 
-1. **Statutory sign-off.** The parameters were cross-checked against secondary sources in November 2026, not against primary KRA/NSSF/SHA gazette text. A practitioner must confirm them and run the two parallel payrolls required by PRD §18.
+1. **Statutory sign-off.** The parameters were cross-checked against secondary sources in November 2026, not against primary KRA/NSSF/SHA gazette text. A practitioner must confirm them and run the two parallel payrolls required before go-live.
 2. **Bank file layouts** (KCB, Equity, Co-op, M-PESA B2C) are representative. Confirm each against the bank's current bulk-upload specification before first use.
-3. **Statutory filing files.** The P10 PAYE return is built per company and month, but its column order hasn't yet been checked against KRA's current template. NSSF files follow NSSF's portal template and returns specification. Neither has been through a real upload. The SHA return still exports in our own layout. Direct submission is Phase 3 (PRD §15: only where official APIs exist).
+3. **Statutory filing files.** The P10 PAYE return is built per company and month, but its column order hasn't yet been checked against KRA's current template. NSSF files follow NSSF's portal template and returns specification. Neither has been through a real upload. The SHA return still exports in our own layout. Direct submission is Phase 3, and only where official APIs exist.
 4. **Ecosys platform contracts are assumed.** These are:
    - the Ecosys Notifications request shape (`POST v1/messages`)
    - the identity provider's claim names

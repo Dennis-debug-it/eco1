@@ -15,7 +15,7 @@ namespace Ecosys.Payroll.Api.Endpoints;
 
 public sealed record RegisterRow(string EmployeeNumber, string EmployeeName, string? Department, decimal BasicPay, decimal GrossPay, decimal TaxablePay, decimal Paye, decimal Nssf, decimal Shif, decimal HousingLevy, decimal TotalOtherDeductions, decimal TotalEmployeeDeductions, decimal NetPay, decimal TotalEmployerContributions, decimal TotalEmployerCost);
 
-/// <summary>Reports (PRD §12). Every tabular report accepts <c>format=csv|xlsx|pdf</c>; without it the JSON is returned.</summary>
+/// <summary>Reports. Every tabular report accepts <c>format=csv|xlsx|pdf</c>; without it the JSON is returned.</summary>
 public static class ReportEndpoints
 {
     public static void MapReports(this RouteGroupBuilder api)

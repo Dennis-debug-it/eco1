@@ -7,7 +7,7 @@ namespace Ecosys.Payroll.Engine.Jurisdictions.Kenya;
 /// Kenyan gross-to-net calculation. Every rate, threshold and cap comes from the
 /// effective-dated <see cref="StatutoryRuleSet"/>; nothing statutory is hardcoded here.
 /// <para>
-/// Sequence (per PRD §4.1): gross → taxable earnings → allowable deductions (NSSF/pension within cap,
+/// Sequence: gross → taxable earnings → allowable deductions (NSSF/pension within cap,
 /// SHIF and AHL where the rule says they are deductible, PRMF, mortgage interest) → taxable pay →
 /// PAYE bands → reliefs (personal, insurance) → other deductions → employer contributions → net pay.
 /// </para>

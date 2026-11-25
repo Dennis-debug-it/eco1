@@ -14,7 +14,7 @@ public sealed record ExportFile(byte[] Content, string ContentType, string FileN
 
 /// <summary>
 /// One tabular report → CSV, Excel (.xlsx, OOXML written directly — no third-party licence) or PDF
-/// (landscape table). PRD §12: reports must support Excel, CSV and PDF exports.
+/// (landscape table). Reports must support Excel, CSV and PDF exports.
 /// </summary>
 public static class TabularExport
 {

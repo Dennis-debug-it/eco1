@@ -89,7 +89,7 @@ Last reviewed: 19 November 2026.
 ## Open items
 
 ### Statutory and filing
-- **S1. Statutory sign-off (PRD §18).**
+- **S1. Statutory sign-off.**
   - A qualified payroll or tax practitioner must confirm every parameter in [statutory-verification.md](statutory-verification.md) against primary sources: Finance Acts, the NSSF Act 2013 Year 4 notice, the Social Health Insurance Act 2023 and regulations, the Affordable Housing Act 2024, and the NITA levy order.
   - Two parallel payrolls must then be reconciled to the shilling against the outgoing system.
   - *Owner: customer's payroll practitioner. Tool: each payroll run's **Parallel run** tab. Upload the outgoing system's register (CSV) and every employee is compared figure by figure, at a tolerance from exact to KES 1. Export the result to Excel or PDF for the sign-off pack. Each comparison is audited.*
@@ -114,7 +114,7 @@ Last reviewed: 19 November 2026.
 ### Infrastructure
 - **E6. Hosting location.** Kenyan data centre, or documented cross-border safeguards (DPA ss.48–50).
 - **G1. Notifications for standalone installs.** Add an SMTP email provider, and optionally an SMS or WhatsApp provider such as Africa's Talking. These carry account-lock alerts, approval requests and payslip notices.
-- **G2. Off-site backup copy.** Automate syncing the backup folder to a second location (see operations.md §4).
+- **G2. Off-site backup copy.** Automate syncing the backup folder to a second location (see section 4 of operations.md).
 
 ### Assurance
 - **H1. Penetration test** by an independent tester before go-live.
@@ -130,7 +130,7 @@ Last reviewed: 19 November 2026.
 | Leave minimums | Employment Act 2007 s.28 (annual leave), s.29 (maternity and paternity leave), s.30 (sick leave) |
 | Holidays | Public Holidays Act (Cap. 110) |
 | Passwords | NIST SP 800-63B |
-| One-time codes | RFC 6238 §5.2 |
+| One-time codes | RFC 6238 section 5.2 |
 
 The statutory rates are recorded separately, in [statutory-verification.md](statutory-verification.md).
 

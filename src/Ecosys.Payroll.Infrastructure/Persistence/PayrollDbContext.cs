@@ -342,7 +342,7 @@ public partial class PayrollDbContext(DbContextOptions<PayrollDbContext> options
                     entry.Property(x => x.CreatedBy).IsModified = false;
                     break;
                 case EntityState.Deleted:
-                    // Soft delete for historical retention (PRD §9.2)
+                    // Soft delete for historical retention
                     entry.State = EntityState.Modified;
                     entry.Entity.IsDeleted = true;
                     entry.Entity.DeletedAt = now;

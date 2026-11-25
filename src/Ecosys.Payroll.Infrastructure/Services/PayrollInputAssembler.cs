@@ -45,7 +45,7 @@ public sealed record RunContext(
 }
 
 /// <summary>
-/// Translates persisted configuration into the engine's <see cref="EmployeePayrollInput"/> (PRD §4.1 steps 1–5).
+/// Translates persisted configuration into the engine's <see cref="EmployeePayrollInput"/>.
 /// The engine stays free of persistence concerns; this class owns "which employees, with what inputs".
 /// </summary>
 public sealed class PayrollInputAssembler(PayrollDbContext db)

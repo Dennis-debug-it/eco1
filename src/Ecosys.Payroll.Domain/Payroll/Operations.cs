@@ -4,7 +4,7 @@ namespace Ecosys.Payroll.Domain.Payroll;
 
 /// <summary>
 /// Attendance summary for one employee in one run, imported from a time/biometric system or captured
-/// manually (PRD §4.1 step 5). Converted into overtime earnings and absence deductions at calculation time.
+/// manually. Converted into overtime earnings and absence deductions at calculation time.
 /// </summary>
 public class AttendanceRecord : LegalEntityScopedEntity
 {
@@ -24,7 +24,7 @@ public enum NotificationChannel { Email, WhatsApp, Sms }
 public enum NotificationStatus { Pending, Sent, Failed, Skipped }
 
 /// <summary>
-/// Transactional outbox for notifications (PRD §15: Ecosys Notifications). Written in the same transaction
+/// Transactional outbox for notifications (Ecosys Notifications). Written in the same transaction
 /// as the business change, delivered asynchronously by a dispatcher, retried on failure.
 /// Bodies never contain salary figures — they point the recipient to the secure portal.
 /// </summary>

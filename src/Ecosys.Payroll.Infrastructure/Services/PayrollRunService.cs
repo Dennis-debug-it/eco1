@@ -17,7 +17,7 @@ namespace Ecosys.Payroll.Infrastructure.Services;
 
 public sealed record CreateRunRequest(Guid LegalEntityId, Guid PayrollGroupId, Guid PayrollPeriodId, PayrollRunType RunType = PayrollRunType.Regular, string? Notes = null, bool AuthoriseDuplicate = false);
 
-/// <summary>Drives the payroll lifecycle (PRD §5). Every transition is authorised, audited and state-checked.</summary>
+/// <summary>Drives the payroll lifecycle. Every transition is authorised, audited and state-checked.</summary>
 public sealed class PayrollRunService(
     Migration.MigrationGuard migration,
     PayslipFacts payslipFacts,
@@ -41,7 +41,7 @@ public sealed class PayrollRunService(
         var entity = await db.LegalEntities.FirstAsync(e => e.Id == req.LegalEntityId, ct);
         var group = await db.PayrollGroups.FirstAsync(g => g.Id == req.PayrollGroupId && g.LegalEntityId == req.LegalEntityId, ct);
 
-        // Duplicate prevention (PRD §9.2): one live regular run per group/period unless explicitly authorised.
+        // Duplicate prevention: one live regular run per group/period unless explicitly authorised.
         if (req.RunType == PayrollRunType.Regular)
         {
             var existing = await db.PayrollRuns.AnyAsync(r => r.PayrollGroupId == req.PayrollGroupId && r.PayrollPeriodId == req.PayrollPeriodId
@@ -350,7 +350,7 @@ public sealed class PayrollRunService(
         batch.PaymentCount = payments.Count;
         batch.TotalAmount = payments.Sum(p => p.Amount);
 
-        // Reconciliation guard (PRD §18): file total must equal approved net total of paid employees.
+        // Reconciliation guard: file total must equal approved net total of paid employees.
         var expected = format == PaymentFileFormat.MpesaB2C
             ? payments.Sum(p => p.Amount) // M-PESA files carry only the mobile-money share; bank shares go in a bank-format batch
             : run.Employees.Where(e => e.NetPay > 0).Sum(e => e.NetPay);

@@ -4,7 +4,7 @@ namespace Ecosys.Payroll.Domain.Finance;
 
 public enum JournalStatus { Draft, Posted, Reversed }
 
-/// <summary>Accounting journal generated from a finalised run (PRD §8). Balanced by construction.</summary>
+/// <summary>Accounting journal generated from a finalised run. Balanced by construction.</summary>
 public class PayrollJournal : LegalEntityScopedEntity
 {
     /// <summary>Null for non-payroll journals (leave provision, training cost).</summary>

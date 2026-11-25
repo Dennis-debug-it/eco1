@@ -25,7 +25,7 @@ public enum PayeReturnCategory { Auto, BasicSalary, HousingAllowance, TransportA
 /// <summary>How basic pay is earned: a monthly salary, or a daily wage paid for the days actually worked.</summary>
 public enum PayBasis { Monthly, Daily }
 
-/// <summary>Configurable earning or deduction definition (PRD §3.3).</summary>
+/// <summary>Configurable earning or deduction definition.</summary>
 public class SalaryComponent : LegalEntityScopedEntity
 {
     public required string Code { get; set; }

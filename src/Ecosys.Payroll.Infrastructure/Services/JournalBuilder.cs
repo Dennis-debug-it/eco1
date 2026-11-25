@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Ecosys.Payroll.Infrastructure.Services;
 
 /// <summary>
-/// Builds a balanced accounting journal from stored result lines (PRD §8). Expense is debited per
+/// Builds a balanced accounting journal from stored result lines. Expense is debited per
 /// cost centre; liabilities are credited per payee (employees, KRA, NSSF, SHA, other).
 /// Account codes come from <see cref="GlAccountMapping"/> with sensible defaults.
 /// </summary>

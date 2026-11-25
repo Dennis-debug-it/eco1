@@ -11,7 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Ecosys.Payroll.Tests.Integration;
 
 /// <summary>
-/// PRD §18 acceptance criteria exercised end-to-end through HTTP against PostgreSQL.
+/// Acceptance criteria exercised end-to-end through HTTP against PostgreSQL.
 /// Each test uses its own payroll period so tests are independent within the shared database.
 /// </summary>
 [Collection(PayrollApiCollection.Name)]

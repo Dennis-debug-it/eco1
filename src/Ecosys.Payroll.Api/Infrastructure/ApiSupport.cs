@@ -97,7 +97,7 @@ public sealed class TenantContextMiddleware(RequestDelegate next, IConfiguration
             return;
         }
 
-        // PRD §13.5: privileged roles must complete MFA. A password-only token for such a user may only
+        // Privileged roles must complete MFA. A password-only token for such a user may only
         // reach the auth endpoints (to enrol or verify), never payroll data.
         if (user.Identity?.IsAuthenticated == true && config.GetValue("Auth:RequireMfaForPrivilegedRoles", true)
             && ctx.Roles.Overlaps(Roles.Privileged) && user.FindFirstValue(ClaimNames.AuthMethod) != "mfa"

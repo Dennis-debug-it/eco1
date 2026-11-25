@@ -315,7 +315,7 @@ type Recon = { tolerance: number; employees: number; matched: number; different:
   totals: { field: string; ecosys: number; legacy: number; difference: number }[]; rows: { employeeNumber: string; name: string; status: string; differences: Diff[] }[] }
 const fieldLabel: Record<string, string> = { Gross: 'Gross', Taxable: 'Taxable pay', PAYE: 'PAYE', NSSF: 'NSSF', SHIF: 'SHIF', HousingLevy: 'Housing levy', OtherDeductions: 'Other deductions', Net: 'Net pay' }
 
-/** Parallel run (PRD §18): upload the outgoing system's register for the same period and compare. */
+/** Parallel run: upload the outgoing system's register for the same period and compare. */
 function ParallelRun({ runId }: { runId: string }) {
   const [file, setFile] = useState<File | null>(null)
   const [tolerance, setTolerance] = useState('0')

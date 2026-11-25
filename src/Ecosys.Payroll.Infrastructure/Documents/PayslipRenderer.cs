@@ -8,7 +8,7 @@ using Ecosys.Payroll.Infrastructure.Security;
 namespace Ecosys.Payroll.Infrastructure.Documents;
 
 /// <summary>
-/// Renders the PRD §6 payslip layout to PDF. Bank account numbers are masked. Shows the employer's statutory
+/// Renders the standard payslip layout to PDF. Bank account numbers are masked. Shows the employer's statutory
 /// contributions but not the employer's total cost of employment, which is for payroll and finance only.
 /// </summary>
 public static class PayslipRenderer

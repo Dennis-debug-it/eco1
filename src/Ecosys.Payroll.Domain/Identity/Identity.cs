@@ -2,7 +2,7 @@ using Ecosys.Payroll.Domain.Common;
 
 namespace Ecosys.Payroll.Domain.Identity;
 
-/// <summary>Role names (PRD §11). Shared Ecosys identity issues these as role claims.</summary>
+/// <summary>Role names. Shared Ecosys identity issues these as role claims.</summary>
 public static class Roles
 {
     public const string PlatformAdministrator = "PlatformAdministrator";
@@ -15,7 +15,7 @@ public static class Roles
     public const string Auditor = "Auditor";
     public const string Employee = "Employee";
 
-    /// <summary>Roles that must use multi-factor authentication (PRD §13.5).</summary>
+    /// <summary>Roles that must use multi-factor authentication.</summary>
     public static readonly string[] Privileged = [PlatformAdministrator, TenantAdministrator, PayrollAdministrator, PayrollApprover, FinanceOfficer];
 
     public static readonly string[] All =
@@ -25,7 +25,7 @@ public static class Roles
     ];
 }
 
-/// <summary>Fine-grained permissions. Roles map to permission sets; salary visibility is independent (PRD §11).</summary>
+/// <summary>Fine-grained permissions. Roles map to permission sets; salary visibility is independent.</summary>
 public static class Permissions
 {
     public const string OrganisationManage = "organisation.manage";

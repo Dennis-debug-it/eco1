@@ -6,7 +6,7 @@ namespace Ecosys.Payroll.Tests.Engine;
 
 /// <summary>
 /// Hand-worked examples. Each expected figure is derived in the comment so a payroll
-/// practitioner can check the arithmetic independently of the code (PRD §18).
+/// practitioner can check the arithmetic independently of the code.
 /// </summary>
 public class KenyaCalculatorTests
 {

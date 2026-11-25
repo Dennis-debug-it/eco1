@@ -22,7 +22,7 @@ public sealed record ReconcileResult(decimal Tolerance, int Employees, int Match
 }
 
 /// <summary>
-/// Parallel-run check (PRD §18): compares the outgoing system's payroll register with an Ecosys run, employee by
+/// Parallel-run check: compares the outgoing system's payroll register with an Ecosys run, employee by
 /// employee and figure by figure. Only the columns present in the legacy file are compared, so a register with just
 /// gross, PAYE and net still reconciles what it can. Pure: no database access.
 /// </summary>

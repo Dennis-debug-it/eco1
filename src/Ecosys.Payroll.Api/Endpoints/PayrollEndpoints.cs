@@ -193,7 +193,7 @@ public static class PayrollEndpoints
             return Results.Ok(await SaveAttendanceAsync(id, parsed, "import", ctx, svc, db, audit, ct));
         }).Accepts<string>("text/csv");
 
-        // ---- Parallel run (PRD §18): compare the outgoing system's register with this run ----
+        // ---- Parallel run: compare the outgoing system's register with this run ----
         g.MapGet("/reconcile-template.csv", () => Results.File(Encoding.UTF8.GetBytes(ParallelRunReconciler.Template), "text/csv", "parallel-run-register-template.csv"));
         g.MapPost("/{id:guid}/reconcile", async (Guid id, HttpRequest http, decimal? tolerance, string? format, ITenantContext ctx, PayrollRunService svc, PayrollDbContext db, AuditService audit, CancellationToken ct) =>
         {

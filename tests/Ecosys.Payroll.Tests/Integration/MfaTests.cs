@@ -4,7 +4,7 @@ using Ecosys.Payroll.Infrastructure.Security;
 
 namespace Ecosys.Payroll.Tests.Integration;
 
-/// <summary>Separate app instance with MFA enforced for privileged roles (PRD §13.5).</summary>
+/// <summary>Separate app instance with MFA enforced for privileged roles.</summary>
 public sealed class MfaFixture : PayrollApiFixture
 {
     protected override bool RequireMfa => true;

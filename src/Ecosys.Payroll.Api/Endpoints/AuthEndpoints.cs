@@ -73,7 +73,7 @@ public static class AuthEndpoints
                 if (string.IsNullOrWhiteSpace(req.Code))
                     return Results.Json(new { title = "Authentication code required", status = 401, code = "MFA_CODE_REQUIRED", detail = "Enter the 6-digit code from your authenticator app." }, statusCode: 401);
                 var step = Totp.Match(user.MfaSecret!, req.Code, now);
-                if (step is null || step <= user.LastTotpStep) // a code that was already used to sign in is rejected (RFC 6238 §5.2)
+                if (step is null || step <= user.LastTotpStep) // a code that was already used to sign in is rejected (RFC 6238 section 5.2)
                     return await FailAsync("auth.mfa.failed", Results.Json(new { title = "Invalid authentication code", status = 401, code = "MFA_CODE_INVALID", detail = "The authentication code is incorrect, has expired or was already used. Wait for the next code." }, statusCode: 401));
                 user.LastTotpStep = step;
             }

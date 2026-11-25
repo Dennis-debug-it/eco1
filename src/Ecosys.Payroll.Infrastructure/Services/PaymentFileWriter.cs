@@ -8,7 +8,7 @@ namespace Ecosys.Payroll.Infrastructure.Services;
 public sealed record PaymentFile(string FileName, byte[] Content, string Hash, string ContentType);
 
 /// <summary>
-/// Downloadable bank-format writers (PRD §7: file-based first). Each format is a simple column layout
+/// Downloadable bank-format writers (file-based first). Each format is a simple column layout
 /// agreed with the bank; direct API integrations come later. Account numbers (the employees' and the company's
 /// debit account) are written in full here because the file goes to the bank — the API restricts who can download it.
 /// </summary>

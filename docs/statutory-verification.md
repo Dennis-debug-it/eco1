@@ -1,6 +1,6 @@
 # Statutory parameter verification record
 
-PRD §4.3 requires every statutory parameter to be independently verified against current KRA, NSSF, SHA and NITA
+Every statutory parameter must be independently verified against current KRA, NSSF, SHA and NITA
 requirements before deployment. This file records what has been checked, against what, and what is outstanding.
 Update it whenever a rule version is added.
 

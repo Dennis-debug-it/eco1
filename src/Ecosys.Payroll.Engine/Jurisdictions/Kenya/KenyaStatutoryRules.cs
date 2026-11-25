@@ -6,7 +6,7 @@ namespace Ecosys.Payroll.Engine.Jurisdictions.Kenya;
 /// Seed statutory configuration for Kenya. Parameters were cross-checked in November 2026 against
 /// secondary sources citing KRA, NSSF (Year-4 notice, Feb 2026) and SHA publications; they are the published
 /// parameters as understood at authoring time and are shipped in <see cref="RuleApprovalStatus.Approved"/> state for the
-/// reference tenant only so that tests and demos run. <b>Per PRD §4.3 they must be independently
+/// reference tenant only so that tests and demos run. <b>They must be independently
 /// verified against KRA, NSSF, SHA and NITA publications before any production deployment.</b>
 /// Deterministic GUIDs keep seeded ids stable across environments.
 /// </summary>

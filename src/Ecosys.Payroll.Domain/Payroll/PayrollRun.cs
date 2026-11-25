@@ -52,7 +52,7 @@ public class PayrollRun : LegalEntityScopedEntity
     /// <summary>For a reversal or correction run, the run it corrects.</summary>
     public Guid? OriginalRunId { get; set; }
 
-    /// <summary>Set when an authorised user permits a second regular run for the same group/period (PRD §9.2).</summary>
+    /// <summary>Set when an authorised user permits a second regular run for the same group/period.</summary>
     public bool DuplicateAuthorised { get; set; }
 
     // Totals snapshot (recomputed on calculate, frozen on approve)
@@ -185,7 +185,7 @@ public class PayrollApproval : LegalEntityScopedEntity
 
 public enum PaymentStatus { Pending, FileGenerated, Sent, Confirmed, Failed, Cancelled }
 
-/// <summary>A payment instruction for one employee from one run. Distinct from the approved payroll and from bank confirmation (PRD §7).</summary>
+/// <summary>A payment instruction for one employee from one run. Distinct from the approved payroll and from bank confirmation.</summary>
 public class PayrollPayment : LegalEntityScopedEntity
 {
     public Guid PayrollRunId { get; set; }
@@ -263,7 +263,7 @@ public sealed class PayslipLeaveBalance
 public enum AdjustmentType { Arrears, Overpayment, Correction, Backpay }
 public enum AdjustmentStatus { Pending, Applied, Cancelled }
 
-/// <summary>Controlled correction to an approved run, applied in a later run (PRD §5).</summary>
+/// <summary>Controlled correction to an approved run, applied in a later run.</summary>
 public class PayrollAdjustment : LegalEntityScopedEntity
 {
     public Guid EmployeeId { get; set; }

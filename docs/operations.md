@@ -62,7 +62,7 @@ The command prints a one-time password. Give it to the administrator in person o
 
 | Secret | If lost | If leaked |
 |---|---|---|
-| `PAYROLL_ENCRYPTION_KEY` | Bank account numbers, KRA PINs and MFA secrets in the database **and in every backup** become unreadable. Keep two copies off the server. | Rotate it: re-encrypt the fields with a new key during a maintenance window. Treat it as a breach (see §7). |
+| `PAYROLL_ENCRYPTION_KEY` | Bank account numbers, KRA PINs and MFA secrets in the database **and in every backup** become unreadable. Keep two copies off the server. | Rotate it: re-encrypt the fields with a new key during a maintenance window. Treat it as a breach (see section 7). |
 | `BACKUP_PASSPHRASE` | Backups can't be restored. | Re-encrypt the off-site copies with a new passphrase. |
 | `AUTH_SIGNING_KEY` | Everyone signs in again. | Change it; every session ends. |
 | `POSTGRES_PASSWORD` | Reset it from inside the db container. | Change it in PostgreSQL and in `.env`. |
@@ -179,7 +179,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm payroll
 | Paid | Record the payment in the console (Invoices → Record payment). The account reopens as soon as nothing is overdue. |
 | Cancelled | Takes effect at the end of the paid period, with a final invoice. The account is then read-only. |
 
-**Read-only** means people can still sign in, view everything, download payslips and reports, and export personal data, but cannot change anything except billing. Nothing is deleted. Employee data stays under the customer's control and the retention rules in §8.
+**Read-only** means people can still sign in, view everything, download payslips and reports, and export personal data, but cannot change anything except billing. Nothing is deleted. Employee data stays under the customer's control and the retention rules in section 8.
 
 The billing cycle runs every 6 hours. **Run billing now** in the console runs it immediately. It is safe to run repeatedly and catches up after downtime.
 
